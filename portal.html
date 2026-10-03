@@ -105,5 +105,6 @@ menu.querySelectorAll('div').forEach(m=>m.onclick=()=>{menu.querySelectorAll('di
 document.querySelectorAll('.sort button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.sort button').forEach(x=>x.classList.remove('on'));b.classList.add('on');sort=b.dataset.s;render()});
 document.getElementById('q').addEventListener('keydown',e=>{if(e.key==='Enter'){query=e.target.value.trim().toLowerCase();if(view==='home'){view='all';menu.querySelectorAll('div').forEach(x=>x.classList.toggle('on',x.dataset.v==='all'))}render()}});
 document.getElementById('user').textContent='내부망 · '+location.hostname;
+if(location.hash==='#all'){view='all';menu.querySelectorAll('div').forEach(x=>x.classList.toggle('on',x.dataset.v==='all'))}  // 딥링크
 load();setInterval(load,10000);
 </script>
