@@ -166,5 +166,37 @@
   "added": "2026-10-02",
   "dept": "인공지능응용연구실",
   "author": "dongju"
+ },
+ {
+  "dir": "persona-local",
+  "port": 8776,
+  "name": "Persona",
+  "title": "Persona — AI 캐릭터 대화 (토이)",
+  "desc": "페르소나·기억·음성 캐릭터 채팅",
+  "group": "토이",
+  "tags": [
+   "#토이",
+   "#캐릭터"
+  ],
+  "dept": "개인",
+  "author": "dongju",
+  "added": "2026-10-04",
+  "hidden": true
+ },
+ {
+  "dir": "avatar-local",
+  "port": 8777,
+  "name": "Avatar",
+  "title": "Avatar — 내 얼굴·내 목소리 아바타 (토이)",
+  "desc": "본인 사진+음성 샘플로 말하는 립싱크 아바타",
+  "group": "토이",
+  "tags": [
+   "#토이",
+   "#립싱크"
+  ],
+  "dept": "개인",
+  "author": "dongju",
+  "added": "2026-10-04",
+  "hidden": true
  }
 ]
