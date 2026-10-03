@@ -13,7 +13,7 @@ with portal.db() as c:
     p = portal.posts(c, "u")[0]
     assert p["likes"] == 1 and p["liked"] and p["tags"] == ["#x"]
 # 도구 등록 검증 (tools.json 은 건드리지 않게 임시 파일로)
-portal.TOOLS_FILE = os.path.join(os.environ["AGENT_DATA"], "tools.json")
+portal.TOOLS_FILE = os.path.join(os.environ["AGENT_DATA"], "tools.json"); json.dump(json.load(open(os.path.join(portal.ROOT, "tools.json"), encoding="utf-8")), open(portal.TOOLS_FILE, "w"))
 for bad in ({"dir": "../x", "port": 9000}, {"dir": "kordoc-local", "port": 9000}, {"dir": "ok-tool", "port": 8766}, {"dir": "ok-tool", "port": 80}):
     try: portal.add_tool(bad); raise SystemExit(f"거부돼야 함: {bad}")
     except ValueError: pass
