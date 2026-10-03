@@ -1,0 +1,47 @@
+<style>
+#agHelpBtn{position:fixed;top:10px;right:12px;z-index:99999;width:34px;height:34px;border-radius:50%;border:1px solid #c7d2e3;background:#fff;color:#1f3a5f;font:700 16px/32px -apple-system,"Apple SD Gothic Neo",system-ui,sans-serif;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.15)}
+#agHelpBtn:hover{background:#eef2f7}
+#agHelp{border:1px solid #e5e7eb;border-radius:12px;max-width:640px;width:92%;padding:0;color:#1f2937;font:14px/1.65 -apple-system,"Pretendard","Apple SD Gothic Neo",system-ui,sans-serif}
+#agHelp::backdrop{background:rgba(15,23,42,.45)}
+#agHelp .h{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-bottom:1px solid #eee;font-weight:700;font-size:15px}
+#agHelp .h button{border:none;background:none;font-size:20px;cursor:pointer;color:#6b7280}
+#agHelp .b{padding:6px 20px 12px;max-height:65vh;overflow:auto}
+#agHelp .b h2{display:none}#agHelp .b h3{font-size:13px;margin:14px 0 4px;color:#6b7280;text-transform:none}
+#agHelp .b ol,#agHelp .b ul{padding-left:22px;margin:4px 0}#agHelp .b li{margin:3px 0}#agHelp .b code{background:#f1f3f6;padding:1px 5px;border-radius:4px;font-size:12.5px}
+#agHelp .f{display:flex;justify-content:space-between;align-items:center;padding:10px 18px;border-top:1px solid #eee;font-size:12.5px;color:#6b7280}
+#agHelp .f button{background:#1f3a5f;color:#fff;border:none;border-radius:6px;padding:7px 18px;font:inherit;font-weight:600;cursor:pointer}
+</style>
+<button id="agHelpBtn" title="사용법 보기">?</button>
+<dialog id="agHelp"><div class="h"><span id="agHelpT">사용법</span><button id="agHelpX" aria-label="닫기">×</button></div><div class="b" id="agHelpB">불러오는 중…</div>
+<div class="f"><label><input type="checkbox" id="agHelpNo" checked> 다음부터 자동으로 띄우지 않기</label><button id="agHelpOk" autofocus>시작하기</button></div></dialog>
+<script>(function(){
+  const DIR = "%DIR%", KEY = "agGuideSeen:" + DIR;   // ponytail: 계정 체계가 없어 브라우저(localStorage) 기준. 로그인 생기면 KEY 에 사용자 id 붙이기
+  const d = document.getElementById('agHelp'), b = document.getElementById('agHelpB');
+  const esc = s => s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  const md = t => {  // 아주 작은 마크다운: ##/###, -, 1., **굵게**, `코드`
+    const inl = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`(.+?)`/g, '<code>$1</code>');
+    let out = '', list = null;
+    const close = () => { if (list) { out += `</${list}>`; list = null; } };
+    for (const raw of t.split('\n')) {
+      const l = raw.replace(/\s+$/, '');
+      let m;
+      if ((m = l.match(/^###\s+(.*)/))) { close(); out += `<h3>${inl(m[1])}</h3>`; }
+      else if ((m = l.match(/^##\s+(.*)/))) { close(); out += `<h2>${inl(m[1])}</h2>`; }
+      else if ((m = l.match(/^\s*[-*]\s+(.*)/))) { if (list !== 'ul') { close(); out += '<ul>'; list = 'ul'; } out += `<li>${inl(m[1])}</li>`; }
+      else if ((m = l.match(/^\s*\d+\.\s+(.*)/))) { if (list !== 'ol') { close(); out += '<ol>'; list = 'ol'; } out += `<li>${inl(m[1])}</li>`; }
+      else if (!l.trim()) { close(); }
+      else { close(); out += `<p>${inl(l)}</p>`; }
+    }
+    close(); return out;
+  };
+  const open = () => { if (!d.open) d.showModal(); };
+  const shut = () => { d.close(); try { if (document.getElementById('agHelpNo').checked) localStorage.setItem(KEY, new Date().toISOString()); } catch (e) {} };
+  document.getElementById('agHelpBtn').onclick = open;
+  document.getElementById('agHelpOk').onclick = shut; document.getElementById('agHelpX').onclick = shut;
+  fetch('/api/guide/' + DIR).then(r => r.text()).then(t => {
+    b.innerHTML = md(t);
+    const h = b.querySelector('h2'); if (h) document.getElementById('agHelpT').textContent = h.textContent;
+    let seen = null; try { seen = localStorage.getItem(KEY); } catch (e) {}
+    if (!seen) open();   // 최초 1회 자동
+  }).catch(() => { b.textContent = '사용법을 불러오지 못했습니다.'; });
+})();</script>
