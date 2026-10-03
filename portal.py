@@ -2,33 +2,39 @@
 """에이전트 페이지 포털 — 도구 목록·상태·시작/중지·리버스 프록시(/t/<도구>/)·사용 통계·피드. stdlib + sqlite.
   python3 portal.py                 # http://localhost:8700
   python3 portal.py start-all|stop-all
-env: PORT(8700) PORTAL_HOST(링크 호스트) AGENT_DATA(모든 도구 데이터 루트, 기본 ../_data)"""
+env: PORT(8700) AGENT_DATA(모든 도구 데이터 루트, 기본 ../_data)"""
 import datetime, json, os, socket, sqlite3, subprocess, sys, urllib.error, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 BASE = os.path.dirname(ROOT)
 PORT = int(os.environ.get("PORT", "8700"))
-HOST = os.environ.get("PORTAL_HOST", "localhost")
 DATA = os.environ.get("AGENT_DATA") or os.path.join(BASE, "_data")  # 포털 DB + 모든 도구 workspace 가 이 아래로 모임
 os.makedirs(DATA, exist_ok=True)
 TOOLS_FILE = os.path.join(ROOT, "tools.json")
-TOOLS = json.load(open(TOOLS_FILE, encoding="utf-8"))
+
+
+def tools():  # 요청마다 다시 읽음 — 손으로 고치거나 다른 프로세스가 추가해도 새로고침이면 반영
+    return json.load(open(TOOLS_FILE, encoding="utf-8"))
+
 HTML = open(os.path.join(ROOT, "portal.html"), encoding="utf-8").read()
 HELP = open(os.path.join(ROOT, "help.html"), encoding="utf-8").read()  # 도구 첫 화면에 끼워 넣는 ? 버튼 + 사용법
-HOP = {"connection", "keep-alive", "transfer-encoding", "te", "trailer", "upgrade", "proxy-connection", "host", "content-length"}
+HOP = {"connection", "keep-alive", "transfer-encoding", "te", "trailer", "upgrade", "proxy-connection", "host", "content-length", "accept-encoding"}
 
 
 # ── DB (sqlite, 파일 하나) ───────────────────────────────────────────────
 def db():
     c = sqlite3.connect(os.path.join(DATA, "portal.db"), timeout=10)
     c.row_factory = sqlite3.Row
-    c.executescript("""
+    return c
+
+
+with db() as _c:  # 스키마는 시작 시 1회
+    _c.executescript("""
     PRAGMA journal_mode=WAL;
     CREATE TABLE IF NOT EXISTS events(kind TEXT, dir TEXT, ts TEXT, user TEXT);          -- open | like
     CREATE TABLE IF NOT EXISTS posts(id INTEGER PRIMARY KEY, title TEXT, body TEXT, author TEXT, dept TEXT, tags TEXT, ts TEXT);
     CREATE TABLE IF NOT EXISTS post_likes(post INTEGER, user TEXT, UNIQUE(post, user));""")
-    return c
 
 
 def now():
@@ -67,7 +73,7 @@ def alive(port):
 
 
 def tool(d):
-    return next((t for t in TOOLS if t["dir"] == d), None)
+    return next((t for t in tools() if t["dir"] == d), None)
 
 
 def start(t):
@@ -93,17 +99,18 @@ def add_tool(t):
     d = t.get("dir", "")
     if not d.replace("-", "").replace("_", "").isalnum():
         raise ValueError("폴더 이름은 영문·숫자·-_ 만")
+    ts = tools()
     if tool(d):
         raise ValueError("이미 있는 도구")
     port = int(t.get("port") or 0)
-    if not (1024 < port < 65536) or any(x["port"] == port for x in TOOLS):
+    if not (1024 < port < 65536) or any(x["port"] == port for x in ts):
         raise ValueError("포트가 비어 있지 않거나 범위 밖")
     row = {"dir": d, "port": port, "name": t.get("name") or d, "title": t.get("title") or d, "desc": t.get("desc", ""), "group": t.get("group") or "기타",
            "tags": [x for x in (t.get("tags") or "").replace("#", "").split() if x], "dept": t.get("dept", ""), "author": t.get("author", ""),
            "added": datetime.date.today().isoformat()}
     row["tags"] = ["#" + x for x in row["tags"]]
-    TOOLS.append(row)
-    json.dump(TOOLS, open(TOOLS_FILE, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    ts.append(row)
+    json.dump(ts, open(TOOLS_FILE, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     return row
 
 
@@ -176,8 +183,7 @@ class H(BaseHTTPRequestHandler):
             with db() as c:
                 u = usage(c)
                 return self._send({"tools": [{**t, "up": alive(t["port"]), "installed": os.path.isdir(os.path.join(BASE, t["dir"])),
-                                              "url": f"/t/{t['dir']}/", "url_direct": f"http://{HOST}:{t['port']}",
-                                              "usage": u.get(t["dir"], {"recent": 0, "total": 0, "users": 0, "likes": 0})} for t in TOOLS],
+                                              "url": f"/t/{t['dir']}/", "usage": u.get(t["dir"], {"recent": 0, "total": 0, "users": 0, "likes": 0})} for t in tools() if not t.get("hidden")],  # hidden: 토이 등 목록 비노출(프록시는 됨)
                                    "rank": user_rank(c), "posts": posts(c, self.user), "me": self.user})
         if p.startswith("/api/guide/"):
             d = p.split("/")[-1]
@@ -186,6 +192,8 @@ class H(BaseHTTPRequestHandler):
             d = p.split("/")[-1]
             f = os.path.join(BASE, d, "README.md") if tool(d) else ""
             return self._send((open(f, encoding="utf-8").read() if f and os.path.exists(f) else "README 없음").encode(), "text/plain; charset=utf-8")
+        if p != "/":
+            return self._send({"error": "not found"}, code=404)
         self._send((HTML + HELP.replace("%DIR%", "portal")).encode(), "text/html; charset=utf-8")
 
     def do_POST(self):
@@ -224,20 +232,9 @@ class H(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] in ("start-all", "stop-all"):
-        for t in TOOLS:
+        for t in tools():
             if os.path.isdir(os.path.join(BASE, t["dir"])):
                 print(sys.argv[1], t["dir"], t["port"]); (start if sys.argv[1] == "start-all" else stop)(t)
         sys.exit(0)
-    # 옛 json 통계·피드 1회 이관
-    with db() as c:
-        for f, sql in ((os.path.join(ROOT, "_stats.json"), None), (os.path.join(ROOT, "feed.json"), None)):
-            if os.path.exists(f):
-                rows = json.load(open(f, encoding="utf-8"))
-                if "stats" in f:
-                    c.executemany("INSERT INTO events VALUES(?,?,?,?)", [("like" if r.get("like") else "open", r["dir"], r["ts"], r["ip"]) for r in rows])
-                elif not c.execute("SELECT 1 FROM posts").fetchone():
-                    c.executemany("INSERT INTO posts(title,body,author,dept,tags,ts) VALUES(?,?,?,?,?,?)",
-                                  [(r["title"], r["body"], r["author"], r["dept"], json.dumps(r.get("tags", [])), r["date"]) for r in rows])
-                os.rename(f, f + ".imported")
     print(f"portal → http://localhost:{PORT}  data={DATA}")
     ThreadingHTTPServer(("", PORT), H).serve_forever()
