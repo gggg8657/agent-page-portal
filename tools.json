@@ -1,0 +1,170 @@
+[
+ {
+  "dir": "humanize-kr-local",
+  "port": 8765,
+  "name": "Humanize KR",
+  "desc": "AI가 쓴 한글의 번역투·상투구 제거",
+  "group": "문서",
+  "title": "Humanize KR — 한국어 문장 다듬기",
+  "tags": [
+   "#윤문",
+   "#번역투제거"
+  ],
+  "added": "2026-09-30",
+  "dept": "인공지능응용연구실",
+  "author": "dongju"
+ },
+ {
+  "dir": "kordoc-local",
+  "port": 8766,
+  "name": "kordoc",
+  "desc": "HWP·PDF 요약·질문·공문서 초안 HWPX",
+  "group": "문서",
+  "title": "kordoc — 공문서 읽기·초안 HWPX",
+  "tags": [
+   "#HWP",
+   "#공문서",
+   "#요약"
+  ],
+  "added": "2026-09-30",
+  "dept": "인공지능응용연구실",
+  "author": "dongju"
+ },
+ {
+  "dir": "notebook-local",
+  "port": 8769,
+  "name": "Notebook",
+  "desc": "출처 올리고 인용 채팅·노트·팟캐스트 대본",
+  "group": "문서",
+  "title": "Notebook — 출처 기반 질의·노트",
+  "tags": [
+   "#RAG",
+   "#NotebookLM",
+   "#인용"
+  ],
+  "added": "2026-10-04",
+  "dept": "인공지능응용연구실",
+  "author": "dongju"
+ },
+ {
+  "dir": "writer-local",
+  "port": 8773,
+  "name": "Writer",
+  "desc": "건배사·경조사·축사·공지문 패턴 글쓰기",
+  "group": "문서",
+  "title": "Writer — 건배사·경조사·공지문",
+  "tags": [
+   "#글쓰기",
+   "#패턴"
+  ],
+  "added": "2026-10-04",
+  "dept": "인공지능응용연구실",
+  "author": "dongju"
+ },
+ {
+  "dir": "meeting-local",
+  "port": 8767,
+  "name": "Meeting",
+  "desc": "녹음 → 화자 분리 → 회의록·인사이트",
+  "group": "회의",
+  "title": "Meeting — 회의 녹음 회의록",
+  "tags": [
+   "#회의록",
+   "#화자분리",
+   "#Whisper"
+  ],
+  "added": "2026-10-04",
+  "dept": "인공지능응용연구실",
+  "author": "dongju"
+ },
+ {
+  "dir": "diagram-local",
+  "port": 8768,
+  "name": "Diagram",
+  "desc": "말로 설명하면 다이어그램",
+  "group": "그림",
+  "title": "Diagram — 말로 그리는 다이어그램",
+  "tags": [
+   "#Mermaid",
+   "#도식"
+  ],
+  "added": "2026-10-04",
+  "dept": "인공지능응용연구실",
+  "author": "dongju"
+ },
+ {
+  "dir": "sketch-local",
+  "port": 8774,
+  "name": "Sketch",
+  "desc": "손그림 사진 → 논문 figure 스타일 다이어그램",
+  "group": "그림",
+  "title": "Sketch — 손그림을 figure로",
+  "tags": [
+   "#비전",
+   "#논문figure"
+  ],
+  "added": "2026-10-04",
+  "dept": "인공지능응용연구실",
+  "author": "dongju"
+ },
+ {
+  "dir": "portrait-local",
+  "port": 8770,
+  "name": "Portrait",
+  "desc": "사진 한 장 → 표정·말하기 영상",
+  "group": "그림",
+  "title": "Portrait — 사진이 말하는 영상",
+  "tags": [
+   "#LivePortrait",
+   "#영상"
+  ],
+  "added": "2026-10-04",
+  "dept": "인공지능응용연구실",
+  "author": "dongju"
+ },
+ {
+  "dir": "tts-local",
+  "port": 8771,
+  "name": "TTS",
+  "desc": "한국어 음성 합성 (OpenAI 음성 API 호환)",
+  "group": "음성",
+  "title": "TTS — 한국어 음성 합성",
+  "tags": [
+   "#TTS",
+   "#음성"
+  ],
+  "added": "2026-10-04",
+  "dept": "인공지능응용연구실",
+  "author": "dongju"
+ },
+ {
+  "dir": "sql-local",
+  "port": 8772,
+  "name": "SQL",
+  "desc": "자연어 → SQL → 표·차트",
+  "group": "데이터",
+  "title": "SQL — 자연어 데이터 질의",
+  "tags": [
+   "#Text2SQL",
+   "#차트"
+  ],
+  "added": "2026-10-04",
+  "dept": "인공지능응용연구실",
+  "author": "dongju"
+ },
+ {
+  "dir": "saju-local",
+  "port": 8775,
+  "name": "팀 밸런스 맵",
+  "desc": "사주·MBTI 협업 궁합 (워크숍용)",
+  "group": "재미",
+  "title": "팀 밸런스 맵 — 사주·MBTI 궁합",
+  "tags": [
+   "#워크숍",
+   "#재미"
+  ],
+  "added": "2026-10-02",
+  "dept": "인공지능응용연구실",
+  "author": "dongju"
+ }
+]
