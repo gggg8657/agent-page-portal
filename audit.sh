@@ -5,7 +5,7 @@ printf '%-20s %-6s %-5s %-7s %-7s %s\n' 패키지 포트 CDN LICENSE NOTICE self
 python3 -c "import json;[print(t['dir'],t['port']) for t in json.load(open('portal/tools.json'))]" | while read d p; do
   [ -d "$d" ] || { printf '%-20s %-6s (미설치)\n' "$d" "$p"; continue; }
   cdn=$(grep -hoE '(src|href)="https?://[^"]+' "$d"/ui.html "$d"/*.html 2>/dev/null | grep -v 'github.com' | wc -l | tr -d ' ')
-  py=$([ -x "$d/venv/bin/python" ] && echo "$PWD/$d/venv/bin/python" || echo python3)  # ponytail: macOS 엔 timeout 없음, 그냥 실행
+  py=python3; for v in venv .venv; do [ -x "$d/$v/bin/python" ] && py="$PWD/$d/$v/bin/python"; done  # ponytail: macOS 엔 timeout 없음, 그냥 실행
   if [ -f "$d/selftest.py" ]; then r=$(cd "$d" && "$py" selftest.py >/dev/null 2>&1 && echo OK || echo FAIL); else r=없음; fi
   printf '%-20s %-6s %-5s %-7s %-7s %s\n' "$d" "$p" "$cdn" "$([ -f $d/LICENSE ] && echo y || echo n)" "$([ -f $d/NOTICE ] && echo y || echo n)" "$r"
 done
