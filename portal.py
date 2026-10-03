@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """에이전트 페이지 포털 — 도구 목록·상태·바로가기·시작/중지. stdlib만.  python3 portal.py  → http://localhost:8700
 도구 목록은 tools.json. 각 도구는 자기 폴더의 setup.sh 로 PORT 를 넘겨 기동한다(setup.sh 없으면 app.py 직접)."""
-import datetime, json, os, socket, subprocess, sys
+import datetime, json, os, socket, subprocess, sys, urllib.error, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -61,19 +61,67 @@ def stop(t):
 HTML = open(os.path.join(ROOT, "portal.html"), encoding="utf-8").read()
 
 
+HOP = {"connection", "keep-alive", "transfer-encoding", "te", "trailer", "upgrade", "proxy-connection", "host", "content-length"}
+
+
 class H(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
     def log_message(self, *a):
         pass
 
-    def _send(self, body, ctype="application/json"):
+    def proxy(self):
+        """/t/<dir>/<rest> → http://127.0.0.1:<port>/<rest>. 도구 UI 는 상대경로만 쓰므로 그대로 통과. SSE 는 read1 로 바로 흘림."""
+        parts = self.path.split("/", 3)  # ['', 't', dir, rest]
+        t = tool(parts[2]) if len(parts) > 2 else None
+        if not t:
+            return self._send({"error": "unknown tool"}, code=404)
+        if len(parts) < 4:  # /t/dir → /t/dir/ (상대경로 기준점)
+            self.send_response(302); self.send_header("Location", f"/t/{t['dir']}/"); self.send_header("Content-Length", "0"); self.end_headers(); return
+        n = int(self.headers.get("Content-Length") or 0)
+        body = self.rfile.read(n) if n else None
+        hdr = {k: v for k, v in self.headers.items() if k.lower() not in HOP}
+        req = urllib.request.Request(f"http://127.0.0.1:{t['port']}/{parts[3]}", data=body, headers=hdr, method=self.command)
+        try:
+            r = urllib.request.urlopen(req, timeout=3600)
+        except urllib.error.HTTPError as e:
+            r = e
+        except Exception as e:
+            return self._send({"error": f"{t['dir']} 응답 없음 ({type(e).__name__}) — 포털에서 '시작'을 누르세요"}, code=502)
+        self.send_response(r.status)
+        for k, v in r.headers.items():
+            if k.lower() not in HOP:
+                self.send_header(k, v)
+        length = r.headers.get("Content-Length")
+        if length:
+            self.send_header("Content-Length", length)
+        else:
+            self.send_header("Connection", "close")
+        self.end_headers()
+        try:
+            while True:
+                chunk = r.read1(65536) if hasattr(r, "read1") else r.read(65536)
+                if not chunk:
+                    break
+                self.wfile.write(chunk); self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        finally:
+            r.close()
+            if not length:
+                self.close_connection = True
+
+    def _send(self, body, ctype="application/json", code=200):
         b = body if isinstance(body, bytes) else json.dumps(body, ensure_ascii=False).encode()
-        self.send_response(200); self.send_header("Content-Type", ctype); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
+        self.send_response(code); self.send_header("Content-Type", ctype); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
 
     def do_GET(self):
+        if self.path.startswith("/t/"):
+            return self.proxy()
         if self.path == "/api/tools":
             rows = stats()
             return self._send([{**t, "up": alive(t["port"]), "installed": os.path.isdir(os.path.join(BASE, t["dir"])),
-                                "url": f"http://{HOST}:{t['port']}", "usage": usage(t["dir"], rows),
+                                "url": f"/t/{t['dir']}/", "url_direct": f"http://{HOST}:{t['port']}", "usage": usage(t["dir"], rows),
                                 "readme": os.path.exists(os.path.join(BASE, t["dir"], "README.md"))} for t in TOOLS])
         if self.path.startswith("/api/readme/"):
             d = self.path.split("/")[-1]
@@ -87,6 +135,8 @@ class H(BaseHTTPRequestHandler):
         self._send(HTML.encode(), "text/html; charset=utf-8")
 
     def do_POST(self):
+        if self.path.startswith("/t/"):
+            return self.proxy()
         req = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         t = tool(req.get("dir"))
         if not t:
