@@ -59,6 +59,12 @@ def stop(t):
 
 
 HTML = open(os.path.join(ROOT, "portal.html"), encoding="utf-8").read()
+HELP = open(os.path.join(ROOT, "help.html"), encoding="utf-8").read()  # 도구 페이지에 끼워 넣는 ? 버튼 + 사용법 팝업
+
+
+def guide(d):
+    p = os.path.join(ROOT, "guides", f"{d}.md")
+    return open(p, encoding="utf-8").read() if os.path.exists(p) else f"## {d}\n\n사용법이 아직 없습니다. `portal/guides/{d}.md` 를 만들면 여기에 뜹니다."
 
 
 HOP = {"connection", "keep-alive", "transfer-encoding", "te", "trailer", "upgrade", "proxy-connection", "host", "content-length"}
@@ -88,6 +94,16 @@ class H(BaseHTTPRequestHandler):
             r = e
         except Exception as e:
             return self._send({"error": f"{t['dir']} 응답 없음 ({type(e).__name__}) — 포털에서 '시작'을 누르세요"}, code=502)
+        inject = self.command == "GET" and parts[3] in ("", "index.html") and "text/html" in (r.headers.get("Content-Type") or "")
+        if inject:  # 도구 첫 화면: ? 버튼 + 사용법 팝업을 끝에 붙인다 (도구 파일은 손대지 않음)
+            body = r.read() + HELP.replace("%DIR%", t["dir"]).encode()
+            r.close()
+            self.send_response(r.status)
+            for k, v in r.headers.items():
+                if k.lower() not in HOP:
+                    self.send_header(k, v)
+            self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+            return
         self.send_response(r.status)
         for k, v in r.headers.items():
             if k.lower() not in HOP:
@@ -127,12 +143,15 @@ class H(BaseHTTPRequestHandler):
             d = self.path.split("/")[-1]
             p = os.path.join(BASE, d, "README.md") if tool(d) else ""
             return self._send((open(p, encoding="utf-8").read() if p and os.path.exists(p) else "README 없음").encode(), "text/plain; charset=utf-8")
+        if self.path.startswith("/api/guide/"):
+            d = self.path.split("/")[-1]
+            return self._send(guide(d).encode() if (tool(d) or d == "portal") else b"", "text/plain; charset=utf-8")
         if self.path == "/api/feed":
             try:
                 return self._send(json.load(open(os.path.join(ROOT, "feed.json"), encoding="utf-8")))
             except Exception:
                 return self._send([])
-        self._send(HTML.encode(), "text/html; charset=utf-8")
+        self._send((HTML + HELP.replace("%DIR%", "portal")).encode(), "text/html; charset=utf-8")
 
     def do_POST(self):
         if self.path.startswith("/t/"):
