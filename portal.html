@@ -35,11 +35,13 @@
   .hd{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}.sort{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:#fff}.sort button{border:none;background:#fff;padding:5px 12px;font:inherit;font-size:12px;cursor:pointer;color:var(--muted)}.sort button.on{background:var(--navy);color:#fff}
   .feed{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px}.feed h3{margin:0 0 10px;font-size:14px}.post{border-top:1px solid #f1f3f6;padding:10px 0}.post b{font-size:13px}.post p{margin:4px 0;font-size:12px;color:#4b5563}.post .m{font-size:11px;color:var(--muted);display:flex;gap:8px}.post .m .l{color:#e11d48;margin-left:auto}
   dialog{border:1px solid var(--line);border-radius:10px;max-width:760px;width:90%;padding:0}dialog pre{white-space:pre-wrap;font-size:12.5px;padding:18px;margin:0;max-height:70vh;overflow:auto}dialog .x{position:sticky;top:0;background:#fff;border-bottom:1px solid var(--line);padding:10px 16px;display:flex;justify-content:space-between;align-items:center;font-weight:600}
+  dialog.form{border:1px solid var(--line);border-radius:10px;width:420px;max-width:92%;padding:0}dialog.form .fb{display:flex;flex-direction:column;gap:8px;padding:14px 16px}
+  dialog.form input,dialog.form textarea,dialog.form select{font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:6px}
 </style>
 <div class="top"><span class="logo">KAERI AI Agent Portal<small>내부망 로컬 LLM 에이전트</small></span><span class="sp"></span><span class="user" id="user"></span></div>
 <div class="wrap">
   <aside class="side">
-    <button class="mk" onclick="howto('','내 에이전트 만들기')">+ 내 에이전트 만들기</button>
+    <button class="mk" onclick="addTool.showModal()">+ 내 에이전트 만들기</button>
     <div class="menu" id="menu"><div data-v="home" class="on">홈</div><div data-v="all">전체 에이전트</div><div data-v="fav">즐겨찾기</div><div data-v="recent">최근 사용</div></div>
     <div class="box"><h4>현황</h4><table id="counts"></table></div>
     <div class="box"><h4>사용자 랭킹 (최근 30일)</h4><table id="rank"></table></div>
@@ -59,11 +61,15 @@
       <div class="grid" id="grid" style="margin-top:12px"></div>
     </div>
   </main>
-  <aside class="right"><div class="feed"><h3>📌 노하우 · 우수사례 피드</h3><div id="feed"></div></div></aside>
+  <aside class="right"><div class="feed"><h3>📌 노하우 · 우수사례 피드 <button class="chip" style="float:right" onclick="newPost.showModal()">+ 글쓰기</button></h3><div id="feed"></div></div></aside>
+<dialog id="newPost" class="form"><form method="dialog" onsubmit="return post(event)"><div class="x"><span>노하우 · 우수사례 글쓰기</span><button type="button" onclick="newPost.close()">×</button></div>
+  <div class="fb"><input name="title" placeholder="제목" required><textarea name="body" rows="5" placeholder="내용 (어떤 도구를 어떻게 썼고 뭐가 좋았는지)"></textarea><input name="tags" placeholder="태그 (띄어쓰기로: 회의록 HWP)"><input name="dept" placeholder="부서"><input name="author" placeholder="이름"><button class="btn">올리기</button></div></form></dialog>
+<dialog id="addTool" class="form"><form method="dialog" onsubmit="return addToolSubmit(event)"><div class="x"><span>내 에이전트 등록</span><button type="button" onclick="addTool.close()">×</button></div>
+  <div class="fb"><input name="dir" placeholder="폴더 이름 (예: my-tool-local, agent_page/ 아래)" required><input name="port" type="number" placeholder="포트 (비어 있는 번호)" required><input name="title" placeholder="제목 (예: MyTool — 한 줄 설명)" required><input name="desc" placeholder="설명"><select name="group"><option>문서<option>회의<option>그림<option>음성<option>데이터<option>재미<option>기타</select><input name="tags" placeholder="태그 (띄어쓰기)"><input name="dept" placeholder="부서"><input name="author" placeholder="작성자"><div style="font-size:12px;color:var(--muted)">폴더에 app.py·setup.sh 를 두면 카드가 '중지됨'으로 바뀌고 포털에서 시작할 수 있습니다. 규약: 환경변수 PORT·WORKSPACE·LLM_*.</div><button class="btn">등록</button></div></form></dialog>
 </div>
 <dialog id="dlg"><div class="x"><span id="dlgT"></span><button onclick="dlg.close()" style="border:none;background:none;font-size:18px;cursor:pointer">×</button></div><pre id="dlgB"></pre></dialog>
 <script>
-let TOOLS=[],FEED=[],view='home',sort='pop',cat='전체',query='';
+let TOOLS=[],FEED=[],RANK=[],view='home',sort='pop',cat='전체',query='';
 const ICON={문서:'📄',회의:'🎙️',그림:'🎨',음성:'🔊',데이터:'📊',재미:'🎲'};
 const LS=k=>JSON.parse(localStorage.getItem(k)||'[]'),save=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 const isNew=t=>(Date.now()-new Date(t.added))/864e5<=30;
@@ -91,8 +97,8 @@ function render(){
     </div>`).join('');
   }
   counts.innerHTML=[['전체',TOOLS.length],['실행 중',TOOLS.filter(t=>t.up).length],['신규(30일)',TOOLS.filter(isNew).length],['미설치',TOOLS.filter(t=>!t.installed).length]].map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join('');
-  rank.innerHTML=[...TOOLS].sort((a,b)=>b.usage.recent-a.usage.recent).slice(0,5).map((t,i)=>`<tr><td>${i+1}. ${t.title.split(' — ')[0]}</td><td>${t.usage.recent}</td></tr>`).join('');
-  feed.innerHTML=FEED.map(p=>`<div class="post"><b>${p.title}</b><p>${p.body}</p><div class="m"><span>${p.dept}</span><span>${p.author}</span><span>${p.date}</span><span class="l">❤ ${p.likes}</span></div></div>`).join('');
+  rank.innerHTML=RANK.map((r,i)=>`<tr><td>${i+1}. ${esc(r.user)}</td><td>${r.n}</td></tr>`).join('')||'<tr><td colspan=2 style="color:#999">아직 없음</td></tr>';
+  feed.innerHTML=FEED.map(p=>`<div class="post"><b>${esc(p.title)}</b><p>${esc(p.body)}</p><div class="m"><span>${esc(p.dept)}</span><span>${esc(p.author)}</span><span>${p.ts.slice(0,10)}</span><span class="l" style="cursor:pointer" onclick="postLike(${p.id})">${p.liked?'❤':'♡'} ${p.likes}</span></div></div>`).join('')||'<div style="font-size:12px;color:#999">첫 글을 올려 보세요</div>';
 }
 function go(d){const t=TOOLS.find(x=>x.dir===d);if(t.up){hit(d);window.open(t.url)}else howto(d,t.title)}
 function hit(d){save('recent',[d,...LS('recent').filter(x=>x!==d)].slice(0,10));fetch('/api/open',{method:'POST',body:JSON.stringify({dir:d})}).then(()=>setTimeout(load,500))}
@@ -100,11 +106,15 @@ function like(d){fetch('/api/like',{method:'POST',body:JSON.stringify({dir:d})})
 function fav(d){const f=LS('fav');save('fav',f.includes(d)?f.filter(x=>x!==d):[...f,d]);render()}
 async function act(a,d){await fetch('/api/'+a,{method:'POST',body:JSON.stringify({dir:d})});setTimeout(load,4000);setTimeout(load,15000)}
 async function howto(d,title){dlgT.textContent=title;dlgB.textContent=d?await fetch('/api/readme/'+d).then(r=>r.text()):'새 에이전트 추가 방법\n\n1. agent_page/ 아래 <이름>-local/ 폴더를 만든다 (app.py · ui.html · setup.sh · selftest.py · README.md)\n2. LLM 연결은 환경변수 LLM_API / LLM_BASE_URL / LLM_MODEL 규약을 따른다\n3. portal/tools.json 에 한 줄 추가 (dir, port, title, desc, group, tags, dept, author, added)\n4. 포털 새로고침';dlg.showModal()}
-async function load(){[TOOLS,FEED]=await Promise.all([fetch('/api/tools').then(r=>r.json()),fetch('/api/feed').then(r=>r.json())]);render()}
+async function load(){const j=await fetch('/api/tools').then(r=>r.json());TOOLS=j.tools;FEED=j.posts;RANK=j.rank;document.getElementById('user').textContent='내부망 · '+j.me;render()}
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function postJSON(u,b){const r=await fetch(u,{method:'POST',body:JSON.stringify(b)}).then(r=>r.json());if(r.error)alert(r.error);return r}
+function postLike(id){postJSON('/api/post_like',{id}).then(load)}
+function post(e){e.preventDefault();const f=Object.fromEntries(new FormData(e.target));postJSON('/api/post',f).then(r=>{if(!r.error){e.target.reset();newPost.close();load()}});return false}
+function addToolSubmit(e){e.preventDefault();const f=Object.fromEntries(new FormData(e.target));postJSON('/api/tool_add',f).then(r=>{if(!r.error){e.target.reset();addTool.close();load()}});return false}
 menu.querySelectorAll('div').forEach(m=>m.onclick=()=>{menu.querySelectorAll('div').forEach(x=>x.classList.remove('on'));m.classList.add('on');view=m.dataset.v;if(view==='fav'||view==='recent'){view==='fav'?(view='fav'):(view='recent');all.hidden=false}render()});
 document.querySelectorAll('.sort button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.sort button').forEach(x=>x.classList.remove('on'));b.classList.add('on');sort=b.dataset.s;render()});
 document.getElementById('q').addEventListener('keydown',e=>{if(e.key==='Enter'){query=e.target.value.trim().toLowerCase();if(view==='home'){view='all';menu.querySelectorAll('div').forEach(x=>x.classList.toggle('on',x.dataset.v==='all'))}render()}});
-document.getElementById('user').textContent='내부망 · '+location.hostname;
 if(location.hash==='#all'){view='all';menu.querySelectorAll('div').forEach(x=>x.classList.toggle('on',x.dataset.v==='all'))}  // 딥링크
 load();setInterval(load,10000);
 </script>
