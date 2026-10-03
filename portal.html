@@ -63,12 +63,12 @@
 </div>
 <dialog id="dlg"><div class="x"><span id="dlgT"></span><button onclick="dlg.close()" style="border:none;background:none;font-size:18px;cursor:pointer">×</button></div><pre id="dlgB"></pre></dialog>
 <script>
-let TOOLS=[],FEED=[],view='home',sort='pop',cat='전체',q='';
+let TOOLS=[],FEED=[],view='home',sort='pop',cat='전체',query='';
 const ICON={문서:'📄',회의:'🎙️',그림:'🎨',음성:'🔊',데이터:'📊',재미:'🎲'};
 const LS=k=>JSON.parse(localStorage.getItem(k)||'[]'),save=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 const isNew=t=>(Date.now()-new Date(t.added))/864e5<=30;
 const score=t=>t.usage.recent*3+t.usage.likes*2+t.usage.total;
-function filtered(){let ts=TOOLS.filter(t=>cat==='전체'||t.group===cat);if(q)ts=ts.filter(t=>(t.title+t.desc+t.tags.join()).toLowerCase().includes(q));
+function filtered(){let ts=TOOLS.filter(t=>cat==='전체'||t.group===cat);if(query)ts=ts.filter(t=>(t.title+t.desc+t.tags.join()).toLowerCase().includes(query));
   if(view==='fav'){const f=LS('fav');ts=ts.filter(t=>f.includes(t.dir))}if(view==='recent'){const r=LS('recent');ts=ts.filter(t=>r.includes(t.dir)).sort((a,b)=>r.indexOf(a.dir)-r.indexOf(b.dir))}return ts}
 function mini(t,i){return `<div class="mini" onclick="go('${t.dir}')"><span class="rank">${i}</span><div class="ic">${ICON[t.group]||'🤖'}</div><div><b>${t.title.split(' — ')[0]}</b><div class="d">${t.desc}</div><div class="s">${t.up?'🟢 실행 중':'⚪ 중지'} · 👁 ${t.usage.total} · ❤ ${t.usage.likes}</div></div></div>`}
 function render(){
@@ -103,7 +103,7 @@ async function howto(d,title){dlgT.textContent=title;dlgB.textContent=d?await fe
 async function load(){[TOOLS,FEED]=await Promise.all([fetch('/api/tools').then(r=>r.json()),fetch('/api/feed').then(r=>r.json())]);render()}
 menu.querySelectorAll('div').forEach(m=>m.onclick=()=>{menu.querySelectorAll('div').forEach(x=>x.classList.remove('on'));m.classList.add('on');view=m.dataset.v;if(view==='fav'||view==='recent'){view==='fav'?(view='fav'):(view='recent');all.hidden=false}render()});
 document.querySelectorAll('.sort button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.sort button').forEach(x=>x.classList.remove('on'));b.classList.add('on');sort=b.dataset.s;render()});
-q.addEventListener('keydown',e=>{if(e.key==='Enter'){q=e.target.value.trim().toLowerCase();if(view==='home'){view='all';menu.querySelectorAll('div').forEach(x=>x.classList.toggle('on',x.dataset.v==='all'))}render()}});
+document.getElementById('q').addEventListener('keydown',e=>{if(e.key==='Enter'){query=e.target.value.trim().toLowerCase();if(view==='home'){view='all';menu.querySelectorAll('div').forEach(x=>x.classList.toggle('on',x.dataset.v==='all'))}render()}});
 document.getElementById('user').textContent='내부망 · '+location.hostname;
 load();setInterval(load,10000);
 </script>
