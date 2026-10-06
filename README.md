@@ -100,3 +100,13 @@ bash audit.sh                     # 전체 점검: CDN 유출·포트 중복·LI
 - 기본 LLM: [Ollama](https://github.com/ollama/ollama) (MIT) + Google [Gemma](https://ai.google.dev/gemma) `gemma4:31b` (모델 이용 조건은 Gemma 배포처 참고) — 포털은 환경변수로 넘겨 줄 뿐 동봉하지 않습니다.
 
 저작권 표기는 `NOTICE` 를 보세요.
+
+### GPU 나눠 쓰기
+`tools.json` 에서 도구마다 `"gpus": "0"` 처럼 적으면 포털이 그 도구를 `CUDA_VISIBLE_DEVICES=<값>` 으로 띄웁니다(없으면 포털 환경의 기본값). 현재 배정 예:
+
+| GPU | 쓰는 것 |
+|---|---|
+| 0 | protein-local (Boltz·ProteinMPNN) |
+| 1 | avatar-local(가상 캐릭터 스튜디오 포함)·portrait-local·persona-local |
+| 2·3 | Ollama(gemma4:31b, 모든 도구의 LLM) · GPU 를 따로 지정하지 않은 도구 |
+| 3 | tts-local·meeting-local(받아쓰기) |

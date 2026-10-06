@@ -81,6 +81,8 @@ def tool(d):
 def start(t):
     cwd = os.path.join(BASE, t["dir"])
     env = {**os.environ, "PORT": str(t["port"]), "WORKSPACE": os.path.join(DATA, t["dir"])}
+    if t.get("gpus"):  # tools.json 의 "gpus": "0" 처럼 도구마다 GPU 를 나눠 준다 (없으면 포털의 CUDA_VISIBLE_DEVICES 그대로)
+        env["CUDA_VISIBLE_DEVICES"] = str(t["gpus"])
     if os.path.exists(os.path.join(cwd, "setup.sh")):
         cmd = ["bash", "setup.sh"]
     else:  # ponytail: setup.sh 없는 도구는 app.py 직접 (saju-local)
