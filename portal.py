@@ -120,6 +120,25 @@ def guide(d):
 
 
 # ── HTTP ────────────────────────────────────────────────────────────────
+
+# ── 저작권 표기 (LICENSE·NOTICE 참고) ─────────────────────────────────────
+_SIG = __import__("base64").b64decode("wqkgMjAyNiDquYDrj5nso7wgwrcgZG9uZ2p1a2ltLmRldkBnbWFpbC5jb20=").decode()
+_SIG_A = __import__("base64").b64decode("RG9uZ0p1IEtpbSA8ZG9uZ2p1a2ltLmRldkBnbWFpbC5jb20+").decode()
+
+
+def signed(html):
+    """화면에 저작권 표기를 붙인다. ui.html 에서 지워져도 서버가 내보낼 때 다시 붙는다."""
+    name, mail = _SIG.split(" · ")
+    if 'name="author"' not in html:
+        meta = f'<meta name="author" content="{name[7:]} <{mail}>">'
+        html = html.replace("<head>", "<head>" + meta, 1) if "<head>" in html else meta + html
+    if "data-sig" not in html:
+        tag = (f'<!-- {_SIG} --><div data-sig title="{mail}" style="text-align:center;font-size:11px;color:#9aa0a6;'
+               f'opacity:.55;margin:28px 0 8px">{name}</div>')
+        html = html.replace("</body>", tag + "</body>", 1) if "</body>" in html else html + tag
+    return html
+
+
 class H(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -132,7 +151,7 @@ class H(BaseHTTPRequestHandler):
 
     def _send(self, body, ctype="application/json", code=200):
         b = body if isinstance(body, bytes) else json.dumps(body, ensure_ascii=False).encode()
-        self.send_response(code); self.send_header("Content-Type", ctype); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
+        self.send_response(code); self.send_header("X-Author", _SIG_A); self.send_header("Content-Type", ctype); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
 
     def proxy(self):
         """/t/<dir>/<rest> → http://127.0.0.1:<port>/<rest>. 첫 화면 HTML 에는 사용법 팝업을 붙이고, 나머지(SSE 포함)는 그대로 흘린다."""
@@ -152,7 +171,7 @@ class H(BaseHTTPRequestHandler):
         except Exception as e:
             return self._send({"error": f"{t['dir']} 응답 없음 ({type(e).__name__}) — 포털에서 '시작'을 누르세요"}, code=502)
         inject = self.command == "GET" and parts[3] in ("", "index.html") and "text/html" in (r.headers.get("Content-Type") or "")
-        body = r.read() + HELP.replace("%DIR%", t["dir"]).encode() if inject else None
+        body = signed(r.read().decode("utf-8", "replace") + HELP.replace("%DIR%", t["dir"])).encode() if inject else None  # 도구 화면에도 저작자 표기
         self.send_response(r.status)
         for k, v in r.headers.items():
             if k.lower() not in HOP:
@@ -194,7 +213,7 @@ class H(BaseHTTPRequestHandler):
             return self._send((open(f, encoding="utf-8").read() if f and os.path.exists(f) else "README 없음").encode(), "text/plain; charset=utf-8")
         if p != "/":
             return self._send({"error": "not found"}, code=404)
-        self._send((HTML + HELP.replace("%DIR%", "portal")).encode(), "text/html; charset=utf-8")
+        self._send(signed(HTML + HELP.replace("%DIR%", "portal")).encode(), "text/html; charset=utf-8")
 
     def do_POST(self):
         if self.path.startswith("/t/"):
@@ -236,5 +255,5 @@ if __name__ == "__main__":
             if os.path.isdir(os.path.join(BASE, t["dir"])):
                 print(sys.argv[1], t["dir"], t["port"]); (start if sys.argv[1] == "start-all" else stop)(t)
         sys.exit(0)
-    print(f"portal → http://localhost:{PORT}  data={DATA}")
+    print(f"portal → http://localhost:{PORT}  data={DATA}  {_SIG}")
     ThreadingHTTPServer(("", PORT), H).serve_forever()
