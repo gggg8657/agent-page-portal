@@ -1,217 +1,363 @@
 [
- {
-  "dir": "humanize-kr-local",
-  "port": 8765,
-  "name": "Humanize KR",
-  "desc": "AI가 쓴 한글의 번역투·상투구 제거",
-  "group": "문서",
-  "title": "Humanize KR — 한국어 문장 다듬기",
-  "tags": [
-   "#윤문",
-   "#번역투제거"
-  ],
-  "added": "2026-09-30",
-  "dept": "인공지능응용연구실",
-  "author": "dongju"
- },
- {
-  "dir": "kordoc-local",
-  "port": 8766,
-  "name": "kordoc",
-  "desc": "HWP·PDF 요약·질문·공문서 초안 HWPX",
-  "group": "문서",
-  "title": "kordoc — 공문서 읽기·초안 HWPX",
-  "tags": [
-   "#HWP",
-   "#공문서",
-   "#요약"
-  ],
-  "added": "2026-09-30",
-  "dept": "인공지능응용연구실",
-  "author": "dongju"
- },
- {
-  "dir": "notebook-local",
-  "port": 8769,
-  "name": "Notebook",
-  "desc": "출처 올리고 인용 채팅·노트·팟캐스트 대본",
-  "group": "문서",
-  "title": "Notebook — 출처 기반 질의·노트",
-  "tags": [
-   "#RAG",
-   "#NotebookLM",
-   "#인용"
-  ],
-  "added": "2026-10-04",
-  "dept": "인공지능응용연구실",
-  "author": "dongju"
- },
- {
-  "dir": "writer-local",
-  "port": 8773,
-  "name": "Writer",
-  "desc": "건배사·경조사·축사·공지문 패턴 글쓰기",
-  "group": "문서",
-  "title": "Writer — 건배사·경조사·공지문",
-  "tags": [
-   "#글쓰기",
-   "#패턴"
-  ],
-  "added": "2026-10-04",
-  "dept": "인공지능응용연구실",
-  "author": "dongju"
- },
- {
-  "dir": "meeting-local",
-  "port": 8767,
-  "name": "Meeting",
-  "desc": "녹음 → 화자 분리 → 회의록·인사이트",
-  "group": "회의",
-  "title": "Meeting — 회의 녹음 회의록",
-  "tags": [
-   "#회의록",
-   "#화자분리",
-   "#Whisper"
-  ],
-  "added": "2026-10-04",
-  "dept": "인공지능응용연구실",
-  "author": "dongju"
- },
- {
-  "dir": "diagram-local",
-  "port": 8768,
-  "name": "Diagram",
-  "desc": "말로 설명하면 다이어그램",
-  "group": "그림",
-  "title": "Diagram — 말로 그리는 다이어그램",
-  "tags": [
-   "#Mermaid",
-   "#도식"
-  ],
-  "added": "2026-10-04",
-  "dept": "인공지능응용연구실",
-  "author": "dongju"
- },
- {
-  "dir": "sketch-local",
-  "port": 8774,
-  "name": "Sketch",
-  "desc": "손그림 사진 → 논문 figure 스타일 다이어그램",
-  "group": "그림",
-  "title": "Sketch — 손그림을 figure로",
-  "tags": [
-   "#비전",
-   "#논문figure"
-  ],
-  "added": "2026-10-04",
-  "dept": "인공지능응용연구실",
-  "author": "dongju"
- },
- {
-  "dir": "portrait-local",
-  "port": 8770,
-  "name": "Portrait",
-  "desc": "사진 한 장 → 표정·말하기 영상",
-  "group": "그림",
-  "title": "Portrait — 사진이 말하는 영상",
-  "tags": [
-   "#LivePortrait",
-   "#영상"
-  ],
-  "added": "2026-10-04",
-  "dept": "인공지능응용연구실",
-  "author": "dongju"
- },
- {
-  "dir": "tts-local",
-  "port": 8771,
-  "name": "TTS",
-  "desc": "한국어 음성 합성 (OpenAI 음성 API 호환)",
-  "group": "음성",
-  "title": "TTS — 한국어 음성 합성",
-  "tags": [
-   "#TTS",
-   "#음성"
-  ],
-  "added": "2026-10-04",
-  "dept": "인공지능응용연구실",
-  "author": "dongju"
- },
- {
-  "dir": "sql-local",
-  "port": 8772,
-  "name": "SQL",
-  "desc": "자연어 → SQL → 표·차트",
-  "group": "데이터",
-  "title": "SQL — 자연어 데이터 질의",
-  "tags": [
-   "#Text2SQL",
-   "#차트"
-  ],
-  "added": "2026-10-04",
-  "dept": "인공지능응용연구실",
-  "author": "dongju"
- },
- {
-  "dir": "saju-local",
-  "port": 8775,
-  "name": "팀 밸런스 맵",
-  "desc": "사주·MBTI 협업 궁합 (워크숍용)",
-  "group": "재미",
-  "title": "팀 밸런스 맵 — 사주·MBTI 궁합",
-  "tags": [
-   "#워크숍",
-   "#재미"
-  ],
-  "added": "2026-10-02",
-  "dept": "인공지능응용연구실",
-  "author": "dongju"
- },
- {
-  "dir": "persona-local",
-  "port": 8776,
-  "name": "Persona",
-  "title": "Persona — AI 캐릭터 대화 (토이)",
-  "desc": "기억·호감도 캐릭터 채팅 + 음성 답변·말로 대화·립싱크 클립",
-  "group": "토이",
-  "tags": [
-   "#토이",
-   "#캐릭터"
-  ],
-  "dept": "개인",
-  "author": "dongju",
-  "added": "2026-10-04"
- },
- {
-  "dir": "avatar-local",
-  "port": 8777,
-  "name": "Avatar",
-  "title": "Avatar — 내 얼굴·내 목소리 아바타 (토이)",
-  "desc": "본인 사진+음성 샘플로 말하는 립싱크 아바타",
-  "group": "토이",
-  "tags": [
-   "#토이",
-   "#립싱크"
-  ],
-  "dept": "개인",
-  "author": "dongju",
-  "added": "2026-10-04"
- },
- {
-  "dir": "agent-cad-local",
-  "port": 8778,
-  "name": "CAD Agent",
-  "desc": "말하면 3D 부품·2D 판재·ICT 배치도/개황도, 기존 DXF 수정",
-  "group": "그림",
-  "title": "CAD Agent — 로컬 CAD 초안·검증",
-  "tags": [
-   "#CAD",
-   "#STEP",
-   "#DXF",
-   "#ICT"
-  ],
-  "added": "2026-10-06",
-  "dept": "인공지능응용연구실",
-  "author": "dongju"
- }
+  {
+    "dir": "humanize-kr-local",
+    "port": 8765,
+    "name": "Humanize KR",
+    "desc": "AI가 쓴 한글의 번역투·상투구 제거",
+    "group": "문서",
+    "title": "Humanize KR — 한국어 문장 다듬기",
+    "tags": [
+      "#윤문",
+      "#번역투제거"
+    ],
+    "added": "2026-09-30",
+    "dept": "인공지능응용연구실",
+    "author": "dongju"
+  },
+  {
+    "dir": "kordoc-local",
+    "port": 8766,
+    "name": "kordoc",
+    "desc": "HWP·PDF 요약·질문·공문서 초안 HWPX",
+    "group": "문서",
+    "title": "kordoc — 공문서 읽기·초안 HWPX",
+    "tags": [
+      "#HWP",
+      "#공문서",
+      "#요약"
+    ],
+    "added": "2026-09-30",
+    "dept": "인공지능응용연구실",
+    "author": "dongju"
+  },
+  {
+    "dir": "notebook-local",
+    "port": 8769,
+    "name": "Notebook",
+    "desc": "출처 올리고 인용 채팅·노트·팟캐스트 대본",
+    "group": "문서",
+    "title": "Notebook — 출처 기반 질의·노트",
+    "tags": [
+      "#RAG",
+      "#NotebookLM",
+      "#인용"
+    ],
+    "added": "2026-10-04",
+    "dept": "인공지능응용연구실",
+    "author": "dongju"
+  },
+  {
+    "dir": "writer-local",
+    "port": 8773,
+    "name": "Writer",
+    "desc": "건배사·경조사·축사·공지문 패턴 글쓰기",
+    "group": "문서",
+    "title": "Writer — 건배사·경조사·공지문",
+    "tags": [
+      "#글쓰기",
+      "#패턴"
+    ],
+    "added": "2026-10-04",
+    "dept": "인공지능응용연구실",
+    "author": "dongju"
+  },
+  {
+    "dir": "meeting-local",
+    "port": 8767,
+    "name": "Meeting",
+    "desc": "녹음 → 화자 분리 → 회의록·인사이트",
+    "group": "회의",
+    "title": "Meeting — 회의 녹음 회의록",
+    "tags": [
+      "#회의록",
+      "#화자분리",
+      "#Whisper"
+    ],
+    "added": "2026-10-04",
+    "dept": "인공지능응용연구실",
+    "author": "dongju"
+  },
+  {
+    "dir": "diagram-local",
+    "port": 8768,
+    "name": "Diagram",
+    "desc": "말로 설명하면 다이어그램",
+    "group": "그림",
+    "title": "Diagram — 말로 그리는 다이어그램",
+    "tags": [
+      "#Mermaid",
+      "#도식"
+    ],
+    "added": "2026-10-04",
+    "dept": "인공지능응용연구실",
+    "author": "dongju"
+  },
+  {
+    "dir": "sketch-local",
+    "port": 8774,
+    "name": "Sketch",
+    "desc": "손그림 사진 → 논문 figure 스타일 다이어그램",
+    "group": "그림",
+    "title": "Sketch — 손그림을 figure로",
+    "tags": [
+      "#비전",
+      "#논문figure"
+    ],
+    "added": "2026-10-04",
+    "dept": "인공지능응용연구실",
+    "author": "dongju"
+  },
+  {
+    "dir": "portrait-local",
+    "port": 8770,
+    "name": "Portrait",
+    "desc": "사진 한 장 → 표정·말하기 영상",
+    "group": "그림",
+    "title": "Portrait — 사진이 말하는 영상",
+    "tags": [
+      "#LivePortrait",
+      "#영상"
+    ],
+    "added": "2026-10-04",
+    "dept": "인공지능응용연구실",
+    "author": "dongju"
+  },
+  {
+    "dir": "tts-local",
+    "port": 8771,
+    "name": "TTS",
+    "desc": "한국어 음성 합성 (OpenAI 음성 API 호환)",
+    "group": "음성",
+    "title": "TTS — 한국어 음성 합성",
+    "tags": [
+      "#TTS",
+      "#음성"
+    ],
+    "added": "2026-10-04",
+    "dept": "인공지능응용연구실",
+    "author": "dongju"
+  },
+  {
+    "dir": "sql-local",
+    "port": 8772,
+    "name": "SQL (demoDB)",
+    "desc": "자연어 → SQL → 표·차트 · 가상 demoDB",
+    "group": "데이터",
+    "title": "SQL — 자연어 데이터 질의 (demoDB: 가상 데이터)",
+    "tags": [
+      "#Text2SQL",
+      "#차트"
+    ],
+    "added": "2026-10-04",
+    "dept": "인공지능응용연구실",
+    "author": "dongju"
+  },
+  {
+    "dir": "saju-local",
+    "port": 8775,
+    "name": "팀 밸런스 맵",
+    "desc": "사주·MBTI 협업 궁합 (워크숍용)",
+    "group": "재미",
+    "title": "팀 밸런스 맵 — 사주·MBTI 궁합",
+    "tags": [
+      "#워크숍",
+      "#재미"
+    ],
+    "added": "2026-10-02",
+    "dept": "인공지능응용연구실",
+    "author": "dongju"
+  },
+  {
+    "dir": "persona-local",
+    "port": 8776,
+    "name": "Persona",
+    "title": "Persona — AI 캐릭터 대화 (토이)",
+    "desc": "기억·호감도 캐릭터 채팅 + 음성 답변·말로 대화·립싱크 클립",
+    "group": "토이",
+    "tags": [
+      "#토이",
+      "#캐릭터"
+    ],
+    "dept": "개인",
+    "author": "dongju",
+    "added": "2026-10-04"
+  },
+  {
+    "dir": "avatar-local",
+    "port": 8777,
+    "name": "Avatar",
+    "title": "Avatar — 내 얼굴·내 목소리 아바타 (토이)",
+    "desc": "본인 사진+음성 샘플로 말하는 립싱크 아바타",
+    "group": "토이",
+    "tags": [
+      "#토이",
+      "#립싱크"
+    ],
+    "dept": "개인",
+    "author": "dongju",
+    "added": "2026-10-04"
+  },
+  {
+    "dir": "agent-cad-local",
+    "port": 8778,
+    "name": "CAD Agent",
+    "desc": "말하면 3D 부품·2D 판재·ICT 배치도/개황도, 기존 DXF 수정",
+    "group": "그림",
+    "title": "CAD Agent — 로컬 CAD 초안·검증",
+    "tags": [
+      "#CAD",
+      "#STEP",
+      "#DXF",
+      "#ICT"
+    ],
+    "added": "2026-10-06",
+    "dept": "인공지능응용연구실",
+    "author": "dongju"
+  },
+  {
+    "dir": "award-local",
+    "port": 8779,
+    "name": "상장 생성기",
+    "desc": "상장·표창장·감사장 — 디자인 7종, PDF/PNG, 일괄 발급",
+    "group": "문서",
+    "title": "상장 생성기 — 상장·표창장·감사장",
+    "tags": [
+      "#상장",
+      "#표창장",
+      "#PDF"
+    ],
+    "added": "2026-10-06",
+    "dept": "인공지능응용연구실",
+    "author": "dongju"
+  },
+  {
+    "dir": "mail-local",
+    "port": 8780,
+    "name": "메일",
+    "desc": "업무 메일 작성·회신·윤문 (diff·숫자 보존 검사)",
+    "group": "문서",
+    "title": "메일 — 업무 메일 작성·회신·윤문",
+    "tags": [
+      "#메일",
+      "#윤문",
+      "#회신"
+    ],
+    "added": "2026-10-06",
+    "dept": "인공지능응용연구실",
+    "author": "dongju"
+  },
+  {
+    "dir": "protein-local",
+    "port": 8781,
+    "name": "단백질 구조 예측",
+    "desc": "서열 → 3D 구조·pLDDT·PAE, 결합 친화도 순위, 서열 설계 (Boltz-2 + ProteinMPNN, 폐쇄망)",
+    "group": "연구",
+    "title": "단백질 구조 예측 — 구조·결합 친화도·서열 설계",
+    "tags": [
+      "#단백질",
+      "#구조예측",
+      "#결합친화도",
+      "#단백질설계",
+      "#Boltz"
+    ],
+    "added": "2026-10-06",
+    "dept": "인공지능응용연구실",
+    "author": "dongju"
+  },
+  {
+    "dir": "digitizer-local",
+    "port": 8783,
+    "name": "그래프 디지타이저",
+    "desc": "그래프 그림·PDF → 숫자 데이터 (축 AI 보정·색 추출·CSV/엑셀)",
+    "group": "데이터",
+    "title": "그래프 디지타이저 — 논문 그래프 그림에서 데이터 뽑기",
+    "tags": [
+      "#그래프",
+      "#디지타이저",
+      "#데이터추출"
+    ],
+    "added": "2026-10-06",
+    "dept": "인공지능응용연구실",
+    "author": "dongju"
+  },
+  {
+    "dir": "review-local",
+    "port": 8782,
+    "name": "논문 리뷰",
+    "desc": "투고 전 원고 사전 심사 — 인용 확인된 심사 지적·예상 판정·예상 질문 + 그림·인용·약어·수치 기계 점검",
+    "group": "문서",
+    "title": "논문 리뷰 — 투고 전 사전 심사",
+    "tags": [
+      "#논문",
+      "#심사",
+      "#투고"
+    ],
+    "added": "2026-10-06",
+    "dept": "인공지능응용연구실",
+    "author": "dongju"
+  },
+  {
+    "dir": "chart-local",
+    "port": 8786,
+    "name": "그래프",
+    "desc": "표 → 그래프 후보 여러 개 → 고칠 수 있는 XLSX·PPTX·DOCX·HWPX 차트",
+    "group": "데이터",
+    "title": "그래프 만들기 — 표 → 다중 후보 → 편집 가능한 문서",
+    "tags": [
+      "#그래프",
+      "#차트",
+      "#시각화"
+    ],
+    "added": "2026-10-06",
+    "dept": "인공지능응용연구실",
+    "author": "dongju"
+  },
+  {
+    "dir": "shield-local",
+    "port": 8784,
+    "name": "차폐 계산기",
+    "desc": "방사선 차폐·선량 간이 계산 — 점선원 감마, 축적인자, 필요 두께 역산, 누적선량",
+    "group": "원자력",
+    "title": "차폐 계산기 — 방사선 차폐·선량 간이 계산",
+    "tags": [
+      "#차폐",
+      "#선량",
+      "#보건물리"
+    ],
+    "added": "2026-10-06",
+    "dept": "인공지능응용연구실",
+    "author": "dongju"
+  },
+  {
+    "dir": "battery-local",
+    "port": 8785,
+    "name": "배터리",
+    "desc": "PyBaMM 배터리 성능·수명(열화) 예측 — C-rate·충전·SOH·EOL·LLI/LAM",
+    "group": "연구",
+    "title": "배터리 — PyBaMM 리튬이온 셀 성능·수명 예측",
+    "tags": [
+      "#배터리",
+      "#PyBaMM",
+      "#수명예측"
+    ],
+    "added": "2026-10-06",
+    "dept": "인공지능응용연구실",
+    "author": "dongju"
+  },
+  {
+    "dir": "weekly-local",
+    "port": 8788,
+    "name": "주간보고",
+    "desc": "주간보고 개인 작성·실 취합 — 핵심 주황·과기부 파랑·BBS 취소선, 약어 풀이, HWPX·DOCX",
+    "group": "문서",
+    "title": "주간보고 — 개인 작성 · 실(소본부) 취합 · HWPX/DOCX",
+    "tags": [
+      "#주간보고",
+      "#취합",
+      "#HWPX"
+    ],
+    "added": "2026-10-06",
+    "dept": "인공지능응용연구실",
+    "author": "dongju"
+  }
 ]

@@ -1,3 +1,8 @@
 _stats.json
 *.imported
 __pycache__/
+*.log
+_data/
+# local UI audit (absolute local paths, screenshots of real sessions)
+ui_audit.js
+ui_audit_report*.json

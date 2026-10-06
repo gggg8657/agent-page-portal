@@ -9,6 +9,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 ROOT = os.path.dirname(os.path.abspath(__file__))
 BASE = os.path.dirname(ROOT)
 PORT = int(os.environ.get("PORT", "8700"))
+SHOW_HIDDEN = os.environ.get("SHOW_HIDDEN") == "1"  # 테스트 포털: 숨긴 도구도 목록에 (예: PORT=8701 HOST=127.0.0.1 SHOW_HIDDEN=1)
+HOST = os.environ.get("HOST", "")
 DATA = os.environ.get("AGENT_DATA") or os.path.join(BASE, "_data")  # 포털 DB + 모든 도구 workspace 가 이 아래로 모임
 os.makedirs(DATA, exist_ok=True)
 TOOLS_FILE = os.path.join(ROOT, "tools.json")
@@ -147,8 +149,8 @@ def guide(d):
 # ── HTTP ────────────────────────────────────────────────────────────────
 
 # ── 저작권 표기 (LICENSE·NOTICE 참고) ─────────────────────────────────────
-_SIG = __import__("base64").b64decode("wqkgMjAyNiDquYDrj5nso7wgwrcgZG9uZ2p1a2ltLmRldkBnbWFpbC5jb20=").decode()
-_SIG_A = __import__("base64").b64decode("RG9uZ0p1IEtpbSA8ZG9uZ2p1a2ltLmRldkBnbWFpbC5jb20+").decode()
+_SIG = __import__("base64").b64decode("wqkgMjAyNiBnZ2dnODY1NyDCtyBkb25nanVraW0uZGV2QGdtYWlsLmNvbQ==").decode()
+_SIG_A = __import__("base64").b64decode("Z2dnZzg2NTcgPGRvbmdqdWtpbS5kZXZAZ21haWwuY29tPg==").decode()
 
 
 def signed(html):
@@ -227,7 +229,7 @@ class H(BaseHTTPRequestHandler):
             with db() as c:
                 u = usage(c)
                 return self._send({"tools": [{**t, "up": alive(t["port"]), "installed": os.path.isdir(os.path.join(BASE, t["dir"])),
-                                              "url": f"/t/{t['dir']}/", "usage": u.get(t["dir"], {"recent": 0, "total": 0, "users": 0, "likes": 0})} for t in tools() if not t.get("hidden")],  # hidden: 토이 등 목록 비노출(프록시는 됨)
+                                              "url": f"/t/{t['dir']}/", "usage": u.get(t["dir"], {"recent": 0, "total": 0, "users": 0, "likes": 0})} for t in tools() if SHOW_HIDDEN or not t.get("hidden")],  # hidden: 토이 등 목록 비노출(프록시는 됨)
                                    "rank": user_rank(c), "posts": posts(c, self.user), "me": self.user})
         if p.startswith("/api/guide/"):
             d = p.split("/")[-1]
@@ -281,4 +283,4 @@ if __name__ == "__main__":
                 print(sys.argv[1], t["dir"], t["port"]); (start if sys.argv[1] == "start-all" else stop)(t)
         sys.exit(0)
     print(f"portal → http://localhost:{PORT}  data={DATA}  {_SIG}")
-    ThreadingHTTPServer(("", PORT), H).serve_forever()
+    ThreadingHTTPServer((HOST, PORT), H).serve_forever()
