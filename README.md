@@ -102,11 +102,16 @@ bash audit.sh                     # 전체 점검: CDN 유출·포트 중복·LI
 저작권 표기는 `NOTICE` 를 보세요.
 
 ### GPU 나눠 쓰기
-`tools.json` 에서 도구마다 `"gpus": "0"` 처럼 적으면 포털이 그 도구를 `CUDA_VISIBLE_DEVICES=<값>` 으로 띄웁니다(없으면 포털 환경의 기본값). 현재 배정 예:
+GPU 를 도구마다 미리 정해 두지 않습니다. 포털 기동 스크립트는 모든 GPU(`CUDA_VISIBLE_DEVICES=0,1,2,3` — 셸에 다른 값이 있어도 덮어씀, 줄이려면 `AGENT_GPUS=2,3`)를 도구에 넘기고, 각 도구가 **모델을 올리는 그 순간 여유 메모리가 가장 큰 GPU 1장**(같으면 덜 바쁜 쪽)을 고릅니다. 각 도구 저장소의 `gpu_pick.py`(stdlib, 같은 파일 복사)가 `nvidia-smi` 로 고릅니다.
 
-| GPU | 쓰는 것 |
-|---|---|
-| 0 | protein-local (Boltz·ProteinMPNN) |
-| 1 | avatar-local(가상 캐릭터 스튜디오 포함)·portrait-local·persona-local |
-| 2·3 | Ollama(gemma4:31b, 모든 도구의 LLM) · GPU 를 따로 지정하지 않은 도구 |
-| 3 | tts-local·meeting-local(받아쓰기) |
+| 도구 | 언제 고르나 | 다 쓰면 |
+|---|---|---|
+| protein-local | 예측·설계 작업마다 | 작업 끝나면 프로세스 종료 |
+| avatar-local 스튜디오(Qwen-Image 약 60GB · Wan2.2 약 36GB) | 모델을 올릴 때마다(모델 바꿀 때도 새로) | 10분 안 쓰면 내림 |
+| avatar-local 목소리(F5-TTS)·립싱크(SadTalker), portrait-local | 실행마다(서브프로세스) | 실행 끝나면 반환 |
+| tts-local(MeloTTS)·meeting-local(Whisper) | 처음 쓸 때 | 10분 안 쓰면 내림 → 다음에 다시 고름 |
+| Ollama(gemma4:31b) | Ollama 스케줄러가 여유 VRAM 보고 배치 | `OLLAMA_KEEP_ALIVE` |
+
+- 어느 GPU 에 올랐는지는 각 도구 로그(`server.log`·`studio.log`)와 진행 메시지에 `GPU 2 (여유 80GB) 에서 로드` 처럼 나옵니다.
+- 환경변수: `GPU_POOL=2,3`(이 GPU 들만 후보로), `GPU_IDLE_UNLOAD_S=600`(안 쓰면 내리는 초, 0 이면 안 내림).
+- 꼭 고정해야 할 때만(예외용): `tools.json` 의 그 도구에 `"gpus": "0"` 을 적으면 포털이 그 도구를 `CUDA_VISIBLE_DEVICES=<값>` 으로 띄워, 그 안에서만 고릅니다.

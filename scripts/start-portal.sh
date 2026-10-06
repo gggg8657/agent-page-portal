@@ -3,7 +3,7 @@
 # 이 파일은 상위 폴더(도구들을 나란히 clone 한 곳)의 start-portal.sh 사본입니다. 상위 폴더에서 실행해도 되고 여기서 실행해도 됩니다.
 cd "$(dirname "$0")/../.."   # agent-page-portal/scripts → 상위 폴더
 OLLAMA_PORT="${OLLAMA_PORT:-11436}"
-export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-2,3}" PATH="$HOME/.local/bin:$PATH"  # 쓸 GPU 번호 · ffmpeg·python3.11
+export CUDA_VISIBLE_DEVICES="${AGENT_GPUS:-0,1,2,3}" CUDA_DEVICE_ORDER=PCI_BUS_ID PATH="$HOME/.local/bin:$PATH"  # 쓸 GPU 후보(도구가 그때그때 여유 많은 것을 고름) · ffmpeg·python3.11
 curl -s -m 2 127.0.0.1:$OLLAMA_PORT/api/version >/dev/null || { [ -x ~/.local/ollama-gpu/start.sh ] && ~/.local/ollama-gpu/start.sh; }  # Ollama 가 꺼져 있으면 띄움(자기 환경에 맞게)
 export LLM_API=ollama LLM_BASE_URL=http://127.0.0.1:$OLLAMA_PORT LLM_MODEL="${LLM_MODEL:-gemma4:31b}" MODEL="${LLM_MODEL:-gemma4:31b}" VISION_MODEL="${LLM_MODEL:-gemma4:31b}" AGENT_DATA="$PWD/_data"
 # 도구끼리 연결: 음성 합성(tts) · 받아쓰기(meeting STT) · 립싱크(avatar), GPU 사용

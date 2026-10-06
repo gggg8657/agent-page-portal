@@ -4,7 +4,7 @@
 cd "$(dirname "$0")/../.."   # agent-page-portal/scripts → 상위 폴더
 exec 9>/tmp/agent-page-autostart.lock; flock -n 9 || exit 0
 curl -s -m 2 localhost:8700/api/tools >/dev/null && exit 0
-export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-2,3}" PATH="$HOME/.local/bin:$PATH"
+export CUDA_VISIBLE_DEVICES="${AGENT_GPUS:-0,1,2,3}" CUDA_DEVICE_ORDER=PCI_BUS_ID PATH="$HOME/.local/bin:$PATH"
 {
   echo "== $(date '+%F %T') autostart"
   agent-page-portal/scripts/start-portal.sh

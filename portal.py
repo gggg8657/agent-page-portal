@@ -81,7 +81,7 @@ def tool(d):
 def start(t):
     cwd = os.path.join(BASE, t["dir"])
     env = {**os.environ, "PORT": str(t["port"]), "WORKSPACE": os.path.join(DATA, t["dir"])}
-    if t.get("gpus"):  # tools.json 의 "gpus": "0" 처럼 도구마다 GPU 를 나눠 준다 (없으면 포털의 CUDA_VISIBLE_DEVICES 그대로)
+    if t.get("gpus"):  # 예외용 고정: tools.json 의 "gpus": "0". 보통은 비워 두고 도구가 그때그때 여유 많은 GPU 를 고른다(gpu_pick.py)
         env["CUDA_VISIBLE_DEVICES"] = str(t["gpus"])
     if os.path.exists(os.path.join(cwd, "setup.sh")):
         cmd = ["bash", "setup.sh"]
