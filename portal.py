@@ -87,11 +87,36 @@ def start(t):
     subprocess.Popen(cmd, cwd=cwd, env=env, stdout=open(os.path.join(cwd, "server.log"), "ab"), stderr=subprocess.STDOUT, start_new_session=True)
 
 
+def port_pids(port):
+    """그 TCP 포트에서 LISTEN 중인 프로세스 pid — /proc 만 본다(lsof·fuser·ss 없는 컨테이너용)"""
+    inodes = set()
+    for f in ("/proc/net/tcp", "/proc/net/tcp6"):
+        try:
+            for line in open(f).read().splitlines()[1:]:
+                c = line.split()
+                if c[3] == "0A" and int(c[1].rsplit(":", 1)[1], 16) == port: inodes.add(c[9])  # 0A = LISTEN
+        except OSError:
+            pass
+    pids = set()
+    for p in os.listdir("/proc"):
+        if not p.isdigit() or int(p) == os.getpid(): continue
+        try:
+            for fd in os.listdir(f"/proc/{p}/fd"):
+                if os.readlink(f"/proc/{p}/fd/{fd}")[8:-1] in inodes: pids.add(int(p)); break  # socket:[inode]
+        except OSError:
+            pass
+    return pids
+
+
 def stop(t):
     cwd = os.path.join(BASE, t["dir"])
     if os.path.exists(os.path.join(cwd, "setup.sh")):
         subprocess.run(["bash", "setup.sh", "stop"], cwd=cwd, capture_output=True)
-    subprocess.run(["bash", "-c", f"lsof -ti tcp:{t['port']} | xargs kill 2>/dev/null"], capture_output=True)
+    for pid in port_pids(t["port"]):  # setup.sh 가 없거나 pid 파일이 없는 도구 — lsof 없는 서버에서도
+        try:
+            os.kill(pid, 15)
+        except OSError:
+            pass
 
 
 def add_tool(t):

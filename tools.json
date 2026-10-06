@@ -172,7 +172,7 @@
   "port": 8776,
   "name": "Persona",
   "title": "Persona — AI 캐릭터 대화 (토이)",
-  "desc": "페르소나·기억·음성 캐릭터 채팅",
+  "desc": "기억·호감도 캐릭터 채팅 + 음성 답변·말로 대화·립싱크 클립",
   "group": "토이",
   "tags": [
    "#토이",
@@ -180,8 +180,7 @@
   ],
   "dept": "개인",
   "author": "dongju",
-  "added": "2026-10-04",
-  "hidden": true
+  "added": "2026-10-04"
  },
  {
   "dir": "avatar-local",
@@ -198,5 +197,22 @@
   "author": "dongju",
   "added": "2026-10-04",
   "hidden": true
+ },
+ {
+  "dir": "agent-cad-local",
+  "port": 8778,
+  "name": "CAD Agent",
+  "desc": "말하면 3D 부품·2D 판재·ICT 배치도/개황도, 기존 DXF 수정",
+  "group": "그림",
+  "title": "CAD Agent — 로컬 CAD 초안·검증",
+  "tags": [
+   "#CAD",
+   "#STEP",
+   "#DXF",
+   "#ICT"
+  ],
+  "added": "2026-10-06",
+  "dept": "인공지능응용연구실",
+  "author": "dongju"
  }
 ]
