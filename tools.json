@@ -108,21 +108,6 @@
     "author": "dongju"
   },
   {
-    "dir": "portrait-local",
-    "port": 8770,
-    "name": "Portrait",
-    "desc": "사진 한 장 → 표정·말하기 영상",
-    "group": "그림",
-    "title": "Portrait — 사진이 말하는 영상",
-    "tags": [
-      "#LivePortrait",
-      "#영상"
-    ],
-    "added": "2026-10-04",
-    "dept": "인공지능응용연구실",
-    "author": "dongju"
-  },
-  {
     "dir": "tts-local",
     "port": 8771,
     "name": "TTS",
