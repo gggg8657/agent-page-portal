@@ -165,7 +165,8 @@
     ],
     "dept": "개인",
     "author": "dongju",
-    "added": "2026-10-04"
+    "added": "2026-10-04",
+    "hidden": true
   },
   {
     "dir": "avatar-local",
@@ -343,6 +344,22 @@
       "#HWPX"
     ],
     "added": "2026-10-06",
+    "dept": "인공지능응용연구실",
+    "author": "dongju"
+  },
+  {
+    "dir": "image-local",
+    "port": 8792,
+    "name": "그림 생성",
+    "desc": "말로 그리고 말로 고치는 범용 그림 도구 — Qwen-Image · 한글 글자 · 사진/일러스트/포스터/로고",
+    "group": "그림",
+    "title": "그림 생성 — 말로 그리기 · 말로 고치기 (Qwen-Image)",
+    "tags": [
+      "#이미지생성",
+      "#그림편집",
+      "#Qwen-Image"
+    ],
+    "added": "2026-10-07",
     "dept": "인공지능응용연구실",
     "author": "dongju"
   }
