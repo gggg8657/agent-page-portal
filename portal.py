@@ -3,7 +3,7 @@
   python3 portal.py                 # http://localhost:8700
   python3 portal.py start-all|stop-all
 env: PORT(8700) AGENT_DATA(모든 도구 데이터 루트, 기본 ../_data)"""
-import datetime, json, os, socket, sqlite3, subprocess, sys, urllib.error, urllib.request
+import datetime, json, os, socket, sqlite3, subprocess, sys, threading, time, urllib.error, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -76,6 +76,9 @@ def alive(port):
 
 def tool(d):
     return next((t for t in tools() if t["dir"] == d), None)
+
+
+EVENTS, EV_LOCK = [], threading.Lock()
 
 
 def start(t):
@@ -183,6 +186,18 @@ class H(BaseHTTPRequestHandler):
         self.send_response(code); self.send_header("X-Author", _SIG_A); self.send_header("Content-Type", ctype); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
 
     def proxy(self):
+        t0 = time.time()
+        try:
+            return self._proxy()
+        finally:   # 오래 걸린 도구 작업(1분 넘는 POST)이 끝나면 기록 → 파동이 펫이 "작업 끝났어요!" (/api/events)
+            parts = self.path.split("/", 3); sec = time.time() - t0
+            if self.command == "POST" and sec > 60 and len(parts) > 2 and parts[2] != "padong-local" and tool(parts[2]):
+                with EV_LOCK:
+                    EVENTS.append({"id": (EVENTS[-1]["id"] + 1) if EVENTS else int(t0), "dir": parts[2], "name": tool(parts[2]).get("name", parts[2]),
+                                   "ok": getattr(self, "_status", 200) < 400, "sec": round(sec), "t": int(time.time())})
+                    del EVENTS[:-30]
+
+    def _proxy(self):
         """/t/<dir>/<rest> → http://127.0.0.1:<port>/<rest>. 첫 화면 HTML 에는 사용법 팝업을 붙이고, 나머지(SSE 포함)는 그대로 흘린다."""
         parts = self.path.split("/", 3)
         t = tool(parts[2]) if len(parts) > 2 else None
@@ -201,6 +216,7 @@ class H(BaseHTTPRequestHandler):
             return self._send({"error": f"{t['dir']} 응답 없음 ({type(e).__name__}) — 포털에서 '시작'을 누르세요"}, code=502)
         inject = self.command == "GET" and parts[3] in ("", "index.html") and "text/html" in (r.headers.get("Content-Type") or "")
         body = signed(r.read().decode("utf-8", "replace") + HELP.replace("%DIR%", t["dir"])).encode() if inject else None  # 도구 화면에도 저작자 표기
+        self._status = r.status
         self.send_response(r.status)
         for k, v in r.headers.items():
             if k.lower() not in HOP:
@@ -227,6 +243,10 @@ class H(BaseHTTPRequestHandler):
         p = self.path.split("?")[0]
         if p.startswith("/t/"):
             return self.proxy()
+        if p == "/api/events":   # 오래 걸린 작업 끝남 (since=마지막 id)
+            since = int((self.path.split("since=") + ["0"])[1].split("&")[0] or 0)
+            with EV_LOCK:
+                return self._send({"events": [e for e in EVENTS if e["id"] > since], "last": EVENTS[-1]["id"] if EVENTS else since})
         if p == "/api/tools":
             with db() as c:
                 u = usage(c)
