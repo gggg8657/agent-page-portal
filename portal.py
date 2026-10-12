@@ -3,9 +3,9 @@
   python3 portal.py                 # http://localhost:8700
   python3 portal.py start-all|stop-all
   python3 portal.py --add-user <id> --name <이름> [--dept 부서] [--pin 숫자 | --password 문자]   # 계정 만들기·PIN 초기화(--pin 없으면 무작위 6자리를 화면에만)
-env: PORT(8700) AGENT_DATA(모든 도구 데이터 루트, 기본 ../_data)
+env: PORT(8700) AGENT_DATA(모든 도구 데이터 루트, 기본 ../_data) TLS_CERT·TLS_KEY(둘 다 있으면 https, README 참고)
      AGENT_OWNERS(쉼표 — 서버 주인 계정 id, 기본 dongju,gggg8657) BACKUP(1=매일 03시 ../backup.sh, 기본 :8700 만)"""
-import datetime, hashlib, hmac, json, os, re, secrets, socket, sqlite3, subprocess, sys, threading, time, urllib.error, urllib.parse, urllib.request
+import datetime, hashlib, hmac, json, os, re, secrets, socket, sqlite3, ssl, subprocess, sys, threading, time, urllib.error, urllib.parse, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -31,6 +31,8 @@ def tools():  # 요청마다 다시 읽음 — 손으로 고치거나 다른 프
 HTML = open(os.path.join(ROOT, "portal.html"), encoding="utf-8").read()
 HELP = open(os.path.join(ROOT, "help.html"), encoding="utf-8").read()  # 도구 첫 화면에 끼워 넣는 ? 버튼 + 사용법
 LOGIN = open(os.path.join(ROOT, "login.html"), encoding="utf-8").read()
+ACCOUNT = open(os.path.join(ROOT, "account.html"), encoding="utf-8").read()  # /account · /approvals · /admin 한 파일
+TLS = bool(os.environ.get("TLS_CERT") and os.environ.get("TLS_KEY"))  # https 면 세션 쿠키에 Secure
 HOP = {"connection", "keep-alive", "transfer-encoding", "te", "trailer", "upgrade", "proxy-connection", "host", "content-length", "accept-encoding"}
 
 
@@ -48,29 +50,50 @@ with db() as _c:  # 스키마는 시작 시 1회
     CREATE TABLE IF NOT EXISTS posts(id INTEGER PRIMARY KEY, title TEXT, body TEXT, author TEXT, dept TEXT, tags TEXT, ts TEXT);
     CREATE TABLE IF NOT EXISTS post_likes(post INTEGER, user TEXT, UNIQUE(post, user));
     CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY, name TEXT, dept TEXT, salt BLOB, hash BLOB, ts TEXT);
-    CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, uid TEXT, exp REAL);          -- token = sha256(쿠키 값)""")
+    CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, uid TEXT, exp REAL);          -- token = sha256(쿠키 값)
+    CREATE TABLE IF NOT EXISTS depts(name TEXT PRIMARY KEY, hidden INTEGER DEFAULT 0, ts TEXT);
+    CREATE TABLE IF NOT EXISTS dept_heads(dept TEXT, uid TEXT, ts TEXT, UNIQUE(dept, uid));   -- 부서장 (한 부서에 여럿 가능)
+    CREATE TABLE IF NOT EXISTS requests(id INTEGER PRIMARY KEY, kind TEXT, uid TEXT, dept TEXT, status TEXT, approver TEXT, note TEXT,
+                                        ts TEXT, decided_ts TEXT, notified INTEGER DEFAULT 0);  -- kind dept_join|dept_head, status pending|approved|rejected|cancelled
+    CREATE TABLE IF NOT EXISTS audit(ts TEXT, actor TEXT, action TEXT, target TEXT, detail TEXT);""")
+    cols = {r[1] for r in _c.execute("PRAGMA table_info(users)")}
+    for col, ddl in (("iters", "INTEGER DEFAULT 200000"), ("disabled", "INTEGER DEFAULT 0"), ("seen", "TEXT")):  # 예전 DB 이어 쓰기
+        if col not in cols:
+            _c.execute(f"ALTER TABLE users ADD COLUMN {col} {ddl}")
+    if not _c.execute("SELECT 1 FROM depts").fetchone():  # 처음 한 번: 기존 계정·tools.json 의 부서로 목록 시작 ('개인' 은 부서가 아님)
+        seed = {r[0] for r in _c.execute("SELECT DISTINCT dept FROM users")} | {t.get("dept") for t in json.load(open(TOOLS_FILE, encoding="utf-8"))}
+        _c.executemany("INSERT OR IGNORE INTO depts(name, ts) VALUES(?, datetime('now','localtime'))", [(d.strip(),) for d in seed if d and d.strip() and d.strip() != "개인"])
 
 
 # ── 계정·세션 ────────────────────────────────────────────────────────────
 ID_RE, PIN_RE = re.compile(r"^[a-z0-9][a-z0-9_.-]{1,31}$"), re.compile(r"^[0-9]{4,8}$")
-SESSION_S, ITERS = 30 * 86400, 200_000
+SESSION_S, ITERS = 30 * 86400, 600_000   # 예전 계정(200k)은 다음 로그인 때 600k 로 다시 해시
 FAILS, FAIL_LOCK = {}, threading.Lock()   # id → 최근 실패 시각들 (10분에 5번까지)
 
 
-def _hash(pin, salt):
-    return hashlib.pbkdf2_hmac("sha256", pin.encode(), salt, ITERS)
+def _hash(pin, salt, iters=ITERS):
+    return hashlib.pbkdf2_hmac("sha256", pin.encode(), salt, iters)
 
 
 def set_user(c, uid, name, dept, pin):
     salt = secrets.token_bytes(16)
-    c.execute("INSERT INTO users(id,name,dept,salt,hash,ts) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, dept=excluded.dept, salt=excluded.salt, hash=excluded.hash",
-              (uid, name, dept, salt, _hash(pin, salt), now()))
+    c.execute("INSERT INTO users(id,name,dept,salt,hash,iters,ts) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, dept=excluded.dept, "
+              "salt=excluded.salt, hash=excluded.hash, iters=excluded.iters", (uid, name, dept, salt, _hash(pin, salt), ITERS, now()))
+
+
+def set_pin(c, uid, pin):
+    salt = secrets.token_bytes(16)
+    c.execute("UPDATE users SET salt=?, hash=?, iters=? WHERE id=?", (salt, _hash(pin, salt), ITERS, uid))
 
 
 def check_pin(c, uid, pin):
-    r = c.execute("SELECT salt, hash FROM users WHERE id=?", (uid,)).fetchone()
-    h = _hash(pin, r["salt"] if r else b"x" * 16)  # 없는 id 도 같은 시간
-    return bool(r) and hmac.compare_digest(h, r["hash"])
+    """맞으면 True. 해시 반복 횟수가 예전 값이면 맞힌 김에 지금 값으로 다시 해시. 정지된 계정은 False"""
+    r = c.execute("SELECT salt, hash, iters, disabled FROM users WHERE id=?", (uid,)).fetchone()
+    h = _hash(pin, r["salt"] if r else b"x" * 16, (r["iters"] or 200_000) if r else ITERS)  # 없는 id 도 같은 시간
+    ok = bool(r) and hmac.compare_digest(h, r["hash"]) and not r["disabled"]
+    if ok and (r["iters"] or 0) < ITERS:
+        set_pin(c, uid, pin)
+    return ok
 
 
 def limited(uid):
@@ -87,7 +110,7 @@ def new_session(c, uid):
 
 
 def cookie(tok, age=SESSION_S):
-    return f"agsid={tok}; Path=/; Max-Age={age}; HttpOnly; SameSite=Lax"
+    return f"agsid={tok}; Path=/; Max-Age={age}; HttpOnly; SameSite=Lax" + ("; Secure" if TLS else "")
 
 
 def check_new(c, uid, name, pin, local):
@@ -101,6 +124,74 @@ def check_new(c, uid, name, pin, local):
         raise ValueError("PIN 은 숫자 4~8자리")
     if c.execute("SELECT 1 FROM users WHERE id=?", (uid,)).fetchone():
         raise ValueError("이미 있는 아이디입니다")
+
+
+# ── 부서·역할·요청 ───────────────────────────────────────────────────────
+# 역할: 관리자(AGENT_OWNERS 계정) · 부서장(dept_heads, 부서마다) · 일반. 부서 변경·가입은 요청 → 그 부서 부서장(없으면 관리자) 승인 후 반영.
+# 부서장 요청은 관리자만 승인. 부서장 권한: 자기 부서 가입 요청 승인·거절, 자기 부서 구성원 목록과 포털 사용 횟수 보기 — 도구 쪽은 바뀌는 것 없음.
+KIND = {"dept_join": "부서 소속", "dept_head": "부서장 권한"}
+
+
+def audit(c, actor, action, target, detail=""):
+    c.execute("INSERT INTO audit VALUES(?,?,?,?,?)", (now(), actor, action, target, detail))
+
+
+def heads_of(c, dept):
+    return [r[0] for r in c.execute("SELECT uid FROM dept_heads WHERE dept=?", (dept,))]
+
+
+def my_heads(c, uid):
+    return [r[0] for r in c.execute("SELECT dept FROM dept_heads WHERE uid=? ORDER BY dept", (uid,))]
+
+
+def role(c, uid):
+    return "관리자" if uid == "owner" or uid in OWNERS else "부서장" if my_heads(c, uid) else "일반"
+
+
+def visible_depts(c):
+    return [r[0] for r in c.execute("SELECT name FROM depts WHERE hidden=0 ORDER BY name")]
+
+
+def names(c):
+    return {r[0]: r[1] for r in c.execute("SELECT id, name FROM users")}
+
+
+def req_rows(c, where, args=()):
+    nm = names(c) | {"owner": "관리자(로컬)"}
+    return [dict(r) | {"uname": nm.get(r["uid"], r["uid"]), "approver_name": nm.get(r["approver"] or "", r["approver"] or ""), "label": KIND.get(r["kind"], r["kind"]),
+                       "route": ("관리자" if r["kind"] == "dept_head" or not heads_of(c, r["dept"]) else "부서장 " + ", ".join(nm.get(h, h) for h in heads_of(c, r["dept"])))}
+            for r in c.execute(f"SELECT * FROM requests WHERE {where} ORDER BY id DESC LIMIT 200", args)]
+
+
+def new_request(c, uid, kind, dept):
+    if dept not in visible_depts(c):
+        raise ValueError("목록에 있는 부서를 고르세요 (목록에 없으면 관리자에게 요청)")
+    if c.execute("SELECT 1 FROM requests WHERE uid=? AND kind=? AND status='pending'", (uid, kind)).fetchone():
+        raise ValueError("이미 대기 중인 요청이 있습니다 — 취소한 뒤 다시 요청하세요")
+    c.execute("INSERT INTO requests(kind,uid,dept,status,ts) VALUES(?,?,?,?,?)", (kind, uid, dept, "pending", now()))
+
+
+def can_decide(c, actor, r):
+    if actor == "owner" or actor in OWNERS:
+        return True
+    return r["kind"] == "dept_join" and r["uid"] != actor and actor in heads_of(c, r["dept"])
+
+
+def decide(c, actor, rid, ok, note=""):
+    r = c.execute("SELECT * FROM requests WHERE id=?", (rid,)).fetchone()
+    if not r or r["status"] != "pending":
+        raise ValueError("이미 처리됐거나 없는 요청입니다")
+    if not can_decide(c, actor, r):
+        raise PermissionError("이 요청을 처리할 권한이 없습니다")
+    c.execute("UPDATE requests SET status=?, approver=?, note=?, decided_ts=?, notified=0 WHERE id=?", ("approved" if ok else "rejected", actor, note[:200], now(), rid))
+    if ok and r["kind"] == "dept_join":
+        c.execute("UPDATE users SET dept=? WHERE id=?", (r["dept"], r["uid"]))
+        for d in my_heads(c, r["uid"]):  # 다른 부서로 옮기면 예전 부서의 부서장 권한은 내려놓음
+            if d != r["dept"]:
+                c.execute("DELETE FROM dept_heads WHERE dept=? AND uid=?", (d, r["uid"])); audit(c, actor, "head_revoke", r["uid"], f"{d} (부서 이동)")
+    if ok and r["kind"] == "dept_head":
+        c.execute("INSERT OR IGNORE INTO dept_heads VALUES(?,?,?)", (r["dept"], r["uid"], now()))
+    audit(c, actor, ("approve" if ok else "reject") + ":" + r["kind"], r["uid"], f"{r['dept']} #{rid} {note[:200]}".strip())
 
 
 def now():
@@ -346,14 +437,16 @@ class H(BaseHTTPRequestHandler):
         m = re.search(r"(?:^|;\s*)agsid=([A-Za-z0-9_-]+)", self.headers.get("Cookie") or "")
         if m:
             with db() as c:
-                r = c.execute("SELECT s.uid, s.exp, u.name FROM sessions s JOIN users u ON u.id=s.uid WHERE s.token=? AND s.exp>?",
+                r = c.execute("SELECT s.uid, s.exp, u.name, u.seen FROM sessions s JOIN users u ON u.id=s.uid WHERE s.token=? AND s.exp>? AND NOT u.disabled",
                               (hashlib.sha256(m[1].encode()).hexdigest(), time.time())).fetchone()
                 if r:
                     self.uid, self.uname = r["uid"], r["name"]
+                    if (r["seen"] or "") < (datetime.datetime.now() - datetime.timedelta(minutes=5)).isoformat(timespec="seconds"):  # 마지막 접속(5분 단위)
+                        c.execute("UPDATE users SET seen=? WHERE id=?", (now(), r["uid"]))
                     if r["exp"] - time.time() < SESSION_S - 86400:  # 하루에 한 번 만료 연장(슬라이딩)
                         c.execute("UPDATE sessions SET exp=? WHERE token=?", (time.time() + SESSION_S, hashlib.sha256(m[1].encode()).hexdigest()))
                         self._setcookie = cookie(m[1])
-        if not self.uid and self.client_address[0] in LOCAL:
+        if not self.uid and not m and self.client_address[0] in LOCAL:  # 쿠키가 있는데 무효(로그아웃·정지·만료)면 로컬이어도 다시 로그인
             self.uid, self.uname = "owner", "서버 주인(로컬)"
         return self.uid
 
@@ -368,6 +461,161 @@ class H(BaseHTTPRequestHandler):
     @property
     def agent_user(self):  # 도구로 넘기는 사용자 id — 서버 주인은 owner, 나머지는 계정 id
         return "owner" if self.is_owner else self.uid
+
+    def setup(self):  # https: TLS 핸드셰이크는 요청 스레드에서(느린 접속이 accept 를 막지 않게). http 로 잘못 온 접속 등 실패는 조용히 끊음
+        super().setup()
+        self._tls_bad = False
+        if isinstance(self.connection, ssl.SSLSocket):
+            try:
+                self.connection.settimeout(15); self.connection.do_handshake(); self.connection.settimeout(None)
+            except (ssl.SSLError, OSError):
+                self._tls_bad = True
+
+    def handle(self):
+        if not self._tls_bad:
+            super().handle()
+
+    def finish(self):
+        try:
+            super().finish()
+        except OSError:
+            pass
+
+    def me(self, c):
+        """화면 위쪽 막대·계정 설정용: 이름·역할·부서·승인 대기 수"""
+        u = c.execute("SELECT dept FROM users WHERE id=?", (self.uid,)).fetchone()
+        pend = c.execute("SELECT dept FROM requests WHERE uid=? AND kind='dept_join' AND status='pending'", (self.uid,)).fetchone()
+        n = sum(can_decide(c, self.uid, r) for r in c.execute("SELECT * FROM requests WHERE status='pending'"))
+        return {"id": self.uid, "name": self.uname, "owner": self.is_owner, "agent_user": self.agent_user, "role": role(c, self.uid),
+                "dept": u["dept"] if u else "", "dept_pending": pend["dept"] if pend else "", "heads": my_heads(c, self.uid), "approvals": n,
+                "account": bool(u)}
+
+    def page(self, p):
+        """/account · /approvals · /admin — 같은 화면 파일, 권한 없는 쪽은 /account 로"""
+        with db() as c:
+            ok = p == "/account" or self.is_owner or (p == "/approvals" and my_heads(c, self.uid))
+        if not ok:
+            self.send_response(302); self.send_header("Location", "/account"); self.send_header("Content-Length", "0"); self.end_headers(); return
+        self._send(signed(ACCOUNT + self.help_html("portal")).encode(), "text/html; charset=utf-8")
+
+    def manage_get(self, p):
+        with db() as c:
+            if p == "/api/account":
+                return self._send({"me": self.me(c), "depts": visible_depts(c), "requests": req_rows(c, "uid=?", (self.uid,))[:20]})
+            if p == "/api/account/notices":  # 내 요청 결과(한 번만) — help.html 이 화면 알림으로
+                rows = req_rows(c, "uid=? AND status IN ('approved','rejected') AND notified=0", (self.uid,))
+                c.execute("UPDATE requests SET notified=1 WHERE uid=? AND status IN ('approved','rejected')", (self.uid,))
+                return self._send({"notices": rows, "approvals": self.me(c)["approvals"]})
+            if p == "/api/approvals":
+                heads = my_heads(c, self.uid)
+                if not (self.is_owner or heads):
+                    return self._send({"error": "부서장·관리자만 볼 수 있습니다"}, code=403)
+                pend = [r for r in req_rows(c, "status='pending'") if can_decide(c, self.uid, r)]
+                cut = (datetime.date.today() - datetime.timedelta(days=30)).isoformat()
+                members = {d: [dict(r) for r in c.execute(
+                    "SELECT u.id, u.name, u.seen, (SELECT COUNT(*) FROM events e WHERE e.user=u.id AND e.kind='open') total, "
+                    "(SELECT COUNT(*) FROM events e WHERE e.user=u.id AND e.kind='open' AND e.ts>=?) recent, "
+                    "EXISTS(SELECT 1 FROM dept_heads h WHERE h.dept=u.dept AND h.uid=u.id) head FROM users u WHERE u.dept=? AND NOT u.disabled ORDER BY u.name", (cut, d))]
+                    for d in heads}
+                done = [r for r in req_rows(c, "status IN ('approved','rejected') AND approver=?", (self.uid,))][:20]
+                return self._send({"pending": pend, "members": members, "done": done})
+            if p == "/api/admin":
+                if not self.is_owner:
+                    return self._send({"error": "관리자만 볼 수 있습니다"}, code=403)
+                heads = {}
+                for r in c.execute("SELECT dept, uid FROM dept_heads"):
+                    heads.setdefault(r["uid"], []).append(r["dept"])
+                users = [dict(r) | {"role": "관리자" if r["id"] in OWNERS else "부서장" if r["id"] in heads else "일반", "heads": heads.get(r["id"], [])}
+                         for r in c.execute("SELECT id, name, dept, ts, seen, disabled FROM users ORDER BY ts")]
+                depts = [dict(r) | {"members": c.execute("SELECT COUNT(*) FROM users WHERE dept=?", (r["name"],)).fetchone()[0], "heads": heads_of(c, r["name"])}
+                         for r in c.execute("SELECT name, hidden FROM depts ORDER BY hidden, name")]
+                return self._send({"users": users, "depts": depts, "pending": req_rows(c, "status='pending'"), "owners": sorted(OWNERS),
+                                   "audit": [dict(r) for r in c.execute("SELECT * FROM audit ORDER BY rowid DESC LIMIT 60")]})
+        return self._send({"error": "not found"}, code=404)
+
+    def manage_post(self, c, p, req):
+        """계정 설정·승인·관리 — 모든 호출에서 서버가 권한 확인(403), 승인·부여·회수·초기화·정지는 audit 에 남김"""
+        acct = c.execute("SELECT 1 FROM users WHERE id=?", (self.uid,)).fetchone()
+        if p.startswith("/api/account/"):
+            if not acct:
+                raise ValueError("로컬 접속은 계정이 없습니다 — 계정으로 로그인하세요")
+            if p == "/api/account/name":
+                nm = str(req.get("name", "")).strip()[:40]
+                if not nm:
+                    raise ValueError("이름을 적어 주세요")
+                c.execute("UPDATE users SET name=? WHERE id=?", (nm, self.uid))
+            elif p == "/api/account/dept":
+                d = str(req.get("dept", ""))
+                if d == (c.execute("SELECT dept FROM users WHERE id=?", (self.uid,)).fetchone()[0] or ""):
+                    raise ValueError("이미 그 부서입니다")
+                new_request(c, self.uid, "dept_join", d)
+            elif p == "/api/account/head":
+                d = c.execute("SELECT dept FROM users WHERE id=?", (self.uid,)).fetchone()[0]
+                if not d:
+                    raise ValueError("부서 소속이 승인된 뒤에 요청할 수 있습니다")
+                if self.uid in heads_of(c, d):
+                    raise ValueError("이미 부서장입니다")
+                new_request(c, self.uid, "dept_head", d)
+            elif p == "/api/account/cancel":
+                if not c.execute("UPDATE requests SET status='cancelled', decided_ts=? WHERE id=? AND uid=? AND status='pending'", (now(), int(req.get("id") or 0), self.uid)).rowcount:
+                    raise ValueError("취소할 수 있는 요청이 아닙니다")
+            else:
+                return self._send({"error": "not found"}, code=404)
+            return self._send({"ok": True})
+        if p == "/api/approvals/decide":
+            decide(c, self.uid, int(req.get("id") or 0), bool(req.get("ok")), str(req.get("note") or "").strip())
+            return self._send({"ok": True})
+        if not p.startswith("/api/admin/"):
+            return self._send({"error": "not found"}, code=404)
+        if not self.is_owner:
+            raise PermissionError("관리자만 할 수 있습니다")
+        if p == "/api/admin/dept":
+            op, name, new = req.get("op"), str(req.get("name", "")).strip()[:40], str(req.get("new", "")).strip()[:40]
+            if op == "add":
+                if not name or re.search(r"[<>\"'&]", name):
+                    raise ValueError("부서 이름을 확인하세요")
+                c.execute("INSERT INTO depts(name, ts) VALUES(?,?) ON CONFLICT(name) DO UPDATE SET hidden=0", (name, now()))
+            elif op == "rename":
+                if not new or re.search(r"[<>\"'&]", new) or c.execute("SELECT 1 FROM depts WHERE name=?", (new,)).fetchone():
+                    raise ValueError("새 이름이 비었거나 이미 있습니다")
+                if not c.execute("UPDATE depts SET name=? WHERE name=?", (new, name)).rowcount:
+                    raise ValueError("없는 부서")
+                for t in ("users", "dept_heads", "requests"):
+                    c.execute(f"UPDATE {t} SET dept=? WHERE dept=?", (new, name))
+            elif op in ("hide", "show"):
+                c.execute("UPDATE depts SET hidden=? WHERE name=?", (op == "hide", name))
+            else:
+                raise ValueError("op")
+            audit(c, self.uid, "dept_" + op, name, new)
+        elif p == "/api/admin/head":
+            d, u = str(req.get("dept", "")), str(req.get("uid", ""))
+            if req.get("op") == "grant":
+                if not c.execute("SELECT 1 FROM users WHERE id=? AND dept=?", (u, d)).fetchone():
+                    raise ValueError("그 부서 소속(승인된) 계정만 부서장이 될 수 있습니다")
+                c.execute("INSERT OR IGNORE INTO dept_heads VALUES(?,?,?)", (d, u, now()))
+            elif req.get("op") == "revoke":
+                c.execute("DELETE FROM dept_heads WHERE dept=? AND uid=?", (d, u))
+            else:
+                raise ValueError("op")
+            audit(c, self.uid, "head_" + req["op"], u, d)
+        elif p in ("/api/admin/reset", "/api/admin/disable"):
+            u = str(req.get("uid", ""))
+            if not c.execute("SELECT 1 FROM users WHERE id=?", (u,)).fetchone():
+                raise ValueError("없는 계정")
+            if p.endswith("reset"):  # 무작위 PIN — 응답으로 한 번만 보여 주고 어디에도 안 남김
+                pin = f"{secrets.randbelow(10**6):06d}"
+                set_pin(c, u, pin); c.execute("DELETE FROM sessions WHERE uid=?", (u,)); audit(c, self.uid, "pin_reset", u)
+                return self._send({"ok": True, "pin": pin})
+            off = bool(req.get("disabled"))
+            if off and u in OWNERS:
+                raise ValueError("관리자 계정은 정지할 수 없습니다")
+            c.execute("UPDATE users SET disabled=? WHERE id=?", (off, u))
+            if off:
+                c.execute("DELETE FROM sessions WHERE uid=?", (u,))
+            audit(c, self.uid, "disable" if off else "enable", u)
+        else:
+            return self._send({"error": "not found"}, code=404)
+        return self._send({"ok": True})
 
     def need_login(self):
         if self.command == "GET" and "text/html" in (self.headers.get("Accept") or ""):  # 화면 → 로그인 페이지로
@@ -483,14 +731,19 @@ class H(BaseHTTPRequestHandler):
             with db() as c:
                 if self.path == "/api/signup":
                     check_new(c, uid, str(req.get("name", "")), pin, self.client_address[0] in LOCAL)
-                    set_user(c, uid, str(req["name"]).strip()[:40], str(req.get("dept", "")).strip()[:40], pin)
+                    d = str(req.get("dept") or "")
+                    if d and d not in visible_depts(c):
+                        raise ValueError("목록에 있는 부서를 고르세요 (목록에 없으면 관리자에게 요청)")
+                    set_user(c, uid, str(req["name"]).strip()[:40], "", pin)  # 부서는 승인 뒤에 들어감
+                    if d:
+                        new_request(c, uid, "dept_join", d)
                 else:
                     if limited(uid):
                         raise ValueError("PIN 을 여러 번 틀렸습니다. 10분 뒤에 다시 해 주세요")
                     if not check_pin(c, uid, pin):
                         with FAIL_LOCK:
                             FAILS.setdefault(uid, []).append(time.time())
-                        raise ValueError("아이디 또는 PIN 이 틀립니다")
+                        raise ValueError("아이디 또는 PIN 이 틀립니다 (정지된 계정이면 관리자에게)")
                     with FAIL_LOCK:
                         FAILS.pop(uid, None)
                 tok = new_session(c, uid)
@@ -504,6 +757,9 @@ class H(BaseHTTPRequestHandler):
 
         if p == "/login":
             return self._send(signed(LOGIN).encode(), "text/html; charset=utf-8")
+        if p == "/api/depts":  # 가입 화면의 부서 목록(로그인 전)
+            with db() as c:
+                return self._send({"depts": visible_depts(c)})
         if p == "/logout":
             m = re.search(r"(?:^|;\s*)agsid=([A-Za-z0-9_-]+)", self.headers.get("Cookie") or "")
             if m:
@@ -514,7 +770,12 @@ class H(BaseHTTPRequestHandler):
         if not self.auth():
             return self.need_login()
         if p == "/api/me":
-            return self._send({"id": self.uid, "name": self.uname, "owner": self.is_owner, "agent_user": self.agent_user})
+            with db() as c:
+                return self._send(self.me(c))
+        if p in ("/account", "/approvals", "/admin"):
+            return self.page(p)
+        if p == "/api/account" or p.startswith(("/api/account/", "/api/approvals", "/api/admin")):
+            return self.manage_get(p)
         if p.startswith("/t/"):
             return self.proxy()
         if p == "/api/events":   # 오래 걸린 작업 끝남 (since=마지막 id)
@@ -529,7 +790,7 @@ class H(BaseHTTPRequestHandler):
                 u = usage(c)
                 return self._send({"tools": [{**t, "up": alive(t["port"]), "installed": os.path.isdir(os.path.join(BASE, t["dir"])),
                                               "url": f"/t/{t['dir']}/", "usage": u.get(t["dir"], {"recent": 0, "total": 0, "users": 0, "likes": 0})} for t in tools() if SHOW_HIDDEN or not t.get("hidden")],  # hidden: 토이 등 목록 비노출(프록시는 됨)
-                                   "rank": user_rank(c), "posts": posts(c, self.user), "me": {"id": self.uid, "name": self.uname, "owner": self.is_owner}})
+                                   "rank": user_rank(c), "posts": posts(c, self.user), "me": self.me(c)})
         if p.startswith("/api/guide/"):
             d = p.split("/")[-1]
             return self._send(guide(d).encode() if (tool(d) or d == "portal") else b"", "text/plain; charset=utf-8")
@@ -570,11 +831,12 @@ class H(BaseHTTPRequestHandler):
                         raise ValueError("지금 PIN 이 틀립니다 (10분에 5번까지)")
                     if not PIN_RE.match(req.get("new", "")):
                         raise ValueError("새 PIN 은 숫자 4~8자리")
-                    r = c.execute("SELECT name, dept FROM users WHERE id=?", (self.uid,)).fetchone()
-                    set_user(c, self.uid, r["name"], r["dept"], req["new"])
+                    set_pin(c, self.uid, req["new"])
                     c.execute("DELETE FROM sessions WHERE uid=?", (self.uid,))
                     tok = new_session(c, self.uid)
                     return self._send({"ok": True}, headers=[("Set-Cookie", cookie(tok))])
+                if self.path.startswith(("/api/account/", "/api/approvals/", "/api/admin/")):
+                    return self.manage_post(c, self.path, req)
                 if self.path == "/api/post":
                     if not (req.get("title") or "").strip():
                         raise ValueError("제목이 비었습니다")
@@ -603,6 +865,8 @@ class H(BaseHTTPRequestHandler):
                 else:
                     return self._send({"error": "not found"}, code=404)
                 self._send({"ok": True})
+        except PermissionError as e:
+            self._send({"error": str(e)}, code=403)
         except (ValueError, KeyError) as e:
             self._send({"error": str(e)}, code=400)
 
@@ -626,5 +890,11 @@ if __name__ == "__main__":
         sys.exit(0)
     if os.environ.get("BACKUP", "1" if PORT == 8700 else "0") == "1":
         threading.Thread(target=backup_loop, daemon=True).start()
-    print(f"portal → http://localhost:{PORT}  data={DATA}  owners={sorted(OWNERS)}  {_SIG}")
-    ThreadingHTTPServer((HOST, PORT), H).serve_forever()
+    print(f"portal → {'https' if TLS else 'http'}://localhost:{PORT}  data={DATA}  owners={sorted(OWNERS)}  {_SIG}")
+    srv = ThreadingHTTPServer((HOST, PORT), H)
+    if TLS:  # 선택: 사내 CA 로 만든 인증서 (README 'https') — TLS 1.2 이상
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER); ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+        ctx.load_cert_chain(os.environ["TLS_CERT"], os.environ["TLS_KEY"])
+        srv.socket = ctx.wrap_socket(srv.socket, server_side=True, do_handshake_on_connect=False)
+        print("https 켜짐 —", os.environ["TLS_CERT"])
+    srv.serve_forever()

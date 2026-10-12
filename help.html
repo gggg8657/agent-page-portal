@@ -89,6 +89,13 @@
     }).catch(() => {});
   }
   poll(); setInterval(poll, 15000);
+  fetch('/api/account/notices').then(r => r.ok ? r.json() : null).then(j => {  // 내 요청 결과(부서·부서장) 한 번씩 + 승인할 요청 안내(탭마다 한 번)
+    if (!j) return; const E = x => String(x ?? '').replace(/[&<>"]/g, '');
+    for (const n of j.notices || []) toast(`<span>${n.status === 'approved' ? '✅' : '⚠️'} ${E(n.label)} 요청(${E(n.dept)})이 ${n.status === 'approved' ? '승인' : '거절'}됐습니다${n.note ? ' — ' + E(n.note) : ''}</span><a href="/account" style="color:#2563eb;white-space:nowrap">보기</a><button aria-label="닫기">×</button>`, n.status === 'approved' ? '' : 'bad', 30000);
+    let shown = null; try { shown = sessionStorage.getItem('agApprovals'); } catch (e) {}
+    if (j.approvals && shown != j.approvals) { try { sessionStorage.setItem('agApprovals', j.approvals); } catch (e) {}
+      toast(`<span>📝 승인할 요청이 ${j.approvals}건 있습니다</span><a href="/approvals" style="color:#2563eb;white-space:nowrap">보기</a><button aria-label="닫기">×</button>`, '', 20000); }
+  }).catch(() => {});
   setTimeout(() => { if (on() && !document.getElementById('agHelp').open) ask(); }, 4000);
 })();</script>
 <script>(function(){  // 파동이 펫 — 모든 화면 아래를 돌아다님(끄기: 펫 메뉴 ⋯ → 펫 끄기). padong-local 이 꺼져 있으면 아무것도 안 뜸

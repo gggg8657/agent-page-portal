@@ -31,6 +31,30 @@ for bad in ({"dir": "../x", "port": 9000}, {"dir": "kordoc-local", "port": 9000}
     except ValueError: pass
 row = portal.add_tool({"dir": "ok-tool", "port": 9001, "title": "OK", "tags": "a #b"})
 assert row["tags"] == ["#a", "#b"] and portal.tool("ok-tool") and json.load(open(portal.TOOLS_FILE))[-1]["dir"] == "ok-tool"
+# 부서·역할·요청: 부서장 없으면 관리자만 승인, 부서장은 자기 부서 가입만, 승인되면 소속 반영
+with portal.db() as c:
+    c.execute("INSERT OR IGNORE INTO depts(name) VALUES('가부서')")
+    owner = next(iter(portal.OWNERS))
+    for u in ("aa", "bb", owner): portal.set_user(c, u, u, "", "1234")
+    portal.new_request(c, "aa", "dept_join", "가부서")
+    rid = c.execute("SELECT max(id) FROM requests").fetchone()[0]
+    try: portal.decide(c, "bb", rid, True); raise AssertionError("일반 사용자가 승인함")
+    except PermissionError: pass
+    portal.decide(c, owner, rid, True)
+    assert c.execute("SELECT dept FROM users WHERE id='aa'").fetchone()[0] == "가부서"
+    portal.new_request(c, "aa", "dept_head", "가부서"); portal.decide(c, owner, c.execute("SELECT max(id) FROM requests").fetchone()[0], True)
+    assert portal.role(c, "aa") == "부서장" and portal.role(c, "bb") == "일반" and portal.role(c, owner) == "관리자"
+    portal.new_request(c, "bb", "dept_join", "가부서")
+    try: portal.new_request(c, "bb", "dept_join", "가부서"); raise AssertionError("대기 요청 둘")
+    except ValueError: pass
+    rid = c.execute("SELECT max(id) FROM requests").fetchone()[0]
+    assert portal.can_decide(c, "aa", dict(c.execute("SELECT * FROM requests WHERE id=?", (rid,)).fetchone()))
+    portal.decide(c, "aa", rid, False, "확인 필요")
+    assert c.execute("SELECT status, approver FROM requests WHERE id=?", (rid,)).fetchone()[:] == ("rejected", "aa") and c.execute("SELECT COUNT(*) FROM audit").fetchone()[0] == 3
+    # 예전 200k 해시는 로그인 성공 때 600k 로 다시 해시
+    salt = b"s" * 16; c.execute("UPDATE users SET salt=?, hash=?, iters=200000 WHERE id='bb'", (salt, portal._hash("1234", salt, 200_000)))
+    assert portal.check_pin(c, "bb", "1234") and c.execute("SELECT iters FROM users WHERE id='bb'").fetchone()[0] == portal.ITERS and portal.check_pin(c, "bb", "1234")
+    c.execute("UPDATE users SET disabled=1 WHERE id='bb'"); assert not portal.check_pin(c, "bb", "1234")
 # 저작권 표기: 서버가 화면에 붙이는 코드가 있어야 한다 (LICENSE·NOTICE)
 _src = open(__import__("os").path.join(__import__("os").path.dirname(__import__("os").path.abspath(__file__)), "portal.py"), encoding="utf-8").read()
 assert "wqkgMjAyNiBnZ2dnODY1NyDCtyBkb25nanVraW0uZGV2QGdtYWlsLmNvbQ==" in _src and "signed(" in _src and "X-Author" in _src, "저작권 표기 누락"

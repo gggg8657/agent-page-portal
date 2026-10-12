@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="ko"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>계정 · AI Agent Portal</title>
+<style>
+  :root{--bg:#f3f5f8;--fg:#1f2937;--muted:#6b7280;--line:#e5e7eb;--navy:#1f3a5f;--blue:#2563eb;--chip:#eef2f7;--ok:#16a34a;--bad:#dc2626;--warn:#b45309}
+  *{box-sizing:border-box}body{font:14px/1.5 -apple-system,"Pretendard","Apple SD Gothic Neo",system-ui,sans-serif;background:var(--bg);color:var(--fg);margin:0}
+  .top{background:#fff;border-bottom:1px solid var(--line);padding:10px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;row-gap:4px}
+  .logo{font-weight:800;color:var(--navy);font-size:16px;text-decoration:none}.logo small{font-weight:500;color:var(--muted);font-size:11px;margin-left:6px}
+  .sp{flex:1}.nav{font-size:12.5px;color:var(--muted);margin-right:44px;display:flex;gap:4px;flex-wrap:wrap}.nav a{color:inherit;padding:3px 8px;border-radius:6px;text-decoration:none}.nav a.on{background:var(--chip);color:var(--navy);font-weight:600}
+  .badge{background:var(--bad);color:#fff;border-radius:999px;padding:0 7px;font-size:11px;font-weight:700;margin-left:3px}
+  .wrap{max-width:1100px;margin:0 auto;padding:16px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;align-items:start}
+  .wrap>*{min-width:0}.wide{grid-column:1/-1}
+  .box{background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow-wrap:anywhere}
+  .box h3{margin:0 0 10px;font-size:14px;display:flex;align-items:center;gap:8px}.box h3 small{font-weight:400;color:var(--muted);font-size:12px}
+  .note{font-size:12px;color:var(--muted);margin:6px 0 0}.msg{font-size:12.5px;min-height:1.2em;margin:6px 0 0}.msg.err{color:var(--bad)}.msg.ok{color:var(--ok)}
+  dl{display:grid;grid-template-columns:72px 1fr;gap:6px 10px;margin:0;font-size:13px}dt{color:var(--muted)}dd{margin:0}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.row>input,.row>select{flex:1;min-width:120px}
+  input,select{font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:6px;color:var(--fg);background:#fff}input:focus,select:focus{outline:2px solid #bfd3f6;border-color:var(--blue)}
+  .btn{background:var(--navy);color:#fff;border:none;border-radius:6px;padding:7px 14px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+  .btn.ghost{background:#fff;color:var(--fg);border:1px solid var(--line);font-weight:500}.btn.red{background:#fff;color:var(--bad);border:1px solid #f3c4c4;font-weight:500}.btn.sm{padding:3px 9px;font-size:12px}
+  .btn:disabled{opacity:.45;cursor:default}
+  .tag{display:inline-block;font-size:11px;border-radius:4px;padding:0 6px;line-height:18px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+  .tag.관리자{border-color:#c7d2e3;color:var(--navy);background:var(--chip)}.tag.부서장{border-color:#fcd9a8;color:var(--warn);background:#fff7ed}
+  .tag.pending{border-color:#fcd9a8;color:var(--warn)}.tag.approved{border-color:#bbe5c8;color:var(--ok)}.tag.rejected{border-color:#f3c4c4;color:var(--bad)}.tag.off{color:var(--bad)}
+  .tbl{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:12.5px}th{text-align:left;color:var(--muted);font-weight:500;border-bottom:1px solid var(--line);padding:6px 6px;white-space:nowrap}
+  td{border-bottom:1px solid #f1f3f6;padding:7px 6px;vertical-align:middle}td .row{gap:4px;flex-wrap:nowrap}td input{padding:4px 7px;font-size:12px;min-width:90px}
+  .empty{color:#9ca3af;font-size:12.5px;padding:6px 0}
+  .pin{font:700 22px/1.3 ui-monospace,Menlo,monospace;letter-spacing:4px;color:var(--navy)}
+  @media(max-width:600px){.wrap{padding:12px 16px}.nav{margin-right:0}}
+</style></head><body>
+<div class="top"><a class="logo" href="/">KAERI AI Agent Portal<small>내부망 로컬 LLM 에이전트</small></a><span class="sp"></span><nav class="nav" id="nav"></nav></div>
+<div class="wrap" id="main"><div class="box">불러오는 중…</div></div>
+<script>
+const V = location.pathname.slice(1) || 'account';
+const E = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const ST = { pending: '대기', approved: '승인', rejected: '거절', cancelled: '취소' };
+const T = ts => ts ? String(ts).slice(0, 16).replace('T', ' ') : '-';
+const tag = (t, c) => `<span class="tag ${c || t}">${E(t)}</span>`;
+async function api(u, body) {
+  const r = await fetch(u, body === undefined ? {} : { method: 'POST', body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({ error: '응답 오류' }));
+  if (!r.ok && !j.error) j.error = '실패 (' + r.status + ')';
+  return j;
+}
+function msg(el, j, okText) { el.className = 'msg ' + (j.error ? 'err' : 'ok'); el.textContent = j.error || okText; return !j.error; }
+function nav(me) {
+  const L = [['/', '포털 홈'], ['/account', '계정 설정']];
+  if (me.owner || me.heads.length) L.push(['/approvals', '승인' + (me.approvals ? `<span class="badge">${me.approvals}</span>` : '')]);
+  if (me.owner) L.push(['/admin', '관리']);
+  document.getElementById('nav').innerHTML = `<span style="padding:3px 4px"><b style="color:var(--fg)">${E(me.name)}</b> ${me.role !== '일반' ? tag(me.role) : ''}</span>` +
+    L.map(([h, t]) => `<a href="${h}" class="${location.pathname === h ? 'on' : ''}">${t}</a>`).join('') + '<a href="/logout">로그아웃</a>';
+}
+function reqTable(rows, mine, who) {  // who: 처리한 쪽 화면 — '보낸 곳' 대신 요청한 사람
+  if (!rows.length) return '<div class="empty">없음</div>';
+  return `<div class="tbl"><table><tr><th>요청</th><th>부서</th><th>상태</th><th>${who ? '요청한 사람' : '보낸 곳'}</th><th>결과·메모</th><th>날짜</th>${mine ? '<th></th>' : ''}</tr>` + rows.map(r => `<tr>
+    <td>${E(r.label)}</td><td>${E(r.dept)}</td><td>${tag(ST[r.status] || r.status, r.status)}</td><td>${who ? E(r.uname) : E(r.status === 'pending' ? r.route : '')}</td>
+    <td>${r.approver ? E(r.approver_name) : ''}${r.note ? ' — ' + E(r.note) : ''}</td><td>${T(r.decided_ts || r.ts)}</td>
+    ${mine ? `<td>${r.status === 'pending' ? `<button class="btn ghost sm" onclick="cancelReq(${r.id})">취소</button>` : ''}</td>` : ''}</tr>`).join('') + '</table></div>';
+}
+function decideTable(rows) {
+  if (!rows.length) return '<div class="empty">처리할 요청이 없습니다</div>';
+  return `<div class="tbl"><table><tr><th>요청한 사람</th><th>요청</th><th>부서</th><th>날짜</th><th>메모 (선택)</th><th></th></tr>` + rows.map(r => `<tr>
+    <td><b>${E(r.uname)}</b> <span style="color:var(--muted)">${E(r.uid)}</span></td><td>${E(r.label)}</td><td>${E(r.dept)}</td><td>${T(r.ts)}</td>
+    <td><input id="note${r.id}" maxlength="200" placeholder="거절 사유 등"></td>
+    <td><div class="row"><button class="btn sm" onclick="decide(${r.id},true)">승인</button><button class="btn red sm" onclick="decide(${r.id},false)">거절</button></div></td></tr>`).join('') + '</table></div>';
+}
+async function decide(id, ok) { const j = await api('/api/approvals/decide', { id, ok, note: document.getElementById('note' + id).value }); if (j.error) alert(j.error); render(); }
+async function cancelReq(id) { if (!confirm('이 요청을 취소할까요?')) return; const j = await api('/api/account/cancel', { id }); if (j.error) alert(j.error); render(); }
+
+async function viewAccount() {
+  const j = await api('/api/account'); if (j.error) return `<div class="box">${E(j.error)}</div>`;
+  const me = j.me; nav(me);
+  if (!me.account) return `<div class="box wide"><h3>로컬 접속</h3>이 서버 안(127.0.0.1)에서 계정 없이 들어와 관리자로 보입니다. 계정 설정은 <a href="/login">계정으로 로그인</a>한 뒤에 할 수 있습니다.${me.owner ? ' 관리 화면은 <a href="/admin">관리</a>.' : ''}</div>`;
+  const pend = kind => j.requests.find(r => r.kind === kind && r.status === 'pending');
+  const pj = pend('dept_join'), ph = pend('dept_head');
+  return `<div class="box"><h3>내 계정</h3><dl><dt>아이디</dt><dd>${E(me.id)}</dd><dt>역할</dt><dd>${tag(me.role)}${me.heads.length ? ' <span class="note">' + me.heads.map(E).join(', ') + ' 부서장</span>' : ''}</dd>
+      <dt>부서</dt><dd>${me.dept ? E(me.dept) : '<span style="color:var(--muted)">없음</span>'}${pj ? ` ${tag('승인 대기', 'pending')} → ${E(pj.dept)}` : ''}</dd></dl>
+      <form onsubmit="return saveName(event)" style="margin-top:12px"><div class="row"><input name="name" value="${E(me.name)}" maxlength="40" required aria-label="이름"><button class="btn">이름 저장</button></div><p class="msg"></p></form></div>
+    <div class="box"><h3>부서 소속 <small>부서장 승인 뒤 반영</small></h3>
+      <form onsubmit="return reqDept(event)"><div class="row"><select name="dept" required ${pj ? 'disabled' : ''}><option value="">부서 고르기</option>${j.depts.filter(d => d !== me.dept).map(d => `<option>${E(d)}</option>`).join('')}</select><button class="btn" ${pj ? 'disabled' : ''}>${me.dept ? '변경 요청' : '소속 요청'}</button></div>
+      <p class="note">${pj ? `대기 중: ${E(pj.dept)} — ${E(pj.route)}에게 요청됨. 바꾸려면 아래 '내 요청'에서 취소하세요.` : '그 부서의 부서장에게(부서장이 없으면 관리자에게) 요청이 갑니다. 목록에 없으면 관리자에게 요청하세요.'}</p><p class="msg"></p></form>
+      <h3 style="margin-top:16px">부서장 권한 <small>관리자 승인</small></h3>
+      <div class="row"><button class="btn ghost" onclick="reqHead(this)" ${!me.dept || me.heads.includes(me.dept) || ph ? 'disabled' : ''}>${me.heads.includes(me.dept) ? '이미 부서장' : ph ? '요청 대기 중' : (me.dept ? E(me.dept) + ' 부서장 권한 요청' : '부서 승인 뒤 요청 가능')}</button></div>
+      <p class="note">부서장은 자기 부서 가입 요청을 승인·거절하고, 부서 구성원 목록과 포털 사용 횟수를 볼 수 있습니다.</p><p class="msg" id="headMsg"></p></div>
+    <div class="box" id="pin"><h3>PIN 바꾸기</h3><form onsubmit="return changePin(event)">
+      <div class="row" style="flex-direction:column;align-items:stretch"><input name="pin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="지금 PIN" required>
+      <input name="new" type="password" inputmode="numeric" autocomplete="new-password" placeholder="새 PIN (숫자 4~8자리)" pattern="[0-9]{4,8}" required><button class="btn">PIN 바꾸기</button></div>
+      <p class="note">PIN 은 서버에 해시로만 저장됩니다. 바꾸면 다른 기기의 로그인은 풀립니다. 잊으면 관리자에게 초기화를 부탁하세요.</p><p class="msg"></p></form></div>
+    <div class="box wide"><h3>내 요청</h3>${reqTable(j.requests, true)}</div>`;
+}
+async function saveName(e) { e.preventDefault(); const f = e.target; if (msg(f.querySelector('.msg'), await api('/api/account/name', { name: f.name.value }), '저장했습니다')) setTimeout(render, 600); return false; }
+async function reqDept(e) { e.preventDefault(); const f = e.target; if (msg(f.querySelector('.msg'), await api('/api/account/dept', { dept: f.dept.value }), '요청했습니다')) setTimeout(render, 600); return false; }
+async function reqHead(b) { if (msg(document.getElementById('headMsg'), await api('/api/account/head', {}), '관리자에게 요청했습니다')) setTimeout(render, 600); }
+async function changePin(e) { e.preventDefault(); const f = e.target; if (msg(f.querySelector('.msg'), await api('/api/pin', { pin: f.pin.value, new: f.new.value }), 'PIN 을 바꿨습니다')) f.reset(); return false; }
+
+async function viewApprovals() {
+  const [me, j] = await Promise.all([api('/api/me'), api('/api/approvals')]); nav(me);
+  if (j.error) return `<div class="box wide">${E(j.error)}</div>`;
+  const mem = Object.entries(j.members);
+  return `<div class="box wide"><h3>승인할 요청 <small>${me.owner ? '관리자: 모든 요청' : '내가 부서장인 부서의 소속 요청'}</small></h3>${decideTable(j.pending)}</div>` +
+    (mem.length ? mem.map(([d, rows]) => `<div class="box wide"><h3>${E(d)} 구성원 <small>${rows.length}명 · 포털에서 도구를 연 횟수</small></h3>${rows.length ? `<div class="tbl"><table><tr><th>이름</th><th>아이디</th><th>최근 30일</th><th>누적</th><th>마지막 접속</th></tr>` +
+      rows.map(r => `<tr><td>${E(r.name)} ${r.head ? tag('부서장') : ''}</td><td>${E(r.id)}</td><td>${r.recent}</td><td>${r.total}</td><td>${T(r.seen)}</td></tr>`).join('') + '</table></div>' : '<div class="empty">아직 없음</div>'}</div>`).join('') : '') +
+    `<div class="box wide"><h3>내가 처리한 요청</h3>${reqTable(j.done, false, true)}</div>`;
+}
+
+let A = null;
+async function viewAdmin() {
+  const [me, j] = await Promise.all([api('/api/me'), api('/api/admin')]); nav(me); A = j;
+  if (j.error) return `<div class="box wide">${E(j.error)}</div>`;
+  const opts = j.depts.filter(d => !d.hidden).map(d => `<option>${E(d.name)}</option>`).join('');
+  return `<div class="box wide"><h3>대기 중인 요청 <small>전체</small></h3>${decideTable(j.pending)}</div>
+    <div class="box wide"><h3>계정 <small>${j.users.length}개 · 관리자: ${j.owners.map(E).join(', ')} (AGENT_OWNERS)</small></h3><div class="tbl"><table>
+      <tr><th>아이디</th><th>이름</th><th>부서</th><th>역할</th><th>가입</th><th>마지막 접속</th><th></th></tr>` + j.users.map(u => `<tr>
+      <td>${E(u.id)}</td><td>${E(u.name)}</td><td>${E(u.dept) || '<span style="color:#9ca3af">-</span>'}</td><td>${tag(u.role)}${u.disabled ? ' ' + tag('정지', 'off') : ''}</td><td>${T(u.ts)}</td><td>${T(u.seen)}</td>
+      <td><div class="row">${u.dept && !u.heads.includes(u.dept) ? `<button class="btn ghost sm" onclick="head('grant','${E(u.dept)}','${E(u.id)}')">부서장 지정</button>` : ''}
+        <button class="btn ghost sm" onclick="resetPin('${E(u.id)}')">PIN 초기화</button>${u.role === '관리자' ? '' : `<button class="btn red sm" onclick="disable('${E(u.id)}',${!u.disabled})">${u.disabled ? '정지 해제' : '정지'}</button>`}</div></td></tr>`).join('') + `</table></div><p class="msg" id="userMsg"></p></div>
+    <div class="box"><h3>부서 <small>가입·변경 목록</small></h3><div class="tbl"><table><tr><th>부서</th><th>인원</th><th>부서장</th><th></th></tr>` + j.depts.map(d => `<tr>
+      <td>${E(d.name)} ${d.hidden ? tag('숨김', 'off') : ''}</td><td>${d.members}</td><td style="white-space:nowrap">${d.heads.map(h => `${E(h)} <button class="btn ghost sm" title="부서장 회수" onclick="head('revoke','${E(d.name)}','${E(h)}')">×</button>`).join(' ') || '-'}</td>
+      <td><div class="row"><button class="btn ghost sm" onclick="renameDept('${E(d.name)}')">이름 바꾸기</button><button class="btn ghost sm" onclick="dept('${d.hidden ? 'show' : 'hide'}','${E(d.name)}')">${d.hidden ? '보이기' : '숨기기'}</button></div></td></tr>`).join('') + `</table></div>
+      <form onsubmit="return addDept(event)" style="margin-top:10px"><div class="row"><input name="name" placeholder="새 부서 이름" maxlength="40" required><button class="btn">추가</button></div><p class="msg"></p></form></div>
+    <div class="box wide"><h3>감사 기록 <small>최근 60개</small></h3><div class="tbl" style="max-height:420px;overflow:auto"><table><tr><th>시각</th><th>누가</th><th>무엇</th><th>대상</th><th>내용</th></tr>` +
+      (j.audit.map(a => `<tr><td>${T(a.ts)}</td><td>${E(a.actor)}</td><td>${E(a.action)}</td><td>${E(a.target)}</td><td>${E(a.detail)}</td></tr>`).join('') || '<tr><td colspan=5 class="empty">없음</td></tr>') + '</table></div></div>';
+}
+async function head(op, d, uid) { if (op === 'revoke' && !confirm(`${uid} 의 ${d} 부서장 권한을 회수할까요?`)) return; const j = await api('/api/admin/head', { op, dept: d, uid }); if (j.error) alert(j.error); render(); }
+async function resetPin(uid) { if (!confirm(`${uid} 의 PIN 을 무작위 6자리로 초기화할까요? (그 계정의 로그인은 모두 풀립니다)`)) return;
+  const j = await api('/api/admin/reset', { uid }); const m = document.getElementById('userMsg');
+  if (msg(m, j, '')) m.innerHTML = `${E(uid)} 새 PIN: <span class="pin">${E(j.pin)}</span> — 지금 한 번만 보입니다. 본인에게 전하고 계정 설정에서 바꾸게 하세요.`; }
+async function disable(uid, off) { if (!confirm(`${uid} 계정을 ${off ? '정지' : '정지 해제'}할까요?`)) return; const j = await api('/api/admin/disable', { uid, disabled: off }); if (j.error) alert(j.error); render(); }
+async function dept(op, name, nw) { const j = await api('/api/admin/dept', { op, name, new: nw }); if (j.error) alert(j.error); render(); }
+function renameDept(name) { const n = prompt(`'${name}' 의 새 이름 (소속·부서장·요청도 함께 바뀜)`, name); if (n && n.trim() !== name) dept('rename', name, n.trim()); }
+async function addDept(e) { e.preventDefault(); const f = e.target; if (msg(f.querySelector('.msg'), await api('/api/admin/dept', { op: 'add', name: f.name.value }), '추가했습니다')) setTimeout(render, 500); return false; }
+
+async function render() {
+  document.title = { account: '계정 설정', approvals: '승인', admin: '관리' }[V] + ' · AI Agent Portal';
+  document.getElementById('main').innerHTML = await ({ account: viewAccount, approvals: viewApprovals, admin: viewAdmin }[V] || viewAccount)();
+  if (location.hash === '#pin') document.querySelector('#pin input')?.focus();
+}
+render();
+</script>
+</body></html>
