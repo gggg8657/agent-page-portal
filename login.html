@@ -21,7 +21,7 @@
 <div class="card">
   <div class="tabs"><button data-t="in" class="on">로그인</button><button data-t="up">처음이에요 (가입)</button><button data-t="pin">PIN 바꾸기</button></div>
   <form id="in"><label>아이디<input name="id" autocomplete="username" required autocapitalize="none"></label>
-    <label>PIN (숫자 4~8자리)<input name="pin" type="password" inputmode="numeric" autocomplete="current-password" required></label>
+    <label>PIN (숫자 4~8자리)<input name="pin" type="password" autocomplete="current-password" required></label>
     <p class="err"></p><button class="btn">로그인</button></form>
   <form id="up" hidden><label>아이디 <span>영문 소문자·숫자 (예: hong.gd) — 바꿀 수 없음</span><input name="id" required autocapitalize="none" pattern="[a-z0-9][a-z0-9_.\-]{1,31}"></label>
     <label>이름<input name="name" required maxlength="40"></label><label>부서 (선택)<input name="dept" maxlength="40"></label>

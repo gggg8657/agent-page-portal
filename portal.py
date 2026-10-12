@@ -2,9 +2,9 @@
 """에이전트 페이지 포털 — 로그인·도구 목록·상태·시작/중지·리버스 프록시(/t/<도구>/)·사용 통계·피드. stdlib + sqlite.
   python3 portal.py                 # http://localhost:8700
   python3 portal.py start-all|stop-all
-  python3 portal.py --add-user <id> --name <이름> [--dept 부서] [--pin 숫자]   # 계정 만들기·PIN 초기화(--pin 없으면 무작위 6자리를 화면에만)
+  python3 portal.py --add-user <id> --name <이름> [--dept 부서] [--pin 숫자 | --password 문자]   # 계정 만들기·PIN 초기화(--pin 없으면 무작위 6자리를 화면에만)
 env: PORT(8700) AGENT_DATA(모든 도구 데이터 루트, 기본 ../_data)
-     AGENT_OWNERS(쉼표 — 서버 주인 계정 id, 기본 dongju) BACKUP(1=매일 03시 ../backup.sh, 기본 :8700 만)"""
+     AGENT_OWNERS(쉼표 — 서버 주인 계정 id, 기본 dongju,gggg8657) BACKUP(1=매일 03시 ../backup.sh, 기본 :8700 만)"""
 import datetime, hashlib, hmac, json, os, re, secrets, socket, sqlite3, subprocess, sys, threading, time, urllib.error, urllib.parse, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -20,7 +20,7 @@ TOOLS_FILE = os.path.join(ROOT, "tools.json")
 
 # 서버 주인 → 도구에 X-Agent-User: owner (예전 기록 전부 보임). 나머지는 계정 id 별 폴더.
 # 접속 IP 는 NAT 뒤라 모두 서버 주소로 보여서 사람 구분에 못 씀 → 로그인. 예외: 이 서버 안(127.0.0.1)에서 쿠키 없이 = 주인(SSH 터널 테스트 포털·내부 호출)
-OWNERS = {x.strip() for x in os.environ.get("AGENT_OWNERS", "dongju").split(",") if x.strip()}
+OWNERS = {x.strip() for x in os.environ.get("AGENT_OWNERS", "dongju,gggg8657").split(",") if x.strip()}
 LOCAL = ("127.0.0.1", "::1")
 
 
@@ -566,13 +566,14 @@ class H(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     if "--add-user" in sys.argv:  # 계정 만들기·PIN 초기화 (관리자). PIN 은 화면에만 — 로그·파일에 안 남김
         a = sys.argv; arg = lambda k, d="": a[a.index(k) + 1] if k in a else d
-        uid, pin = arg("--add-user").lower(), arg("--pin") or f"{secrets.randbelow(10**6):06d}"
-        if not ID_RE.match(uid) or uid == "owner" or not PIN_RE.match(pin):
-            sys.exit("아이디(영문 소문자·숫자 2~32자, owner 불가)·PIN(숫자 4~8) 확인")
+        uid, pw = arg("--add-user").lower(), arg("--password")  # --password: 관리자 계정용 문자 비밀번호(6~64자, 로그인 칸에 PIN 대신)
+        pin = pw or arg("--pin") or f"{secrets.randbelow(10**6):06d}"
+        if not ID_RE.match(uid) or uid == "owner" or not (PIN_RE.match(pin) or (pw and 6 <= len(pw) <= 64)):
+            sys.exit("아이디(영문 소문자·숫자 2~32자, owner 불가)·PIN(숫자 4~8) 또는 --password(6~64자) 확인")
         with db() as c:
             set_user(c, uid, arg("--name", uid), arg("--dept"), pin)
             c.execute("DELETE FROM sessions WHERE uid=?", (uid,))
-        print(f"{uid} 계정 저장 (주인: {uid in OWNERS})" + ("" if "--pin" in a else f"  PIN {pin}"))
+        print(f"{uid} 계정 저장 (주인: {uid in OWNERS})" + ("" if "--pin" in a or pw else f"  PIN {pin}"))
         sys.exit(0)
     if len(sys.argv) > 1 and sys.argv[1] in ("start-all", "stop-all"):
         for t in tools():
