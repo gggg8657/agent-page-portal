@@ -1,1 +1,37 @@
-/* diagram-local — 이 도구만의 테마 손질 (THEME_GUIDE.md). CSS 만, html[data-ag-theme...] 로 시작하는 선택자만. 비어 있으면 공통(base-trendy·base-dark·dark.js)만 적용 */
+/* diagram-local — 이 도구만의 테마 손질 (THEME_GUIDE.md). CSS 만, html[data-ag-theme...] 로 시작하는 선택자만.
+   Mermaid 미리보기(#view svg)는 색을 건드리지 않는다: 도구의 '테마' 단추가 꺼져 있으면 Mermaid 기본(밝은) 색이라 흰 종이 위에 둔다 */
+
+/* 트렌디 밝게 + 도구 자체 어둡게를 켠 경우 — 아래 트렌디 규칙이 쓰는 토큰을 body 안에서만 trendy-dark 값으로 */
+html[data-ag-theme="trendy-light"] body.dark{--ag-bg:#0c0c10;--ag-surface:#15151b;--ag-surface-2:#1c1c23;--ag-surface-3:#24242d;--ag-ink:#ededf2;--ag-ink-2:#b0b0bc;--ag-ink-3:#8f8f9c;--ag-line:#25252e;--ag-line-2:#34343f;--ag-accent-soft:#221f45;--ag-accent-ink:#aeabff;--ag-hover:#1d1d25;--ag-ok:#4fd197;--ag-ok-soft:#10301f;--ag-warn:#f2b54f;--ag-warn-soft:#352812;--ag-bad:#f47a7a;--ag-bad-soft:#3a1719;color-scheme:dark}
+
+/* 도구 자체 '테마'(body.dark) 를 켰을 때 — dark.js 가 이 변수들을 밝게 뒤집지 않게 토큰으로 */
+html[data-ag-theme$="dark"] body.dark{--bg:var(--ag-bg);--fg:var(--ag-ink);--muted:var(--ag-ink-3);--line:var(--ag-line-2);--panel:var(--ag-surface)}
+html[data-ag-theme$="dark"] body.dark .msg.user{background:var(--ag-accent-soft)}
+html[data-ag-theme$="dark"] body.dark .msg.assistant{background:var(--ag-surface-2)}
+
+/* 미리보기 — 밝은 Mermaid 그림은 흰 종이, 도구 '테마'(어두운 Mermaid)를 켜면 어두운 표면 */
+html[data-ag-theme$="dark"] body:not(.dark) #view{background:#fff;border-color:var(--ag-line-2)}
+html[data-ag-theme$="dark"] body:not(.dark) #view>span{color:#6b7280!important}
+
+/* 대화 말풍선 */
+html[data-ag-theme$="dark"] .msg.user{background:var(--ag-accent-soft);color:var(--ag-ink)}
+html[data-ag-theme$="dark"] .msg.assistant{background:var(--ag-surface-2);color:var(--ag-ink-2)}
+html[data-ag-theme$="dark"] #err{color:var(--ag-bad)}
+
+/* 트렌디 — 카드·둥글기·알약 예시 */
+html[data-ag-theme^="trendy"] :is(#chat,#view){border-radius:var(--ag-r-lg);border-color:var(--ag-line);box-shadow:var(--ag-shadow-2)}
+html[data-ag-theme^="trendy"] #view{padding:16px}
+html[data-ag-theme^="trendy"] :is(#q,#src){border-radius:var(--ag-r-lg);border-color:var(--ag-line-2);padding:10px 12px}
+html[data-ag-theme^="trendy"] #src{background:var(--ag-surface-2)}
+html[data-ag-theme^="trendy"] .msg{border-radius:var(--ag-r-lg)}
+html[data-ag-theme^="trendy"] .msg.user{background:var(--ag-accent-soft);color:var(--ag-ink);border-bottom-right-radius:var(--ag-r-xs)}
+html[data-ag-theme^="trendy"] .msg.assistant{background:var(--ag-surface-2);color:var(--ag-ink-2);border-bottom-left-radius:var(--ag-r-xs)}
+html[data-ag-theme^="trendy"] #examples{gap:6px}
+html[data-ag-theme^="trendy"] #examples button{border-radius:var(--ag-r-full);background:var(--ag-surface);border-color:var(--ag-line-2);color:var(--ag-ink-2);padding:3px 10px}
+html[data-ag-theme^="trendy"] #examples button:hover{background:var(--ag-accent-soft);color:var(--ag-accent-ink);border-color:transparent}
+html[data-ag-theme^="trendy"] .bar :is(button:not(.primary),select){border-color:var(--ag-line-2)}
+html[data-ag-theme^="trendy"] button.primary{background-color:var(--ag-accent);border-color:transparent;color:var(--ag-on-accent);padding:6px 16px}
+html[data-ag-theme^="trendy"] details summary{color:var(--ag-ink-2);font-weight:600;padding:2px 4px}
+html[data-ag-theme^="trendy"] #runs{padding-left:4px}
+html[data-ag-theme^="trendy"] #runs li{padding:5px 8px;border-radius:var(--ag-r-sm);color:var(--ag-ink-2)}
+html[data-ag-theme^="trendy"] #runs li:hover{background:var(--ag-hover);color:var(--ag-accent-ink)}

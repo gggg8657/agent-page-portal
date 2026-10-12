@@ -1,1 +1,50 @@
-/* image-local — 이 도구만의 테마 손질 (THEME_GUIDE.md). CSS 만, html[data-ag-theme...] 로 시작하는 선택자만. 비어 있으면 공통(base-trendy·base-dark·dark.js)만 적용 */
+/* image-local — 이 도구만의 테마 손질 (THEME_GUIDE.md). CSS 만, html[data-ag-theme...] 로 시작하는 선택자만.
+   만든 그림(.results·.gal·.srcs·#view img)은 색·밝기를 절대 건드리지 않는다 — 틀(둥글기·그림자)만 */
+
+/* 그리기/고치기 탭 — 알약 모양 유지. 선택 탭은 글자색 반전(ink 바탕 + bg 글자): 공통 .tabs .on 글자색이 덮어서 글자가 안 보이던 것 */
+html[data-ag-theme^="trendy"] .tabs button{border-radius:var(--ag-r-full);padding:6px 16px;font-weight:550}
+html[data-ag-theme^="trendy"] .tabs button:not(.on){background:var(--ag-surface);border-color:var(--ag-line-2);color:var(--ag-ink-2)}
+html[data-ag-theme^="trendy"] .tabs button:not(.on):hover{background:var(--ag-hover);color:var(--ag-ink)}
+html[data-ag-theme] .tabs button.on{background:var(--ag-ink);border-color:var(--ag-ink);color:var(--ag-bg)}
+
+/* 입력칸 — 어둡게에서 브라우저 기본 회색(#3b3b3b) 대신 우물 색 */
+html[data-ag-theme$="dark"] :is(textarea,input[type=text],input[type=number],select){background:var(--ag-surface-2);color:var(--ag-ink);border-color:var(--ag-line-2)}
+html[data-ag-theme^="trendy"] :is(textarea,input[type=text],input[type=number],select){border-color:var(--ag-line-2)}
+html[data-ag-theme^="trendy"] textarea{padding:12px 14px;line-height:1.6}
+html[data-ag-theme^="trendy"] .box{border-color:var(--ag-line);padding:18px}
+html[data-ag-theme^="trendy"] .box h3{font-size:15px}
+
+/* 스타일·비율 칩 — 알약, 선택은 강조색 */
+html[data-ag-theme^="trendy"] .chips{gap:6px}
+html[data-ag-theme^="trendy"] .chips button{border-radius:var(--ag-r-full);background:var(--ag-surface);border-color:var(--ag-line-2);color:var(--ag-ink-2)}
+html[data-ag-theme^="trendy"] .chips button:hover{color:var(--ag-ink)}
+html[data-ag-theme] .chips button.on{background:var(--ag-accent);border-color:var(--ag-accent);color:var(--ag-on-accent)}
+html[data-ag-theme^="trendy"] .chips button.on{font-weight:600;box-shadow:0 4px 12px -6px color-mix(in srgb,var(--ag-accent) 70%,transparent)}
+html[data-ag-theme^="trendy"] .lbl{font-size:12.5px;font-weight:600;color:var(--ag-ink-3);letter-spacing:.01em}
+
+/* 주 버튼 */
+html[data-ag-theme^="trendy"] button.primary{background-color:var(--ag-accent);border-color:transparent;color:var(--ag-on-accent);border-radius:var(--ag-r-md)}
+
+/* 진행 막대 */
+html[data-ag-theme$="dark"] .bar{background:var(--ag-surface-3)}
+html[data-ag-theme^="trendy"] .bar{border-radius:var(--ag-r-full)}
+html[data-ag-theme^="trendy"] .bar i{background:var(--ag-grad)}
+
+/* 그림 틀 — 그림 자체는 그대로, 둥글기·그림자만 */
+html[data-ag-theme^="trendy"] :is(.results img,.gal img){border-radius:var(--ag-r-md);box-shadow:var(--ag-shadow-1)}
+html[data-ag-theme^="trendy"] .gal img{transition:transform var(--ag-dur) var(--ag-ease),box-shadow var(--ag-dur) var(--ag-ease)}
+html[data-ag-theme^="trendy"] .gal img:hover{transform:translateY(-2px);box-shadow:var(--ag-shadow-2)}
+html[data-ag-theme$="dark"] :is(.results img,.gal img,.srcs img){background:var(--ag-surface-2)}
+html[data-ag-theme$="dark"] .gal .item p{color:var(--ag-ink-3)}
+
+/* 고치기: 끌어 놓기 영역·올린 그림 지우기 단추·주의 문구 */
+html[data-ag-theme^="trendy"] .drop{border-radius:var(--ag-r-lg);border-color:var(--ag-line-2);background:var(--ag-surface-2)}
+html[data-ag-theme] .drop.over{border-color:var(--ag-accent);background:var(--ag-accent-soft)}
+html[data-ag-theme$="dark"] .srcs button{background:var(--ag-surface);color:var(--ag-ink);border-color:var(--ag-line-2)}
+html[data-ag-theme$="dark"] .warn{background:var(--ag-warn-soft);border-color:color-mix(in srgb,var(--ag-warn) 45%,transparent);color:var(--ag-ink)}
+html[data-ag-theme^="trendy"] .warn{border-radius:var(--ag-r-md)}
+
+/* 크게 보기 창 */
+html[data-ag-theme^="trendy"] #view{backdrop-filter:blur(6px)}
+html[data-ag-theme^="trendy"] #view .in{border-radius:var(--ag-r-xl);box-shadow:var(--ag-shadow-3);padding:18px}
+html[data-ag-theme$="dark"] #view .in{background:var(--ag-surface)}

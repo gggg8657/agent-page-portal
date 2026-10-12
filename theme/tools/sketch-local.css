@@ -1,1 +1,30 @@
-/* sketch-local — 이 도구만의 테마 손질 (THEME_GUIDE.md). CSS 만, html[data-ag-theme...] 로 시작하는 선택자만. 비어 있으면 공통(base-trendy·base-dark·dark.js)만 적용 */
+/* sketch-local — 이 도구만의 테마 손질 (THEME_GUIDE.md). CSS 만, html[data-ag-theme...] 로 시작하는 선택자만.
+   올린 손그림(#img)·Mermaid 미리보기(#view svg)는 색을 건드리지 않는다 — 미리보기는 밝은 Mermaid 색이라 흰 종이 위에 */
+
+/* 미리보기·올린 사진 — 흰 종이 */
+html[data-ag-theme$="dark"] #view{background:#fff;border-color:var(--ag-line-2)}
+html[data-ag-theme$="dark"] #view>.lbl{color:#6b7280}
+
+/* 대화 말풍선·오류 */
+html[data-ag-theme$="dark"] .msg.user{background:var(--ag-accent-soft);color:var(--ag-ink)}
+html[data-ag-theme$="dark"] .msg.assistant{background:var(--ag-surface-2);color:var(--ag-ink)}
+html[data-ag-theme$="dark"] #err{color:var(--ag-bad)}
+
+/* 트렌디 — 카드·둥글기 */
+html[data-ag-theme^="trendy"] .box{border-radius:var(--ag-r-lg);border-color:var(--ag-line);box-shadow:var(--ag-shadow-2);padding:12px}
+html[data-ag-theme^="trendy"] #view{padding:16px}
+html[data-ag-theme^="trendy"] #img{border-radius:var(--ag-r-md)}
+html[data-ag-theme^="trendy"] textarea{border-radius:var(--ag-r-md);border-color:var(--ag-line-2);padding:8px 10px}
+html[data-ag-theme^="trendy"] :is(#src,#tikz,#elems,#edges){background:var(--ag-surface-2)}
+html[data-ag-theme^="trendy"] .msg{border-radius:var(--ag-r-lg)}
+html[data-ag-theme^="trendy"] .msg.user{background:var(--ag-accent-soft);color:var(--ag-ink);border-bottom-right-radius:var(--ag-r-xs)}
+html[data-ag-theme^="trendy"] .msg.assistant{background:var(--ag-surface-2);color:var(--ag-ink);border-bottom-left-radius:var(--ag-r-xs)}
+html[data-ag-theme^="trendy"] button.mode{border-radius:var(--ag-r-md);border-color:var(--ag-line-2)}
+html[data-ag-theme^="trendy"] button.mode:hover{border-color:var(--ag-accent);background:var(--ag-accent-soft)}
+html[data-ag-theme^="trendy"] .bar :is(button:not(.primary),select,input[type=text]){border-color:var(--ag-line-2)}
+html[data-ag-theme^="trendy"] button.primary{background-color:var(--ag-accent);border-color:transparent;color:var(--ag-on-accent);padding:5px 14px}
+html[data-ag-theme^="trendy"] .lbl{color:var(--ag-ink-3)}
+html[data-ag-theme^="trendy"] details summary{color:var(--ag-ink-2);font-weight:600;padding:2px 4px}
+html[data-ag-theme^="trendy"] #runs{padding-left:4px}
+html[data-ag-theme^="trendy"] #runs li{padding:5px 8px;border-radius:var(--ag-r-sm);color:var(--ag-ink-2)}
+html[data-ag-theme^="trendy"] #runs li:hover{background:var(--ag-hover);color:var(--ag-accent-ink)}
