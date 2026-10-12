@@ -1,1 +1,31 @@
 /* mail-local — 이 도구만의 테마 손질 (THEME_GUIDE.md). CSS 만, html[data-ag-theme...] 로 시작하는 선택자만. 비어 있으면 공통(base-trendy·base-dark·dark.js)만 적용 */
+
+/* 어둡게: 도구의 의미 색 변수(삭제·추가·주의)를 테마 상태 토큰으로 — del/ins·체크 목록·주의 메모가 한꺼번에 맞춰짐 */
+html[data-ag-theme$="dark"]{--del:var(--ag-bad-soft);--delf:var(--ag-bad);--ins:var(--ag-ok-soft);--insf:var(--ag-ok);--warn:var(--ag-warn-soft);--warnf:var(--ag-warn)}
+html[data-ag-theme$="dark"] del{text-decoration-color:currentColor}
+html[data-ag-theme$="dark"] .priv{background:var(--ag-ok-soft);border-color:transparent;color:var(--ag-ok)}
+html[data-ag-theme$="dark"] .na b,html[data-ag-theme$="dark"] .tag{background:var(--ag-surface-3);color:var(--ag-ink-2)}
+html[data-ag-theme$="dark"] .seg button.on,html[data-ag-theme$="dark"] .subj label.on{background:var(--ag-accent-soft);border-color:var(--ag-accent-ink);color:var(--ag-accent-ink)}
+html[data-ag-theme$="dark"] .subj label.on{color:var(--ag-ink)}
+html[data-ag-theme$="dark"] .u.rev{background:var(--ag-surface-3)}
+html[data-ag-theme$="dark"] .u.w{outline-color:var(--ag-warn)}
+html[data-ag-theme$="dark"] .hist li .t:hover{color:var(--ag-accent-ink)}
+html[data-ag-theme$="dark"] .toast{background:var(--ag-surface-3);color:var(--ag-ink);box-shadow:var(--ag-shadow-3)}
+
+/* 트렌디: 목적 칩·제목 후보는 알약/선택 카드, 결과·비교 상자는 둥근 우물 */
+html[data-ag-theme^="trendy"] .tabs button.on{border-bottom-color:var(--ag-accent)}
+html[data-ag-theme^="trendy"] .panel{border-color:var(--ag-line)}
+html[data-ag-theme^="trendy"] .seg button.on{background:var(--ag-accent-soft);border-color:transparent;color:var(--ag-accent-ink)}
+html[data-ag-theme^="trendy"] .subj label{border-color:var(--ag-line);border-radius:var(--ag-r-md);padding:7px 10px}
+html[data-ag-theme^="trendy"] .subj label.on{background:var(--ag-accent-soft);border-color:var(--ag-accent)}
+html[data-ag-theme^="trendy"] .notes div{border-radius:var(--ag-r-sm);padding:6px 10px}
+html[data-ag-theme^="trendy"] .check{border-color:var(--ag-line);border-radius:var(--ag-r-md);background:var(--ag-surface-2)}
+html[data-ag-theme^="trendy"] .vtabs button{border-radius:var(--ag-r-full)}
+html[data-ag-theme^="trendy"] .vtabs button.on{background:var(--ag-accent);border-color:var(--ag-accent);color:var(--ag-on-accent)}
+html[data-ag-theme^="trendy"] .diffview{border-color:var(--ag-line);border-radius:var(--ag-r-md);background:var(--ag-surface)}
+html[data-ag-theme^="trendy"] pre.stream{background:var(--ag-surface-2);border-color:var(--ag-line-2);border-radius:var(--ag-r-md)}
+html[data-ag-theme^="trendy"] .hist li{border-bottom-color:var(--ag-line);border-radius:var(--ag-r-sm)}
+html[data-ag-theme^="trendy"] .hist li:hover{background:var(--ag-hover)}
+html[data-ag-theme^="trendy"] .hist li .t:hover{color:var(--ag-accent-ink)}
+html[data-ag-theme^="trendy"] .tag,html[data-ag-theme^="trendy"] .priv{border-radius:var(--ag-r-full)}
+html[data-ag-theme^="trendy"] .toast{border-radius:var(--ag-r-md);box-shadow:var(--ag-shadow-3)}

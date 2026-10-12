@@ -1,1 +1,42 @@
 /* coach-local — 이 도구만의 테마 손질 (THEME_GUIDE.md). CSS 만, html[data-ag-theme...] 로 시작하는 선택자만. 비어 있으면 공통(base-trendy·base-dark·dark.js)만 적용 */
+/* 분류 칩·밑줄(맞춤법 빨강·문체 보라 …)은 JS 인라인 색 — dark.js 가 색조를 살려 바꿔 주므로 그대로 둔다 */
+
+/* 어둡게: 삭제·추가 의미 색, 편집기 초점 링, 떠 있는 제안 창 */
+html[data-ag-theme$="dark"]{--del:var(--ag-bad-soft);--delf:var(--ag-bad);--ins:var(--ag-ok-soft);--insf:var(--ag-ok)}
+html[data-ag-theme$="dark"] del{text-decoration-color:currentColor}
+html[data-ag-theme$="dark"] .ed:focus-within{border-color:var(--ag-accent-ink);box-shadow:0 0 0 3px var(--ag-ring)}
+html[data-ag-theme$="dark"] .ed textarea::placeholder{color:var(--ag-ink-3)}
+html[data-ag-theme$="dark"] .pop{background:var(--ag-surface-2);border-color:var(--ag-line-2);box-shadow:var(--ag-shadow-3)}
+html[data-ag-theme$="dark"] .priv{background:var(--ag-ok-soft);border-color:transparent;color:var(--ag-ok)}
+html[data-ag-theme$="dark"] .kindbar{background:var(--ag-warn-soft);border-color:transparent;color:var(--ag-warn)}
+html[data-ag-theme$="dark"] .pchip.warn{background:var(--ag-warn-soft);color:var(--ag-warn)}
+html[data-ag-theme$="dark"] .card:hover,html[data-ag-theme$="dark"] .card.on{border-color:var(--ag-accent-ink);box-shadow:none}
+html[data-ag-theme$="dark"] .plist button.on{background:var(--ag-accent-soft);border-color:var(--ag-accent-ink)}
+html[data-ag-theme$="dark"] :is(button.link,.issue q:hover,table.docs td.t:hover){color:var(--ag-accent-ink)}
+html[data-ag-theme$="dark"] .modal{background:var(--ag-backdrop)}
+html[data-ag-theme$="dark"] .modal>.box{background:var(--ag-surface);box-shadow:var(--ag-shadow-3)}
+html[data-ag-theme$="dark"] .toast{background:var(--ag-surface-3);color:var(--ag-ink);box-shadow:var(--ag-shadow-3)}
+
+/* 트렌디: 편집기 = 큰 카드, 제안 카드 = 촘촘한 중간 카드, 창·메뉴 = 떠 있는 면 */
+html[data-ag-theme^="trendy"] .ed{border-color:var(--ag-line);border-radius:var(--ag-r-lg);box-shadow:var(--ag-shadow-2)}
+html[data-ag-theme^="trendy"] .ed textarea{border-radius:var(--ag-r-lg)}
+html[data-ag-theme^="trendy"] .ed:focus-within{border-color:var(--ag-accent);box-shadow:var(--ag-shadow-2),0 0 0 3px var(--ag-ring)}
+html[data-ag-theme^="trendy"] .tabs button.on{border-bottom-color:var(--ag-accent)}
+html[data-ag-theme^="trendy"] .card{border-radius:var(--ag-r-md);box-shadow:var(--ag-shadow-1);padding:10px 12px}
+html[data-ag-theme^="trendy"] .card:hover{border-color:var(--ag-line-2);box-shadow:var(--ag-shadow-2)}
+html[data-ag-theme^="trendy"] .card.on{border-color:var(--ag-accent);box-shadow:0 0 0 3px var(--ag-ring)}
+/* 트렌디 밝게: 바탕이 같은 계열 옅은 색이라 빨강·주황 칩 글자가 4.5:1 에 모자람 → 같은 색조로 한 단계 진하게 */
+html[data-ag-theme="trendy-light"] .chip[style*="#dc2626"]{color:#b91c1c!important}
+html[data-ag-theme="trendy-light"] .chip[style*="#b45309"]{color:#92400e!important}
+html[data-ag-theme^="trendy"] .chip,html[data-ag-theme^="trendy"] .pchip{border-radius:var(--ag-r-full);padding:0 8px}
+html[data-ag-theme^="trendy"] .pop{border-color:var(--ag-line);border-radius:var(--ag-r-lg);box-shadow:var(--ag-shadow-3);padding:12px 14px}
+html[data-ag-theme^="trendy"] .prof{border-color:var(--ag-line);border-radius:var(--ag-r-md);background:var(--ag-surface-2)}
+html[data-ag-theme^="trendy"] .kindbar{border-radius:var(--ag-r-md)}
+html[data-ag-theme^="trendy"] .modal{backdrop-filter:blur(4px)}
+html[data-ag-theme^="trendy"] .modal>.box{border-radius:var(--ag-r-xl);box-shadow:var(--ag-shadow-3);padding:18px 20px}
+html[data-ag-theme^="trendy"] .plist button{border-radius:var(--ag-r-sm)}
+html[data-ag-theme^="trendy"] .plist button.on{background:var(--ag-accent-soft);border-color:transparent;color:var(--ag-accent-ink)}
+html[data-ag-theme^="trendy"] details.menu summary{border-radius:var(--ag-r-sm)}
+html[data-ag-theme^="trendy"] details.menu>div{border-color:var(--ag-line);border-radius:var(--ag-r-md);box-shadow:var(--ag-shadow-3)}
+html[data-ag-theme^="trendy"] .priv{border-radius:var(--ag-r-full)}
+html[data-ag-theme^="trendy"] .toast{border-radius:var(--ag-r-md);box-shadow:var(--ag-shadow-3)}

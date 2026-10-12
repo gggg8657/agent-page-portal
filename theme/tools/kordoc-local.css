@@ -1,1 +1,23 @@
 /* kordoc-local — 이 도구만의 테마 손질 (THEME_GUIDE.md). CSS 만, html[data-ag-theme...] 로 시작하는 선택자만. 비어 있으면 공통(base-trendy·base-dark·dark.js)만 적용 */
+
+/* 트렌디: 요청·결과 칸, 윤문 막대, 변경 표, 실행 기록 줄 */
+html[data-ag-theme^="trendy"] textarea{border-radius:var(--ag-r-lg);border-color:var(--ag-line);box-shadow:var(--ag-shadow-1);padding:12px 14px}
+html[data-ag-theme^="trendy"] #polishBar{background:var(--ag-accent-soft)!important;border-color:transparent!important;border-radius:var(--ag-r-lg)!important;padding:10px 14px!important}
+html[data-ag-theme^="trendy"] pre{background:var(--ag-surface-2);border-radius:var(--ag-r-md);padding:14px}
+html[data-ag-theme^="trendy"] .tabs button.on{border-bottom-color:var(--ag-accent)}
+html[data-ag-theme^="trendy"] table.cg td{border-bottom-color:var(--ag-line)}
+html[data-ag-theme^="trendy"] #meta a{color:var(--ag-accent-ink)}
+html[data-ag-theme^="trendy"] #runs{padding-left:0}
+html[data-ag-theme^="trendy"] #runs li{padding:4px 8px;border-radius:var(--ag-r-sm)}
+html[data-ag-theme^="trendy"] #runs li:hover{background:var(--ag-hover);color:var(--ag-accent-ink)}
+html[data-ag-theme^="trendy"] summary{color:var(--ag-ink-2)}
+html[data-ag-theme^="trendy"] .badge{border-radius:var(--ag-r-full)}
+
+/* 어둡게: 상태 배지·삭제·추가 의미 색 */
+html[data-ag-theme$="dark"] #polishBar{background:var(--ag-accent-soft)!important;border-color:var(--ag-line-2)!important}
+html[data-ag-theme$="dark"] .badge.ok{background:var(--ag-ok-soft);color:var(--ag-ok)}
+html[data-ag-theme$="dark"] .badge.warn{background:var(--ag-warn-soft);color:var(--ag-warn)}
+html[data-ag-theme$="dark"] .badge.bad{background:var(--ag-bad-soft);color:var(--ag-bad)}
+html[data-ag-theme$="dark"] del{background:var(--ag-bad-soft);color:var(--ag-bad);text-decoration-color:currentColor}
+html[data-ag-theme$="dark"] ins{background:var(--ag-ok-soft);color:var(--ag-ok)}
+html[data-ag-theme$="dark"] #meta a,html[data-ag-theme$="dark"] #runs li:hover{color:var(--ag-accent-ink)}

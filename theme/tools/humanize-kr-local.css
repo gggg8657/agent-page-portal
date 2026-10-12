@@ -1,1 +1,20 @@
 /* humanize-kr-local — 이 도구만의 테마 손질 (THEME_GUIDE.md). CSS 만, html[data-ag-theme...] 로 시작하는 선택자만. 비어 있으면 공통(base-trendy·base-dark·dark.js)만 적용 */
+
+/* 트렌디: 입력·결과 칸, 변경 비교 상자, 보고서(pre), 실행 기록 줄 */
+html[data-ag-theme^="trendy"] textarea{border-radius:var(--ag-r-lg);border-color:var(--ag-line);box-shadow:var(--ag-shadow-1);padding:12px 14px}
+html[data-ag-theme^="trendy"] #diff{border-radius:var(--ag-r-lg);border-color:var(--ag-line);background:var(--ag-surface);box-shadow:var(--ag-shadow-1);padding:14px 16px}
+html[data-ag-theme^="trendy"] pre{background:var(--ag-surface-2);border-radius:var(--ag-r-md);padding:14px}
+html[data-ag-theme^="trendy"] .tabs button.on{border-bottom-color:var(--ag-accent)}
+html[data-ag-theme^="trendy"] #runs{padding-left:0}
+html[data-ag-theme^="trendy"] #runs li{padding:4px 8px;border-radius:var(--ag-r-sm)}
+html[data-ag-theme^="trendy"] #runs li:hover{background:var(--ag-hover);color:var(--ag-accent-ink)}
+html[data-ag-theme^="trendy"] summary{color:var(--ag-ink-2)}
+html[data-ag-theme^="trendy"] .badge{border-radius:var(--ag-r-full)}
+
+/* 어둡게: 삭제·추가와 게이트 배지는 빨강·초록 의미를 그대로 */
+html[data-ag-theme$="dark"] del{background:var(--ag-bad-soft);color:var(--ag-bad);text-decoration-color:currentColor}
+html[data-ag-theme$="dark"] ins{background:var(--ag-ok-soft);color:var(--ag-ok)}
+html[data-ag-theme$="dark"] .g0{background:var(--ag-ok-soft);color:var(--ag-ok)}
+html[data-ag-theme$="dark"] .g1{background:var(--ag-warn-soft);color:var(--ag-warn)}
+html[data-ag-theme$="dark"] :is(.g2,.g3){background:var(--ag-bad-soft);color:var(--ag-bad)}
+html[data-ag-theme$="dark"] #runs li:hover{color:var(--ag-accent-ink)}
