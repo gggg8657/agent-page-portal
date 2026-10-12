@@ -5,7 +5,7 @@ cd "$(dirname "$0")/../.."   # agent-page-portal/scripts → 상위 폴더
 OLLAMA_PORT="${OLLAMA_PORT:-11436}"
 export CUDA_VISIBLE_DEVICES="${AGENT_GPUS:-0,1,2,3}" CUDA_DEVICE_ORDER=PCI_BUS_ID PATH="$HOME/.local/bin:$PATH"  # 쓸 GPU 후보(도구가 그때그때 여유 많은 것을 고름) · ffmpeg·python3.11
 curl -s -m 2 127.0.0.1:$OLLAMA_PORT/api/version >/dev/null || { [ -x ~/.local/ollama-gpu/start.sh ] && ~/.local/ollama-gpu/start.sh; }  # Ollama 가 꺼져 있으면 띄움(자기 환경에 맞게)
-export LLM_API=ollama LLM_BASE_URL=http://127.0.0.1:$OLLAMA_PORT LLM_MODEL="${LLM_MODEL:-gemma4:31b}" MODEL="${LLM_MODEL:-gemma4:31b}" VISION_MODEL="${LLM_MODEL:-gemma4:31b}" AGENT_DATA="$PWD/_data"
+export LLM_API=ollama LLM_BASE_URL=http://127.0.0.1:$OLLAMA_PORT LLM_MODEL="${LLM_MODEL:-gemma4:31b}" MODEL="${LLM_MODEL:-gemma4:31b}" VISION_MODEL="${LLM_MODEL:-gemma4:31b}" NUM_CTX="${NUM_CTX:-32768}" AGENT_DATA="$PWD/_data"  # NUM_CTX: 모든 도구 같은 값(= Ollama OLLAMA_CONTEXT_LENGTH) — 다르면 도구 바꿀 때마다 모델을 다시 올림
 # 도구끼리 연결: 음성 합성(tts) · 받아쓰기(meeting STT) · 립싱크(avatar), GPU 사용
 export TTS_BASE_URL=http://127.0.0.1:8771/v1 STT_BASE_URL=http://127.0.0.1:8767/v1 AVATAR_URL=http://127.0.0.1:8777/api/run
 export TTS_VOICE=KR TTS_MODEL=melo TTS_DEVICE=cuda DEVICE=cuda WHISPER_DEVICE=cuda
