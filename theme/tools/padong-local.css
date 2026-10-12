@@ -1,1 +1,52 @@
-/* padong-local — 이 도구만의 테마 손질 (THEME_GUIDE.md). CSS 만, html[data-ag-theme...] 로 시작하는 선택자만. 비어 있으면 공통(base-trendy·base-dark·dark.js)만 적용 */
+/* padong-local — 이 도구만의 테마 손질 (THEME_GUIDE.md). CSS 만, html[data-ag-theme...] 로 시작하는 선택자만.
+   스튜디오 틀(머리 막대·옆 칸·버튼)만 바꾼다. 캐릭터 무대(#stage — 하늘색 배경·말풍선·이름표)는 어느 테마에서나 원래 그대로.
+   펫(?pet=1 iframe)은 포털이 테마를 안 넣지만, 혹시 들어가도 안 바뀌게 모든 규칙을 :not(.pet) 아래에 둔다. */
+
+/* 강조색 — 흰 글씨 4.5:1 이상(기본 #4f8fe0 은 3.4:1), 글자로 쓰는 곳은 accent-ink */
+html[data-ag-theme$="dark"]:not(.pet),html[data-ag-theme^="trendy"]:not(.pet){--blue:var(--ag-accent);--blue2:var(--ag-accent-soft)}
+html[data-ag-theme$="dark"]:not(.pet) .tabs button.on,html[data-ag-theme^="trendy"]:not(.pet) .tabs button.on{color:var(--ag-accent-ink)}
+html[data-ag-theme$="dark"]:not(.pet) .chips button.on,html[data-ag-theme^="trendy"]:not(.pet) .chips button.on{color:var(--ag-accent-ink);border-color:var(--ag-accent-ink)}
+
+/* 어둡게: 캐릭터 무대는 원래 색 그대로(dark.js 가 바꾼 값 되돌림) */
+html[data-ag-theme$="dark"]:not(.pet) #stage{background:linear-gradient(#fbfdff 0%,#dcebfd 70%,#c4dcfb 100%)!important}
+html[data-ag-theme$="dark"]:not(.pet) #stage .view .tag{background:#ffffffb0!important;color:#62718a!important}
+html[data-ag-theme$="dark"]:not(.pet) #stage.split .view+.view{border-left-color:#b8cdea!important}
+html[data-ag-theme$="dark"]:not(.pet) #stage .bubble{background:#fff!important;border-color:#2b5fa8!important;color:#1d3c6e!important;box-shadow:0 4px 14px #2b5fa830!important}
+html[data-ag-theme$="dark"]:not(.pet) #stage .bubble:after{border-top-color:#2b5fa8!important}
+html[data-ag-theme$="dark"]:not(.pet) #stage .plabel{background:#1d3c6ee0!important;color:#fff!important}
+
+/* 어둡게: 옆 칸 입력·코드 */
+html[data-ag-theme$="dark"]:not(.pet) form#ask input,html[data-ag-theme$="dark"]:not(.pet) #sayText,html[data-ag-theme$="dark"]:not(.pet) #voice{background:var(--ag-surface-2);border-color:var(--ag-line-2);color:var(--ag-ink)}
+html[data-ag-theme$="dark"]:not(.pet) pre.api{background:var(--ag-surface-2);border-color:var(--ag-line);color:var(--ag-ink-2)}
+html[data-ag-theme$="dark"]:not(.pet) .msg.a{background:var(--ag-surface-2);border-color:var(--ag-line)}
+html[data-ag-theme$="dark"]:not(.pet) dialog .hd{background:var(--ag-surface)}
+
+/* 트렌디: 머리 막대 반투명, 세그먼트 컨트롤, 버튼·칩·대화 */
+html[data-ag-theme^="trendy"]:not(.pet) header{background:color-mix(in srgb,var(--ag-surface) 82%,transparent);backdrop-filter:blur(10px);border-bottom-color:var(--ag-line)}
+html[data-ag-theme^="trendy"]:not(.pet) header h1{letter-spacing:-.02em}
+html[data-ag-theme^="trendy"]:not(.pet) .seg{background:var(--ag-surface-2);border-color:transparent;border-radius:var(--ag-r-md);padding:3px}
+html[data-ag-theme^="trendy"]:not(.pet) .seg button{border-radius:var(--ag-r-sm);color:var(--ag-ink-2)}
+html[data-ag-theme^="trendy"]:not(.pet) .seg button:hover{color:var(--ag-ink)}
+html[data-ag-theme^="trendy"]:not(.pet) .seg button.on{background:var(--ag-surface);color:var(--ag-ink);font-weight:600;box-shadow:var(--ag-shadow-1)}
+html[data-ag-theme="trendy-dark"]:not(.pet) .seg button.on{background:var(--ag-surface-3)}
+html[data-ag-theme^="trendy"]:not(.pet) .btn{border-radius:var(--ag-r-sm);border-color:var(--ag-line-2)}
+html[data-ag-theme^="trendy"]:not(.pet) .btn:hover,html[data-ag-theme^="trendy"]:not(.pet) .grid button:hover,html[data-ag-theme^="trendy"]:not(.pet) .chips button:hover{border-color:var(--ag-accent-ink);background:var(--ag-hover)}
+html[data-ag-theme^="trendy"]:not(.pet) .btn.on{background:var(--ag-accent);border-color:var(--ag-accent);color:var(--ag-on-accent)}
+html[data-ag-theme^="trendy"]:not(.pet) aside{border-left-color:var(--ag-line)}
+html[data-ag-theme^="trendy"]:not(.pet) .grid{gap:6px}
+html[data-ag-theme^="trendy"]:not(.pet) .grid button{border-radius:var(--ag-r-sm);background:var(--ag-surface-2);border-color:transparent;transition:background var(--ag-dur) var(--ag-ease),border-color var(--ag-dur) var(--ag-ease)}
+html[data-ag-theme^="trendy"]:not(.pet) .chips button{border-radius:var(--ag-r-full);background:var(--ag-surface-2);border-color:transparent;padding:5px 11px}
+html[data-ag-theme^="trendy"]:not(.pet) .chips button.on{background:var(--ag-accent-soft);border-color:transparent;font-weight:600}
+html[data-ag-theme^="trendy"]:not(.pet) .tabs{border-color:var(--ag-line)}
+html[data-ag-theme^="trendy"]:not(.pet) .tabs button{color:var(--ag-ink-2)}
+html[data-ag-theme^="trendy"]:not(.pet) .tabs button.on{border-bottom-color:var(--ag-accent-ink)}
+html[data-ag-theme^="trendy"]:not(.pet) h4{color:var(--ag-ink-3);letter-spacing:.01em}
+html[data-ag-theme^="trendy"]:not(.pet) .msg{border-radius:var(--ag-r-lg)}
+html[data-ag-theme^="trendy"]:not(.pet) .msg.u{background:var(--ag-grad);border-bottom-right-radius:var(--ag-r-xs)}
+html[data-ag-theme^="trendy"]:not(.pet) .msg.a{background:var(--ag-surface-2);border-color:transparent;border-bottom-left-radius:var(--ag-r-xs)}
+html[data-ag-theme^="trendy"]:not(.pet) form#ask{border-top-color:var(--ag-line)}
+html[data-ag-theme^="trendy"]:not(.pet) form#ask input{border-radius:var(--ag-r-md);border-color:var(--ag-line-2)}
+html[data-ag-theme^="trendy"]:not(.pet) form#ask input:focus,html[data-ag-theme^="trendy"]:not(.pet) #sayText:focus{outline:0;border-color:var(--ag-accent-ink);box-shadow:0 0 0 3px var(--ag-ring)}
+html[data-ag-theme^="trendy"]:not(.pet) form#ask button{border-radius:var(--ag-r-md);background:var(--ag-grad);box-shadow:var(--ag-shadow-1)}
+html[data-ag-theme^="trendy"]:not(.pet) pre.api{border-radius:var(--ag-r-md);border-color:transparent;background:var(--ag-surface-2)}
+html[data-ag-theme^="trendy"]:not(.pet) dialog{border-radius:var(--ag-r-xl);box-shadow:var(--ag-shadow-3)}
