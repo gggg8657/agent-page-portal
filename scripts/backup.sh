@@ -28,7 +28,7 @@ for rel in sys.stdin.read().split():
   tar -cf "$OUT/.part.tar" \
       --exclude='*.db' --exclude='*.db-wal' --exclude='*.db-shm' --exclude='*.sqlite' --exclude='*.sqlite3' --exclude='*.sqlite-wal' --exclude='*.sqlite-shm' \
       --exclude='*/cache' --exclude='*/.cache' --exclude='*/__pycache__' --exclude='*/venv' --exclude='*/.venv' --exclude='*/hf_home' \
-      --exclude='*.safetensors' --exclude='*.ckpt' --exclude='*.gguf' --exclude='*.onnx' \
+      --exclude='*.safetensors' --exclude='*.ckpt' --exclude='*.gguf' --exclude='*.onnx' --exclude='./tls' --exclude='tls' --exclude='*.key' \
       --warning=no-file-changed --warning=no-file-removed \
       -C "$(dirname "$DATA")" "$(basename "$DATA")"
   rc=$?
