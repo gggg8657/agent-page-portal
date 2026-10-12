@@ -1,1 +1,17 @@
-/* avatar-local — 이 도구만의 테마 손질 (THEME_GUIDE.md). CSS 만, html[data-ag-theme...] 로 시작하는 선택자만. 비어 있으면 공통(base-trendy·base-dark·dark.js)만 적용 */
+/* avatar-local — 이 도구만의 테마 손질 (THEME_GUIDE.md). CSS 만, html[data-ag-theme...] 로 시작하는 선택자만. 그림·영상은 손대지 않음 */
+
+/* 위 탭(가상 캐릭터 / 내 얼굴): 선택 탭은 글자색 반전 알약 — 도구의 color:#fff 가 어둡게·트렌디 공통 규칙과 겹쳐 글자가 사라지던 곳 */
+html[data-ag-theme^="trendy"] .tabs button{border-radius:var(--ag-r-full)}
+html:is([data-ag-theme^="trendy"],[data-ag-theme$="dark"]) .tabs button.on{background:var(--ag-ink);border-color:var(--ag-ink);color:var(--ag-bg)}
+html[data-ag-theme^="trendy"] .tabs button:not(.on){background:var(--ag-surface);border-color:var(--ag-line-2)}
+
+/* 어둡게: 입력칸이 브라우저 기본 회색으로 떠 보이던 것 → 우물 표면 */
+html[data-ag-theme$="dark"] :is(textarea,input[type=text],select){background:var(--ag-surface-2);border-color:var(--ag-line-2);color:var(--ag-ink)}
+html[data-ag-theme$="dark"] .gal .item .del{background:color-mix(in srgb,var(--ag-surface) 92%,transparent);color:var(--ag-ink);border-color:var(--ag-line-2)}
+html[data-ag-theme$="dark"] .gal .item.selected{background:var(--ag-accent-soft)}
+html[data-ag-theme$="dark"] .cands img{background:var(--ag-surface-2)}
+
+/* 트렌디: 갤러리 항목·후보 그림 둥글기 */
+html[data-ag-theme^="trendy"] .gal .item{border-radius:var(--ag-r-md)}
+html[data-ag-theme^="trendy"] :is(.gal video,.gal img,.cands img,img.prev,video){border-radius:var(--ag-r-md)}
+html[data-ag-theme^="trendy"] .consent{border-radius:var(--ag-r-lg)}
