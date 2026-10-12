@@ -201,6 +201,7 @@ def add_tool(t):
     port = int(t.get("port") or 0)
     if not (1024 < port < 65536) or any(x["port"] == port for x in ts):
         raise ValueError("포트가 비어 있지 않거나 범위 밖")
+    t = {k: re.sub(r"[<>\"'`\\]", "", str(v))[:200] for k, v in t.items()}  # 카드에 그대로 그려지므로 HTML·따옴표 문자 제거(다른 사람 화면에서 스크립트 실행 방지)
     row = {"dir": d, "port": port, "name": t.get("name") or d, "title": t.get("title") or d, "desc": t.get("desc", ""), "group": t.get("group") or "기타",
            "tags": [x for x in (t.get("tags") or "").replace("#", "").split() if x], "dept": t.get("dept", ""), "author": t.get("author", ""),
            "added": datetime.date.today().isoformat()}
@@ -471,7 +472,12 @@ class H(BaseHTTPRequestHandler):
                 self.close_connection = True
 
     def login(self):
-        req = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+        try:
+            req = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+            if not isinstance(req, dict):
+                raise ValueError
+        except ValueError:
+            return self._send({"error": "요청 본문은 JSON 객체여야 합니다"}, code=400)
         uid, pin = str(req.get("id", "")).strip().lower(), str(req.get("pin", ""))
         try:
             with db() as c:
