@@ -24,7 +24,7 @@
 <div class="agh-f"><label><input type="checkbox" id="agHelpNo" checked> 다음부터 자동으로 띄우지 않기</label><label title="1분 넘게 걸린 내 작업이 끝나면 알려 줌"><input type="checkbox" id="agNoteOn"> 작업 끝 알림</label><button id="agHelpOk" autofocus>시작하기</button></div></dialog>
 <script>(function(){
   if (window.top !== window) { document.getElementById('agHelpBtn').remove(); return; }  // iframe(예: 파동이 펫) 안에서는 사용법 버튼·팝업 없음
-  const DIR = "%DIR%", KEY = "agGuideSeen:" + DIR;   // ponytail: 계정 체계가 없어 브라우저(localStorage) 기준. 로그인 생기면 KEY 에 사용자 id 붙이기
+  const DIR = "%DIR%", KEY = "agGuideSeen:%USER%:" + DIR;   // 계정별(포털 로그인 id) · 브라우저(localStorage) 기준
   const d = document.getElementById('agHelp'), b = document.getElementById('agHelpB');
   const esc = s => s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
   const md = t => {  // 아주 작은 마크다운: ##/###, -, 1., **굵게**, `코드`
@@ -91,6 +91,6 @@
 })();</script>
 <script>(function(){  // 파동이 펫 — 모든 화면 아래를 돌아다님(끄기: 펫 메뉴 ⋯ → 펫 끄기). padong-local 이 꺼져 있으면 아무것도 안 뜸
   if (window.top !== window || "%DIR%" === "padong-local") return;
-  var s = document.createElement('script'); s.src = '/t/padong-local/static/pet.js'; s.dataset.dir = "%DIR%"; s.defer = true;
+  var s = document.createElement('script'); s.src = '/t/padong-local/static/pet.js'; s.dataset.dir = "%DIR%"; s.dataset.user = "%USER%"; s.defer = true;
   (document.body || document.documentElement).appendChild(s);
 })();</script>

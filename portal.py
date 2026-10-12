@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""에이전트 페이지 포털 — 도구 목록·상태·시작/중지·리버스 프록시(/t/<도구>/)·사용 통계·피드. stdlib + sqlite.
+"""에이전트 페이지 포털 — 로그인·도구 목록·상태·시작/중지·리버스 프록시(/t/<도구>/)·사용 통계·피드. stdlib + sqlite.
   python3 portal.py                 # http://localhost:8700
   python3 portal.py start-all|stop-all
+  python3 portal.py --add-user <id> --name <이름> [--dept 부서] [--pin 숫자]   # 계정 만들기·PIN 초기화(--pin 없으면 무작위 6자리를 화면에만)
 env: PORT(8700) AGENT_DATA(모든 도구 데이터 루트, 기본 ../_data)
-     AGENT_ADMINS(쉼표 — 서버 주인으로 볼 IP·사용자, 기본 127.0.0.1 + 서버 자기 IP) BACKUP(1=매일 03시 ../backup.sh, 기본 :8700 만)"""
-import datetime, json, os, re, socket, sqlite3, subprocess, sys, threading, time, urllib.error, urllib.request
+     AGENT_OWNERS(쉼표 — 서버 주인 계정 id, 기본 dongju) BACKUP(1=매일 03시 ../backup.sh, 기본 :8700 만)"""
+import datetime, hashlib, hmac, json, os, re, secrets, socket, sqlite3, subprocess, sys, threading, time, urllib.error, urllib.parse, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -17,21 +18,10 @@ os.makedirs(DATA, exist_ok=True)
 TOOLS_FILE = os.path.join(ROOT, "tools.json")
 
 
-def _own_ips():
-    ips = {"127.0.0.1", "::1"}
-    try:
-        ips |= set(subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=3).stdout.split())
-    except (OSError, subprocess.SubprocessError):
-        pass
-    try:
-        ips |= {a[4][0] for a in socket.getaddrinfo(socket.gethostname(), None)}
-    except OSError:
-        pass
-    return ips
-
-
-# 서버 주인 → 도구에 X-Agent-User: owner (예전 기록 전부 보임). 나머지 접속자는 자기 IP/사용자 이름별 폴더
-ADMINS = {x.strip() for x in os.environ["AGENT_ADMINS"].split(",") if x.strip()} if os.environ.get("AGENT_ADMINS") else _own_ips()
+# 서버 주인 → 도구에 X-Agent-User: owner (예전 기록 전부 보임). 나머지는 계정 id 별 폴더.
+# 접속 IP 는 NAT 뒤라 모두 서버 주소로 보여서 사람 구분에 못 씀 → 로그인. 예외: 이 서버 안(127.0.0.1)에서 쿠키 없이 = 주인(SSH 터널 테스트 포털·내부 호출)
+OWNERS = {x.strip() for x in os.environ.get("AGENT_OWNERS", "dongju").split(",") if x.strip()}
+LOCAL = ("127.0.0.1", "::1")
 
 
 def tools():  # 요청마다 다시 읽음 — 손으로 고치거나 다른 프로세스가 추가해도 새로고침이면 반영
@@ -39,6 +29,7 @@ def tools():  # 요청마다 다시 읽음 — 손으로 고치거나 다른 프
 
 HTML = open(os.path.join(ROOT, "portal.html"), encoding="utf-8").read()
 HELP = open(os.path.join(ROOT, "help.html"), encoding="utf-8").read()  # 도구 첫 화면에 끼워 넣는 ? 버튼 + 사용법
+LOGIN = open(os.path.join(ROOT, "login.html"), encoding="utf-8").read()
 HOP = {"connection", "keep-alive", "transfer-encoding", "te", "trailer", "upgrade", "proxy-connection", "host", "content-length", "accept-encoding"}
 
 
@@ -54,7 +45,61 @@ with db() as _c:  # 스키마는 시작 시 1회
     PRAGMA journal_mode=WAL;
     CREATE TABLE IF NOT EXISTS events(kind TEXT, dir TEXT, ts TEXT, user TEXT);          -- open | like
     CREATE TABLE IF NOT EXISTS posts(id INTEGER PRIMARY KEY, title TEXT, body TEXT, author TEXT, dept TEXT, tags TEXT, ts TEXT);
-    CREATE TABLE IF NOT EXISTS post_likes(post INTEGER, user TEXT, UNIQUE(post, user));""")
+    CREATE TABLE IF NOT EXISTS post_likes(post INTEGER, user TEXT, UNIQUE(post, user));
+    CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY, name TEXT, dept TEXT, salt BLOB, hash BLOB, ts TEXT);
+    CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, uid TEXT, exp REAL);          -- token = sha256(쿠키 값)""")
+
+
+# ── 계정·세션 ────────────────────────────────────────────────────────────
+ID_RE, PIN_RE = re.compile(r"^[a-z0-9][a-z0-9_.-]{1,31}$"), re.compile(r"^[0-9]{4,8}$")
+SESSION_S, ITERS = 30 * 86400, 200_000
+FAILS, FAIL_LOCK = {}, threading.Lock()   # id → 최근 실패 시각들 (10분에 5번까지)
+
+
+def _hash(pin, salt):
+    return hashlib.pbkdf2_hmac("sha256", pin.encode(), salt, ITERS)
+
+
+def set_user(c, uid, name, dept, pin):
+    salt = secrets.token_bytes(16)
+    c.execute("INSERT INTO users(id,name,dept,salt,hash,ts) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, dept=excluded.dept, salt=excluded.salt, hash=excluded.hash",
+              (uid, name, dept, salt, _hash(pin, salt), now()))
+
+
+def check_pin(c, uid, pin):
+    r = c.execute("SELECT salt, hash FROM users WHERE id=?", (uid,)).fetchone()
+    h = _hash(pin, r["salt"] if r else b"x" * 16)  # 없는 id 도 같은 시간
+    return bool(r) and hmac.compare_digest(h, r["hash"])
+
+
+def limited(uid):
+    with FAIL_LOCK:
+        FAILS[uid] = [t for t in FAILS.get(uid, []) if time.time() - t < 600]
+        return len(FAILS[uid]) >= 5
+
+
+def new_session(c, uid):
+    tok = secrets.token_urlsafe(32)
+    c.execute("DELETE FROM sessions WHERE exp<?", (time.time(),))
+    c.execute("INSERT INTO sessions VALUES(?,?,?)", (hashlib.sha256(tok.encode()).hexdigest(), uid, time.time() + SESSION_S))
+    return tok
+
+
+def cookie(tok, age=SESSION_S):
+    return f"agsid={tok}; Path=/; Max-Age={age}; HttpOnly; SameSite=Lax"
+
+
+def check_new(c, uid, name, pin, local):
+    if not ID_RE.match(uid):
+        raise ValueError("아이디는 영문 소문자·숫자로 시작하고 영문 소문자·숫자·_.- 2~32자")
+    if uid == "owner" or (uid in OWNERS and not local):
+        raise ValueError("쓸 수 없는 아이디입니다")
+    if not name.strip():
+        raise ValueError("이름을 적어 주세요")
+    if not PIN_RE.match(pin):
+        raise ValueError("PIN 은 숫자 4~8자리")
+    if c.execute("SELECT 1 FROM users WHERE id=?", (uid,)).fetchone():
+        raise ValueError("이미 있는 아이디입니다")
 
 
 def now():
@@ -73,8 +118,8 @@ def usage(c):
 
 def user_rank(c):
     cut = (datetime.date.today() - datetime.timedelta(days=30)).isoformat()
-    return [{"user": r["user"], "n": r["n"]} for r in
-            c.execute("SELECT user, COUNT(*) n FROM events WHERE kind='open' AND ts>=? GROUP BY user ORDER BY n DESC LIMIT 5", (cut,))]
+    return [{"user": r["name"], "n": r["n"]} for r in   # 계정 있는 사람만, 이름으로(IP 로 남은 예전 기록은 안 보임)
+            c.execute("SELECT u.name, COUNT(*) n FROM events e JOIN users u ON u.id=e.user WHERE e.kind='open' AND e.ts>=? GROUP BY e.user ORDER BY n DESC LIMIT 5", (cut,))]
 
 
 def posts(c, user):
@@ -293,18 +338,52 @@ class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
-    @property
-    def user(self):  # ponytail: 로그인 없음 → IP. 사용자 헤더(X-Forwarded-User/X-User)는 이 서버 안의 리버스프록시가 보낸 것만 믿음(밖에서 보내면 위조 가능)
-        ip = self.client_address[0]
-        return (self.headers.get("X-Forwarded-User") or self.headers.get("X-User") or ip) if ip in ("127.0.0.1", "::1") else ip
+    def auth(self):
+        """요청마다: 쿠키 agsid → 계정. 쿠키 없이 이 서버 안(127.0.0.1)에서 온 요청 = 주인. 밖에서 온 X-Agent-User·X-Forwarded-User 등은 안 믿음"""
+        self.uid, self.uname, self._setcookie = None, None, None
+        m = re.search(r"(?:^|;\s*)agsid=([A-Za-z0-9_-]+)", self.headers.get("Cookie") or "")
+        if m:
+            with db() as c:
+                r = c.execute("SELECT s.uid, s.exp, u.name FROM sessions s JOIN users u ON u.id=s.uid WHERE s.token=? AND s.exp>?",
+                              (hashlib.sha256(m[1].encode()).hexdigest(), time.time())).fetchone()
+                if r:
+                    self.uid, self.uname = r["uid"], r["name"]
+                    if r["exp"] - time.time() < SESSION_S - 86400:  # 하루에 한 번 만료 연장(슬라이딩)
+                        c.execute("UPDATE sessions SET exp=? WHERE token=?", (time.time() + SESSION_S, hashlib.sha256(m[1].encode()).hexdigest()))
+                        self._setcookie = cookie(m[1])
+        if not self.uid and self.client_address[0] in LOCAL:
+            self.uid, self.uname = "owner", "서버 주인(로컬)"
+        return self.uid
 
     @property
-    def agent_user(self):  # 도구로 넘기는 사용자 id — 서버 주인은 owner, 나머지는 [A-Za-z0-9_.-] 로 정리
-        return "owner" if self.user in ADMINS else (re.sub(r"[^A-Za-z0-9_.-]", "_", self.user)[:64] or "_")
+    def user(self):  # 계정 id (통계·좋아요·피드 키)
+        return self.uid
 
-    def _send(self, body, ctype="application/json", code=200):
+    @property
+    def is_owner(self):
+        return self.uid == "owner" or self.uid in OWNERS
+
+    @property
+    def agent_user(self):  # 도구로 넘기는 사용자 id — 서버 주인은 owner, 나머지는 계정 id
+        return "owner" if self.is_owner else self.uid
+
+    def need_login(self):
+        if self.command == "GET" and "text/html" in (self.headers.get("Accept") or ""):  # 화면 → 로그인 페이지로
+            self.send_response(302); self.send_header("Location", "/login?next=" + urllib.parse.quote(self.path, safe=""))
+            self.send_header("Content-Length", "0"); self.end_headers(); return
+        self._send({"error": "로그인이 필요합니다", "login": "/login"}, code=401)
+
+    def help_html(self, d):
+        return HELP.replace("%DIR%", d).replace("%USER%", self.agent_user)
+
+    def _send(self, body, ctype="application/json", code=200, headers=None):
         b = body if isinstance(body, bytes) else json.dumps(body, ensure_ascii=False).encode()
-        self.send_response(code); self.send_header("X-Author", _SIG_A); self.send_header("Content-Type", ctype); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
+        self.send_response(code); self.send_header("X-Author", _SIG_A); self.send_header("Content-Type", ctype); self.send_header("Content-Length", str(len(b)))
+        for k, v in headers or ():
+            self.send_header(k, v)
+        if getattr(self, "_setcookie", None):
+            self.send_header("Set-Cookie", self._setcookie)
+        self.end_headers(); self.wfile.write(b)
 
     def proxy(self):
         t0 = time.time()
@@ -328,8 +407,9 @@ class H(BaseHTTPRequestHandler):
             self.send_response(302); self.send_header("Location", f"/t/{t['dir']}/"); self.send_header("Content-Length", "0"); self.end_headers(); return
         n = int(self.headers.get("Content-Length") or 0)
         req = urllib.request.Request(f"http://127.0.0.1:{t['port']}/{parts[3]}", data=self.rfile.read(n) if n else None,
-                                     headers={k: v for k, v in self.headers.items() if k.lower() not in HOP and k.lower() != "x-agent-user"} | {"X-Agent-User": self.agent_user},
-                                     method=self.command)  # 클라이언트가 보낸 X-Agent-User 는 버리고 포털이 정한 값만
+                                     headers={k: v for k, v in self.headers.items() if k.lower() not in HOP | {"x-agent-user", "x-forwarded-user", "x-user", "cookie"}}
+                                     | {"X-Agent-User": self.agent_user} | ({"Cookie": ck} if (ck := re.sub(r"(?:^|;\s*)agsid=[^;]*", "", self.headers.get("Cookie") or "").strip("; ")) else {}),
+                                     method=self.command)  # 클라이언트가 보낸 사용자 헤더는 버리고 포털이 정한 값만, 포털 세션 쿠키는 도구로 안 넘김
         try:
             r = urllib.request.urlopen(req, timeout=3600)
         except urllib.error.HTTPError as e:
@@ -337,9 +417,11 @@ class H(BaseHTTPRequestHandler):
         except Exception as e:
             return self._send({"error": f"{t['dir']} 응답 없음 ({type(e).__name__}) — 포털에서 '시작'을 누르세요"}, code=502)
         inject = self.command == "GET" and parts[3] in ("", "index.html") and "text/html" in (r.headers.get("Content-Type") or "")
-        body = signed(r.read().decode("utf-8", "replace") + HELP.replace("%DIR%", t["dir"])).encode() if inject else None  # 도구 화면에도 저작자 표기
+        body = signed(r.read().decode("utf-8", "replace") + self.help_html(t["dir"])).encode() if inject else None  # 도구 화면에도 저작자 표기
         self._status = r.status
         self.send_response(r.status)
+        if self._setcookie:
+            self.send_header("Set-Cookie", self._setcookie)
         for k, v in r.headers.items():
             if k.lower() not in HOP:
                 self.send_header(k, v)
@@ -361,8 +443,45 @@ class H(BaseHTTPRequestHandler):
             if not length:
                 self.close_connection = True
 
+    def login(self):
+        req = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+        uid, pin = str(req.get("id", "")).strip().lower(), str(req.get("pin", ""))
+        try:
+            with db() as c:
+                if self.path == "/api/signup":
+                    check_new(c, uid, str(req.get("name", "")), pin, self.client_address[0] in LOCAL)
+                    set_user(c, uid, str(req["name"]).strip()[:40], str(req.get("dept", "")).strip()[:40], pin)
+                else:
+                    if limited(uid):
+                        raise ValueError("PIN 을 여러 번 틀렸습니다. 10분 뒤에 다시 해 주세요")
+                    if not check_pin(c, uid, pin):
+                        with FAIL_LOCK:
+                            FAILS.setdefault(uid, []).append(time.time())
+                        raise ValueError("아이디 또는 PIN 이 틀립니다")
+                    with FAIL_LOCK:
+                        FAILS.pop(uid, None)
+                tok = new_session(c, uid)
+            self._send({"ok": True, "id": uid}, headers=[("Set-Cookie", cookie(tok))])
+        except (ValueError, KeyError) as e:
+            self._send({"error": str(e)}, code=400)
+
     def do_GET(self):
+        self._setcookie = None  # keep-alive 로 같은 연결에서 앞 요청 값이 남지 않게
         p = self.path.split("?")[0]
+
+        if p == "/login":
+            return self._send(signed(LOGIN).encode(), "text/html; charset=utf-8")
+        if p == "/logout":
+            m = re.search(r"(?:^|;\s*)agsid=([A-Za-z0-9_-]+)", self.headers.get("Cookie") or "")
+            if m:
+                with db() as c:
+                    c.execute("DELETE FROM sessions WHERE token=?", (hashlib.sha256(m[1].encode()).hexdigest(),))
+            self.send_response(302); self.send_header("Location", "/login"); self.send_header("Set-Cookie", cookie("", 0))
+            self.send_header("Content-Length", "0"); self.end_headers(); return
+        if not self.auth():
+            return self.need_login()
+        if p == "/api/me":
+            return self._send({"id": self.uid, "name": self.uname, "owner": self.is_owner, "agent_user": self.agent_user})
         if p.startswith("/t/"):
             return self.proxy()
         if p == "/api/events":   # 오래 걸린 작업 끝남 (since=마지막 id)
@@ -377,7 +496,7 @@ class H(BaseHTTPRequestHandler):
                 u = usage(c)
                 return self._send({"tools": [{**t, "up": alive(t["port"]), "installed": os.path.isdir(os.path.join(BASE, t["dir"])),
                                               "url": f"/t/{t['dir']}/", "usage": u.get(t["dir"], {"recent": 0, "total": 0, "users": 0, "likes": 0})} for t in tools() if SHOW_HIDDEN or not t.get("hidden")],  # hidden: 토이 등 목록 비노출(프록시는 됨)
-                                   "rank": user_rank(c), "posts": posts(c, self.user), "me": self.user})
+                                   "rank": user_rank(c), "posts": posts(c, self.user), "me": {"id": self.uid, "name": self.uname, "owner": self.is_owner}})
         if p.startswith("/api/guide/"):
             d = p.split("/")[-1]
             return self._send(guide(d).encode() if (tool(d) or d == "portal") else b"", "text/plain; charset=utf-8")
@@ -387,19 +506,40 @@ class H(BaseHTTPRequestHandler):
             return self._send((open(f, encoding="utf-8").read() if f and os.path.exists(f) else "README 없음").encode(), "text/plain; charset=utf-8")
         if p != "/":
             return self._send({"error": "not found"}, code=404)
-        self._send(signed(HTML + HELP.replace("%DIR%", "portal")).encode(), "text/html; charset=utf-8")
+        self._send(signed(HTML + self.help_html("portal")).encode(), "text/html; charset=utf-8")
 
     def do_POST(self):
+        self._setcookie = None  # keep-alive 로 같은 연결에서 앞 요청 값이 남지 않게
+        if self.path in ("/api/login", "/api/signup"):
+            return self.login()
+        if not self.auth():
+            n = int(self.headers.get("Content-Length") or 0)
+            n and self.rfile.read(n)
+            return self.need_login()
         if self.path.startswith("/t/"):
             return self.proxy()
         req = json.loads(self.rfile.read(int(self.headers["Content-Length"])) or b"{}")
         try:
             with db() as c:
+                if self.path == "/api/pin":  # PIN 바꾸기: 지금 PIN 확인 → 새 PIN, 다른 기기 세션은 끊음
+                    if self.uid == "owner":
+                        raise ValueError("로컬 접속은 계정이 없습니다 — 로그인 후 바꾸세요")
+                    if limited(self.uid) or not check_pin(c, self.uid, req.get("pin", "")):
+                        with FAIL_LOCK:
+                            FAILS.setdefault(self.uid, []).append(time.time())
+                        raise ValueError("지금 PIN 이 틀립니다 (10분에 5번까지)")
+                    if not PIN_RE.match(req.get("new", "")):
+                        raise ValueError("새 PIN 은 숫자 4~8자리")
+                    r = c.execute("SELECT name, dept FROM users WHERE id=?", (self.uid,)).fetchone()
+                    set_user(c, self.uid, r["name"], r["dept"], req["new"])
+                    c.execute("DELETE FROM sessions WHERE uid=?", (self.uid,))
+                    tok = new_session(c, self.uid)
+                    return self._send({"ok": True}, headers=[("Set-Cookie", cookie(tok))])
                 if self.path == "/api/post":
                     if not (req.get("title") or "").strip():
                         raise ValueError("제목이 비었습니다")
                     c.execute("INSERT INTO posts(title,body,author,dept,tags,ts) VALUES(?,?,?,?,?,?)",
-                              (req["title"].strip(), req.get("body", "").strip(), req.get("author") or self.user, req.get("dept", ""),
+                              (req["title"].strip(), req.get("body", "").strip(), req.get("author") or self.uname, req.get("dept", ""),
                                json.dumps(["#" + x.strip("#") for x in (req.get("tags") or "").split() if x]), now()))
                     return self._send({"ok": True})
                 if self.path == "/api/post_like":
@@ -424,6 +564,16 @@ class H(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    if "--add-user" in sys.argv:  # 계정 만들기·PIN 초기화 (관리자). PIN 은 화면에만 — 로그·파일에 안 남김
+        a = sys.argv; arg = lambda k, d="": a[a.index(k) + 1] if k in a else d
+        uid, pin = arg("--add-user").lower(), arg("--pin") or f"{secrets.randbelow(10**6):06d}"
+        if not ID_RE.match(uid) or uid == "owner" or not PIN_RE.match(pin):
+            sys.exit("아이디(영문 소문자·숫자 2~32자, owner 불가)·PIN(숫자 4~8) 확인")
+        with db() as c:
+            set_user(c, uid, arg("--name", uid), arg("--dept"), pin)
+            c.execute("DELETE FROM sessions WHERE uid=?", (uid,))
+        print(f"{uid} 계정 저장 (주인: {uid in OWNERS})" + ("" if "--pin" in a else f"  PIN {pin}"))
+        sys.exit(0)
     if len(sys.argv) > 1 and sys.argv[1] in ("start-all", "stop-all"):
         for t in tools():
             if os.path.isdir(os.path.join(BASE, t["dir"])):
@@ -431,5 +581,5 @@ if __name__ == "__main__":
         sys.exit(0)
     if os.environ.get("BACKUP", "1" if PORT == 8700 else "0") == "1":
         threading.Thread(target=backup_loop, daemon=True).start()
-    print(f"portal → http://localhost:{PORT}  data={DATA}  admins={sorted(ADMINS)}  {_SIG}")
+    print(f"portal → http://localhost:{PORT}  data={DATA}  owners={sorted(OWNERS)}  {_SIG}")
     ThreadingHTTPServer((HOST, PORT), H).serve_forever()

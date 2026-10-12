@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ko"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>로그인 · AI Agent Portal</title>
+<style>
+  :root{--bg:#f3f5f8;--fg:#1f2937;--muted:#6b7280;--line:#e5e7eb;--navy:#1f3a5f;--blue:#2563eb;--chip:#eef2f7;--bad:#dc2626}
+  *{box-sizing:border-box}body{font:14px/1.5 -apple-system,"Pretendard","Apple SD Gothic Neo",system-ui,sans-serif;background:var(--bg);color:var(--fg);margin:0}
+  .top{background:#fff;border-bottom:1px solid var(--line);padding:10px 20px}.logo{font-weight:800;color:var(--navy);font-size:16px}.logo small{font-weight:500;color:var(--muted);font-size:11px;margin-left:6px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:10px;max-width:380px;margin:48px auto 0;padding:0 0 18px}
+  @media(max-width:420px){.card{margin:20px 16px 0}}
+  .tabs{display:flex;border-bottom:1px solid var(--line)}.tabs button{flex:1;border:none;background:none;padding:12px 0;font:inherit;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent}.tabs button.on{color:var(--navy);border-bottom-color:var(--navy)}
+  form{display:flex;flex-direction:column;gap:10px;padding:18px 20px 0}form[hidden]{display:none}
+  label{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+  input{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:6px;color:var(--fg)}input:focus{outline:2px solid #bfd3f6;border-color:var(--blue)}
+  .btn{background:var(--navy);color:#fff;border:none;border-radius:6px;padding:9px 0;font:inherit;font-weight:600;cursor:pointer;margin-top:4px}
+  .note{font-size:12px;color:var(--muted);margin:0}.err{font-size:12.5px;color:var(--bad);min-height:1.2em;margin:0}
+  .foot{text-align:center;font-size:12px;color:var(--muted);margin-top:14px}.foot a{color:var(--blue)}
+</style></head><body>
+<div class="top"><span class="logo">KAERI AI Agent Portal<small>내부망 로컬 LLM 에이전트</small></span></div>
+<div class="card">
+  <div class="tabs"><button data-t="in" class="on">로그인</button><button data-t="up">처음이에요 (가입)</button><button data-t="pin">PIN 바꾸기</button></div>
+  <form id="in"><label>아이디<input name="id" autocomplete="username" required autocapitalize="none"></label>
+    <label>PIN (숫자 4~8자리)<input name="pin" type="password" inputmode="numeric" autocomplete="current-password" required></label>
+    <p class="err"></p><button class="btn">로그인</button></form>
+  <form id="up" hidden><label>아이디 <span>영문 소문자·숫자 (예: hong.gd) — 바꿀 수 없음</span><input name="id" required autocapitalize="none" pattern="[a-z0-9][a-z0-9_.\-]{1,31}"></label>
+    <label>이름<input name="name" required maxlength="40"></label><label>부서 (선택)<input name="dept" maxlength="40"></label>
+    <label>PIN (숫자 4~8자리)<input name="pin" type="password" inputmode="numeric" autocomplete="new-password" required pattern="[0-9]{4,8}"></label>
+    <p class="note">PIN 은 서버에 해시로만 저장되어 아무도 볼 수 없습니다. 잊으면 관리자에게 초기화를 부탁하세요. 도구 기록은 계정마다 따로 저장됩니다.</p>
+    <p class="err"></p><button class="btn">가입하고 시작</button></form>
+  <form id="pin" hidden><p class="note">로그인한 상태에서 바꿀 수 있습니다. 바꾸면 다른 기기의 로그인은 풀립니다.</p>
+    <label>지금 PIN<input name="pin" type="password" inputmode="numeric" autocomplete="current-password" required></label>
+    <label>새 PIN (숫자 4~8자리)<input name="new" type="password" inputmode="numeric" autocomplete="new-password" required pattern="[0-9]{4,8}"></label>
+    <p class="err"></p><button class="btn">PIN 바꾸기</button></form>
+</div>
+<div class="foot" id="foot"></div>
+<script>
+const q = new URLSearchParams(location.search), raw = q.get('next') || '/';
+const next = /^\/(?![\/\\])/.test(raw) ? raw : '/';   // 같은 사이트 안으로만
+const show = t => { document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t)); document.querySelectorAll('form').forEach(f => f.hidden = f.getAttribute('id') !== t); document.querySelector('#' + t + ' input').focus(); };
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => show(b.dataset.t));
+if (location.hash === '#pin') show('pin'); else if (location.hash === '#up') show('up');
+fetch('/api/me').then(r => r.ok ? r.json() : null).then(m => { if (m) foot.innerHTML = `지금 <b>${m.name.replace(/[&<>]/g, '')}</b> 로 접속 중 · <a href="/">포털로</a> · <a href="/logout">로그아웃</a>`; }).catch(() => {});
+document.querySelectorAll('form').forEach(f => f.onsubmit = async e => {
+  e.preventDefault(); const k = f.getAttribute('id'), err = f.querySelector('.err'); err.textContent = '';
+  const url = { in: '/api/login', up: '/api/signup', pin: '/api/pin' }[k];
+  try {
+    const r = await fetch(url, { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(f))) }), j = await r.json();
+    if (j.error) { err.textContent = j.error; return; }
+    if (k === 'pin') { f.reset(); err.style.color = '#16a34a'; err.textContent = 'PIN 을 바꿨습니다'; return; }
+    location.href = next;
+  } catch (x) { err.textContent = '서버에 연결하지 못했습니다'; }
+});
+</script>
+</body></html>
