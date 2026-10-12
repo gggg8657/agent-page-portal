@@ -636,11 +636,11 @@ class H(BaseHTTPRequestHandler):
         self.end_headers(); self.wfile.write(b)
 
     def guide_file(self, p):
-        """사용 설명서(guide/ — tools/build.py 가 만듦): /guide/ · /guide/img/<그림> · /guide/ext/<도구>/<그림> · /guide/agent-portal.pdf. 이름 규칙에 맞는 파일만"""
+        """사용 설명서(guide/ — tools/build.py 가 만듦): /guide/ · /guide/img/<그림> · /guide/ext/<도구>/<그림> · /guide/agent-portal.pdf · /guide/fonts/<글꼴>.woff2. 이름 규칙에 맞는 파일만"""
         if p == "/guide":  # 상대 경로(img/…)가 맞게 / 붙여서. #도구 앵커는 브라우저가 유지
             self.send_response(302); self.send_header("Location", "/guide/"); self.send_header("Content-Length", "0"); self.end_headers(); return
         rel = urllib.parse.unquote(p[len("/guide/"):]) or "index.html"
-        m = re.fullmatch(r"index\.html|agent-portal\.pdf|img/[A-Za-z0-9][\w.-]*\.(png|jpe?g|svg|webp)", rel)
+        m = re.fullmatch(r"index\.html|agent-portal\.pdf|img/[A-Za-z0-9][\w.-]*\.(png|jpe?g|svg|webp)|fonts/[A-Za-z0-9][\w.-]*\.woff2|fonts/OFL\.txt", rel)
         top = GUIDE_DIR
         e = re.fullmatch(r"ext/([a-z0-9-]+-local)/([A-Za-z0-9][\w.-]*\.(png|jpe?g|webp))", rel)
         if e:  # 공개 저장소에 넣으면 안 되는 그림(예: 파동이 — 캐릭터 권리)은 비공개 도구 저장소 static/guide/ 에 두고 여기서 내보냄
@@ -654,7 +654,7 @@ class H(BaseHTTPRequestHandler):
             self.send_response(304); self.send_header("ETag", etag); self.send_header(*cc); self.send_header("Content-Length", "0"); self.end_headers(); return
         ext = rel.rsplit(".", 1)[1]
         ctype = {"html": "text/html; charset=utf-8", "pdf": "application/pdf", "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
-                 "svg": "image/svg+xml", "webp": "image/webp"}[ext]
+                 "svg": "image/svg+xml", "webp": "image/webp", "woff2": "font/woff2", "txt": "text/plain; charset=utf-8"}[ext]
         hd = [cc, ("ETag", etag), ("Last-Modified", lm), ("X-Content-Type-Options", "nosniff")]
         if ext == "pdf":
             hd.append(("Content-Disposition", "attachment; filename=agent-portal.pdf; filename*=UTF-8''" + urllib.parse.quote("에이전트-포털-사용-설명서.pdf")))

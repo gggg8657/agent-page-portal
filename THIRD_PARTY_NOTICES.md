@@ -6,7 +6,7 @@
 | 이름 | 버전 | 쓰임 | 라이선스 | 링크 | 상업 이용 | 비고 |
 |---|---|---|---|---|---|---|
 | Python 표준 라이브러리 | 3.x | 실행 | PSF-2.0 | https://docs.python.org/3/license.html | 가능 | |
-| Noto Sans KR | — | 외부 서비스(Google Fonts CDN) — `guide/index.html` 글꼴 | SIL OFL 1.1 | https://fonts.google.com/noto/specimen/Noto+Sans+KR | 가능 | 동봉 안 함. 열 때 Google 서버 접속 |
+| Pretendard (Variable) | 1.3.9 | 동봉 — `guide/fonts/PretendardVariable.woff2`, 사용 설명서 글꼴(화면·PDF) | SIL OFL 1.1 | https://github.com/orioncactus/pretendard | 가능 | 원문 `guide/fonts/OFL.txt`. Reserved Font Name "Pretendard" — 고치면 이름 바꿔야 함. 글꼴만 따로 팔 수 없음 |
 | Ollama | — | 외부 프로그램(도구들이 부름, 포털은 환경변수만 넘김) | MIT | https://github.com/ollama/ollama | 가능 | 동봉 안 함 |
 | Gemma 4 `gemma4:31b` | — | 기본 LLM 이름을 도구에 넘김 | Apache-2.0 (Ollama 매니페스트 기준) | https://ai.google.dev/gemma | 가능 | 동봉 안 함 |
 | Playwright / playwright-core | 1.63.0 | 개발 도구 — 사용 설명서 화면 캡처·PDF 생성(`guide/tools/`, `node_modules` 는 커밋 제외) | Apache-2.0 | https://github.com/microsoft/playwright | 가능 | 받는 Chromium 은 자체 라이선스 |

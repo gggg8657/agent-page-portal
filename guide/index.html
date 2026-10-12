@@ -1,234 +1,359 @@
 <!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>에이전트 포털 사용 설명서</title>
 <meta name="author" content="DongJu Kim (gggg8657)">
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap">
-<style>
-/* 화면 따라 하기형 소개 자료. 흰 바탕 단일 테마, 고딕 하나 */
-:root{--bg:#fff;--ink:#191919;--ink-2:#555;--line:#e3e3e3;--soft:#f5f5f5;--red:#d63024;--sans:"Noto Sans KR","Pretendard",system-ui,sans-serif;--mono:ui-monospace,"D2Coding",monospace;color-scheme:light}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 var(--sans);word-break:keep-all}
-.wrap{max-width:1000px;margin:0 auto;padding-inline:24px;padding-block:56px 72px}
-h1{font-size:26px;font-weight:700;margin:0 0 4px;letter-spacing:-.01em}
-.lead{color:var(--ink-2);margin:0 0 28px}
-h2{font-size:20px;font-weight:700;margin:64px 0 6px;letter-spacing:-.01em}
-h2 + p{color:var(--ink-2);margin:0 0 20px}
-img,svg{display:block;max-width:100%;height:auto}
-.frame{border:1px solid var(--line);border-radius:6px;overflow:hidden;background:#fff}
-.strip{display:grid;grid-template-columns:0.8fr auto 1.15fr auto 1.35fr;gap:14px;align-items:center}
-.strip > *{min-width:0}
-.strip .arr{color:#999;font-size:20px}
-.strip .cap{font-size:13.5px;color:var(--ink-2);margin-top:6px}
-.steps{display:grid;gap:30px}
-.two{display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:start}
-.two > *,.step > *{min-width:0}
-.step .t{display:flex;gap:10px;align-items:baseline;margin-bottom:10px}
-.step .n{flex:none;width:24px;height:24px;border-radius:50%;background:var(--ink);color:#fff;font-size:13px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;transform:translateY(3px)}
-.step .t p{margin:0}
-table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
-th,td{padding:6px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
-th{font-weight:500;color:var(--ink-2)}
-th:first-child,td:first-child{text-align:left}
-pre{font:13px/1.6 var(--mono);background:var(--soft);border-radius:6px;padding:12px 14px;margin:0;overflow-x:auto}
-.files{margin:10px 0 0;padding-left:1.1em;font-size:14.5px;color:var(--ink-2)}
-.src{margin-top:64px;padding-top:14px;border-top:1px solid var(--line);font-size:12.5px;color:#888}
-@media screen and (max-width:760px){
-  .wrap{padding-inline:16px;padding-block:36px 56px}
-  .strip,.two{grid-template-columns:1fr}
-  .strip .arr{transform:rotate(90deg);justify-self:center}
+<link rel="preload" href="fonts/PretendardVariable.woff2" as="font" type="font/woff2" crossorigin>
+<style>/* 글꼴: Pretendard Variable (SIL OFL 1.1, fonts/OFL.txt) — 폐쇄망이라 CDN 없이 같이 둔다 */
+@font-face{font-family:"Pretendard Variable";src:url(fonts/PretendardVariable.woff2) format("woff2-variations"),url(fonts/PretendardVariable.woff2) format("woff2");font-weight:45 930;font-style:normal;font-display:swap}
+/* 에이전트 포털 사용 설명서 — 화면 따라 하기형 가이드.
+   Pretendard 하나, 무채색 본문 + 분류 색 토큰(.c-*), 둥근 카드·벤토 그리드, 화면(밝게/어둡게) + A4 인쇄 */
+:root{
+  --bg:#fbfbfc;--surface:#fff;--surface-2:#f3f4f7;--ink:#14161b;--ink-2:#565b66;--ink-3:#8b909a;--line:#e6e8ec;--line-2:#d9dce2;
+  --frame-bar:#f2f3f5;--dot:#d3d6dc;--shadow:0 1px 2px rgba(16,24,40,.05),0 14px 32px -16px rgba(16,24,40,.22);
+  --mesh-base:#f3f2fb;--tile:rgba(255,255,255,.66);
+  --sans:"Pretendard Variable","Pretendard","Noto Sans KR",system-ui,sans-serif;--mono:ui-monospace,"D2Coding","JetBrains Mono",monospace;
+  --c:#4b4fd8;color-scheme:light
 }
-@media print{ .strip table{font-size:8pt} .strip th,.strip td{padding:3px 3px} .strip{grid-template-columns:0.8fr auto 1.2fr auto 1.3fr;gap:8px} body{font-size:11pt} .wrap{padding-block:0;max-width:none} .step,.strip,.two{break-inside:avoid} h2{break-after:avoid;margin-top:36px} h2.pb{break-before:page} }
+/* 분류 색 — 진한 색 하나만 정하고 옅은 바탕·글자색은 섞어서 만든다 */
+.c-portal{--c:#4b4fd8}.c-doc{--c:#2f6fe4}.c-meet{--c:#0e9384}.c-voice{--c:#8155e8}.c-art{--c:#e5484d}
+.c-data{--c:#0b8bb3}.c-research{--c:#2f9e44}.c-nuclear{--c:#c08a00}.c-fun{--c:#d6409f}.c-toy{--c:#ec6a1c}.c-etc{--c:#5b6170}
+[class^="c-"],[class*=" c-"],:root{--ct:color-mix(in srgb,var(--c) 11%,var(--surface));--ck:color-mix(in srgb,var(--c) 78%,#000)}
+@media screen and (prefers-color-scheme:dark){
+  :root{--bg:#0d0e12;--surface:#15171c;--surface-2:#1b1e24;--ink:#eceef2;--ink-2:#a8adb7;--ink-3:#7c818c;--line:#262a32;--line-2:#323741;
+    --frame-bar:#22252c;--dot:#454a55;--shadow:0 1px 2px rgba(0,0,0,.4),0 14px 32px -16px rgba(0,0,0,.7);
+    --mesh-base:#14141c;--tile:rgba(255,255,255,.06);color-scheme:dark}
+  [class^="c-"],[class*=" c-"],:root{--ct:color-mix(in srgb,var(--c) 18%,var(--surface));--ck:color-mix(in srgb,var(--c) 62%,#fff)}
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 var(--sans);word-break:keep-all;-webkit-font-smoothing:antialiased;font-feature-settings:"ss06"}
+a{color:inherit}
+.wrap{max-width:1080px;margin:0 auto;padding-inline:24px;padding-block:28px 96px}
+img,svg{display:block;max-width:100%;height:auto}
+b{font-weight:700}
 
-/* 전체 포털용 추가 */
-.tool{padding-top:8px}
-.tool + .tool{margin-top:72px;padding-top:40px;border-top:1px solid var(--line)}
-.tool h2{margin-top:0}
-.cat{font-size:13px;color:#888;margin:0 0 2px}
-.toc{columns:2;column-gap:40px;margin:8px 0 0;padding:0;list-style:none;font-size:15px}
-.toc li{break-inside:avoid;padding:5px 0;border-bottom:1px solid var(--line);display:flex;gap:10px}
-.toc li span{color:#888;font-size:13px;min-width:56px}
-.toc a{text-decoration:none;color:var(--ink)}
-.strip.s2{grid-template-columns:1fr auto 1fr}
-.inbox{padding:12px 14px;font-size:14.5px;line-height:1.6;white-space:pre-wrap}
-@media screen and (max-width:760px){ .toc{columns:1} .strip.s2{grid-template-columns:1fr} }
-@media print{ .tool + .tool{break-before:page;margin-top:0;border-top:0} .toc{font-size:10pt} }
-@media print{ .tool{break-before:page} }
+/* 칩 — 분류 이름 */
+.chip{display:inline-flex;align-items:center;gap:6px;margin:0;padding:4px 11px 4px 9px;border-radius:999px;background:var(--ct);color:var(--ck);font-size:12.5px;font-weight:700;line-height:1.4;letter-spacing:.01em;white-space:nowrap}
+.chip::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--c)}
+.chip i{font-style:normal;font-weight:600;font-size:11px;min-width:18px;padding:0 5px;border-radius:999px;background:var(--surface);color:var(--ck);text-align:center}
 
-.gbar{position:sticky;top:0;z-index:10;background:rgba(255,255,255,.96);border-bottom:1px solid var(--line);backdrop-filter:blur(4px)}
-.gbar .in{max-width:1000px;margin:0 auto;padding:8px 24px;display:flex;align-items:center;gap:14px;font-size:14px}
-.gbar a{color:var(--ink);text-decoration:none}.gbar .t{font-weight:700;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gbar .back{color:var(--ink-2)}.gbar .back:hover,.gbar .menu a:hover{text-decoration:underline}
-.gbar details{position:relative}.gbar summary{cursor:pointer;list-style:none;color:var(--ink-2)}.gbar summary::-webkit-details-marker{display:none}
-.gbar .menu{position:absolute;right:0;top:30px;width:min(560px,calc(100vw - 32px));max-height:70vh;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.12);padding:10px 14px;columns:2;column-gap:24px}
-.gbar .menu div{break-inside:avoid;margin-bottom:8px}.gbar .menu span{display:block;font-size:12px;color:#888}.gbar .menu a{display:block;padding:2px 0}
-.gbar .pdf{border:1px solid var(--ink);border-radius:6px;padding:4px 12px;font-weight:500;white-space:nowrap}.gbar .pdf:hover{background:var(--ink);color:#fff}
-.gbar .nd{font-size:12px;color:#999;white-space:nowrap}
-.tool,#top{scroll-margin-top:60px}
-@media screen and (max-width:760px){.gbar .in{padding:8px 16px;gap:10px}.gbar .t,.gbar .nd{display:none}.gbar details{margin-left:auto}.gbar .menu{position:fixed;left:16px;right:16px;top:44px;width:auto;columns:1}}
-@media print{.gbar{display:none}}
+/* 표지 */
+.cover{margin-bottom:72px}
+.cv{position:relative;overflow:hidden;display:flex;flex-direction:column;min-height:min(78vh,760px);padding:56px 52px 40px;border-radius:36px;border:1px solid var(--line);
+  background:
+    radial-gradient(60% 55% at 92% 6%,color-mix(in srgb,#5b5ff0 48%,transparent),transparent 70%),
+    radial-gradient(45% 50% at 74% 58%,color-mix(in srgb,#14b8a6 30%,transparent),transparent 70%),
+    radial-gradient(55% 45% at 4% 100%,color-mix(in srgb,#f472b6 34%,transparent),transparent 72%),
+    radial-gradient(40% 40% at 14% 12%,color-mix(in srgb,#fbbf24 26%,transparent),transparent 70%),
+    var(--mesh-base)}
+.cv-org{margin:0 0 auto;align-self:flex-start;padding:6px 14px;border-radius:999px;background:var(--tile);border:1px solid color-mix(in srgb,var(--ink) 8%,transparent);font-size:13px;font-weight:600;color:var(--ink-2);backdrop-filter:blur(8px)}
+.cover h1{margin:72px 0 20px;font-size:clamp(44px,8.4vw,92px);line-height:1.02;font-weight:800;letter-spacing:-.045em}
+.cover .lead{margin:0 0 40px;max-width:30em;font-size:18px;line-height:1.6;color:var(--ink-2)}
+.cv-cats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.cv-cats a{display:flex;flex-direction:column;gap:2px;padding:14px 16px 12px;border-radius:18px;background:var(--tile);border:1px solid color-mix(in srgb,var(--ink) 6%,transparent);text-decoration:none;backdrop-filter:blur(10px)}
+.cv-cats b{font-size:28px;line-height:1.1;font-weight:800;color:var(--c);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.cv-cats span{font-size:13px;font-weight:600;color:var(--ink-2)}
+.cv-cats a:hover{border-color:var(--c)}
+.cv-foot{display:flex;justify-content:space-between;gap:16px;margin:28px 0 0;font-size:12.5px;color:var(--ink-3)}
+
+/* 목차 */
+.tocpage{margin-bottom:24px}
+.tocpage h2{margin:0 0 20px;font-size:40px;line-height:1.1;font-weight:800;letter-spacing:-.035em}
+.toc{columns:2;column-gap:14px}
+.tg{break-inside:avoid;margin:0 0 14px;padding:16px 16px 10px;border-radius:22px;background:var(--surface);border:1px solid var(--line)}
+.tg ol{list-style:none;margin:10px 0 0;padding:0}
+.tg li + li{border-top:1px solid var(--line)}
+.tg a{display:grid;grid-template-columns:30px 1fr auto;column-gap:6px;padding:8px 2px;text-decoration:none;color:var(--ink)}
+.tg b{grid-column:2;grid-row:1}.tg small{grid-column:2/4}
+.tg .pg{grid-column:3;grid-row:1;align-self:baseline;font-size:12px;font-weight:600;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.tg .pg:empty{display:none}
+.tg .no{grid-column:1;grid-row:1/3;font-size:13px;font-weight:700;color:var(--c);font-variant-numeric:tabular-nums;padding-top:2px}
+.tg b{font-size:15px;font-weight:700;letter-spacing:-.01em}
+.tg small{font-size:12.5px;color:var(--ink-2);line-height:1.5}
+.tg a:hover b{color:var(--ck)}
+
+/* 도구 섹션 */
+.tool{margin-top:104px}
+.tool,#top,#toc{scroll-margin-top:72px}
+.th{position:relative;overflow:hidden;margin-bottom:18px;padding:30px 36px 32px;border-radius:30px;border:1px solid var(--line);
+  background:radial-gradient(70% 140% at 100% 0%,color-mix(in srgb,var(--c) 24%,transparent),transparent 62%),
+             radial-gradient(40% 90% at 0% 100%,color-mix(in srgb,var(--c) 9%,transparent),transparent 70%),var(--surface)}
+.th-meta{display:flex;align-items:center;gap:8px}
+.th-n{font-size:12.5px;font-weight:600;color:var(--ink-3);padding:3px 10px;border:1px solid var(--line-2);border-radius:999px;background:var(--surface)}
+.th-no{position:absolute;right:30px;top:14px;font-size:92px;line-height:1;font-weight:800;letter-spacing:-.06em;color:color-mix(in srgb,var(--c) 26%,transparent);font-variant-numeric:tabular-nums;pointer-events:none}
+.th h2{margin:16px 0 6px;padding-right:120px;font-size:38px;line-height:1.15;font-weight:800;letter-spacing:-.035em}
+.th .one{margin:0;padding-right:120px;max-width:44em;font-size:17px;color:var(--ink-2)}
+
+/* 입력 → 결과: 카드 한 쌍 */
+.strip{display:grid;grid-template-columns:1fr 44px 1fr;gap:10px;align-items:stretch;margin-bottom:32px}
+.strip > *{min-width:0}
+.strip > div:not(.arr){display:flex;flex-direction:column;gap:10px;padding:14px 14px 16px;border-radius:24px;background:var(--surface-2);border:1px solid var(--line)}
+.strip > div:last-child{background:var(--ct);border-color:color-mix(in srgb,var(--c) 22%,var(--line))}
+.strip .cap{order:-1;display:flex;align-items:center;gap:7px;padding:0 4px;font-size:13px;font-weight:700;color:var(--ink-2)}
+.strip .cap::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;border:2px solid var(--ink-3)}
+.strip > div:last-child .cap::before{background:var(--c);border-color:var(--c)}
+.strip > div:last-child .cap{color:var(--ck)}
+.strip .arr{align-self:center;justify-self:center;width:40px;height:40px;display:grid;place-items:center;border-radius:50%;background:var(--surface);border:1px solid var(--line-2);color:var(--c);font-size:18px;font-weight:700;box-shadow:var(--shadow)}
+
+/* 화면 캡처 틀 */
+.frame{border:1px solid var(--line-2);border-radius:14px;overflow:hidden;background:#fff;color:#14161b}
+.inbox{padding:14px 16px;font-size:14.5px;line-height:1.65;white-space:pre-wrap}
+pre{font:13px/1.65 var(--mono);background:var(--surface);border:1px solid var(--line-2);border-radius:14px;padding:14px 16px;margin:0;overflow-x:auto;color:var(--ink)}
+table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{padding:6px 8px;border-bottom:1px solid #e6e8ec;text-align:right;white-space:nowrap}
+th{font-weight:600;color:#565b66}
+th:first-child,td:first-child{text-align:left}
+
+/* 단계: 큰 번호 카드 + 창 모양 캡처 */
+.steps{display:grid;gap:16px}
+.step{padding:20px 20px 22px;border-radius:26px;background:var(--surface);border:1px solid var(--line)}
+.step > *,.two > *{min-width:0}
+.step .t{display:flex;gap:14px;align-items:center;margin-bottom:16px}
+.step .n{flex:none;width:48px;height:48px;display:grid;place-items:center;border-radius:15px;background:var(--c);color:#fff;font-size:18px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;
+  box-shadow:0 6px 16px -6px color-mix(in srgb,var(--c) 70%,transparent)}
+.step .t p{margin:0;font-size:16.5px;line-height:1.55}
+.step .frame{box-shadow:var(--shadow)}
+.step .frame::before{content:"";display:block;height:24px;border-bottom:1px solid #e6e8ec;
+  background:radial-gradient(circle at 15px 12px,#d3d6dc 3.6px,transparent 4.2px),radial-gradient(circle at 29px 12px,#d3d6dc 3.6px,transparent 4.2px),radial-gradient(circle at 43px 12px,#d3d6dc 3.6px,transparent 4.2px),#f2f3f5}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+.two > .step{height:100%}
+
+/* 끝: 출처·라이선스 + 뒤표지 */
+.lic{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.lic li{min-width:0;padding:10px 14px;border-radius:14px;background:var(--surface);border:1px solid var(--line);font-size:14px}
+.lic b{display:block}
+.lic a{display:block;font-size:12px;color:var(--ink-2);text-decoration:none;overflow-wrap:anywhere}
+.lic a:hover{text-decoration:underline}
+.src{margin:20px 0 0;font-size:12.5px;color:var(--ink-3)}
+.colophon{margin-top:40px;padding:44px 40px;border-radius:30px;border:1px solid var(--line);
+  background:radial-gradient(55% 60% at 100% 0%,color-mix(in srgb,#5b5ff0 40%,transparent),transparent 72%),
+             radial-gradient(45% 55% at 20% 30%,color-mix(in srgb,#14b8a6 22%,transparent),transparent 72%),
+             radial-gradient(55% 60% at 0% 100%,color-mix(in srgb,#f472b6 30%,transparent),transparent 72%),var(--mesh-base)}
+.colophon p{margin:0;font-size:13px;color:var(--ink-3)}
+.colophon p:first-child{margin-bottom:6px;font-size:26px;font-weight:800;letter-spacing:-.03em;color:var(--ink)}
+
+/* 화면 위쪽 막대 (build.py 의 .gbar) */
+.gbar{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--bg) 80%,transparent);border-bottom:1px solid var(--line);backdrop-filter:saturate(1.6) blur(14px);-webkit-backdrop-filter:saturate(1.6) blur(14px)}
+.gbar .in{max-width:1080px;margin:0 auto;padding:10px 24px;display:flex;align-items:center;gap:14px;font-size:14px}
+.gbar a{color:var(--ink);text-decoration:none}
+.gbar .t{font-weight:700;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.01em}
+.gbar .back{color:var(--ink-2)}.gbar .back:hover,.gbar .menu a:hover{color:var(--ink);text-decoration:underline}
+.gbar details{position:relative}
+.gbar summary{cursor:pointer;list-style:none;color:var(--ink-2);padding:5px 12px;border-radius:999px;border:1px solid var(--line-2)}
+.gbar summary::-webkit-details-marker{display:none}
+.gbar details[open] summary{background:var(--surface-2);color:var(--ink)}
+.gbar .menu{position:absolute;right:0;top:40px;width:min(580px,calc(100vw - 32px));background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:0 20px 50px -20px rgba(16,24,40,.35);padding:16px 18px;columns:2;column-gap:20px}
+.gbar .menu div{break-inside:avoid;margin-bottom:12px}
+.gbar .menu span{display:inline-block;margin-bottom:4px;padding:1px 9px;border-radius:999px;background:var(--ct);color:var(--ck);font-size:11.5px;font-weight:700}
+.gbar .menu a{display:block;padding:3px 2px}
+.gbar .pdf{border-radius:999px;padding:6px 14px;font-weight:600;white-space:nowrap;background:var(--ink);color:var(--bg)}.gbar .pdf:hover{opacity:.85}
+.gbar .nd{font-size:12px;color:var(--ink-3);white-space:nowrap}
+
+@media screen and (max-width:760px){
+  .wrap{padding-inline:16px;padding-block:16px 64px}
+  .cv{min-height:0;padding:28px 20px 22px;border-radius:26px}
+  .cover h1{margin:48px 0 14px;font-size:44px}
+  .cover .lead{font-size:16px;margin-bottom:28px}
+  .cv-cats{grid-template-columns:repeat(2,1fr);gap:8px}
+  .cv-cats a{padding:10px 12px}.cv-cats b{font-size:22px}
+  .cv-foot{flex-direction:column;gap:2px}
+  .tocpage h2{font-size:30px}
+  .toc{columns:1}
+  .tool{margin-top:72px}
+  .th{padding:22px 20px 22px;border-radius:24px}
+  .th-no{font-size:56px;right:18px;top:12px}
+  .th h2{font-size:28px;padding-right:64px}.th .one{padding-right:0;font-size:15.5px}
+  .strip{grid-template-columns:1fr;gap:8px}
+  .strip .arr{transform:rotate(90deg)}
+  .two{grid-template-columns:1fr}
+  .step{padding:16px 14px 16px;border-radius:22px}
+  .step .n{width:40px;height:40px;border-radius:13px;font-size:16px}
+  .step .t p{font-size:15.5px}
+  .lic{grid-template-columns:1fr}
+  .colophon{padding:28px 22px}
+  .gbar .in{padding:8px 16px;gap:10px}.gbar .t,.gbar .nd{display:none}.gbar details{margin-left:auto}
+  .gbar .menu{position:fixed;left:16px;right:16px;top:52px;width:auto;columns:auto;max-height:calc(100vh - 72px);overflow:auto}
+}
+
+/* 인쇄·PDF (A4, 여백·꼬리말은 tools/pdf.mjs) */
+@media print{
+  body{font-size:10.5pt;background:#fff}
+  :root{--bg:#fff}
+  .gbar{display:none}
+  .wrap{max-width:none;padding:0}
+  .cover{height:263mm;margin:0;break-after:page}
+  .cv{height:100%;min-height:0;padding:15mm 13mm 10mm;border-radius:9mm}
+  .cover h1{margin:0 0 7mm;font-size:62pt}
+  .cv-org{margin-bottom:auto}
+  .cover .lead{font-size:12.5pt;margin-bottom:12mm}
+  .cv-cats{gap:2.6mm}.cv-cats a{padding:3.6mm 4mm 3mm;border-radius:5mm;backdrop-filter:none}.cv-cats b{font-size:20pt}.cv-cats span{font-size:9.5pt}
+  .cv-foot{font-size:8.5pt;margin-top:8mm}
+  .tocpage{break-after:page;margin:0}
+  .tocpage h2{font-size:26pt;margin-bottom:6mm}
+  .toc{columns:3;column-gap:3mm}
+  .tg{padding:3mm 3.2mm 1.4mm;border-radius:4.5mm;margin-bottom:3mm}
+  .tg ol{margin-top:1.6mm}
+  .tg a{grid-template-columns:7mm 1fr auto;column-gap:0;padding:2.2mm 0}.tg b{font-size:10.4pt}.tg small{font-size:8.4pt;line-height:1.45}.tg .no{font-size:9pt}.tg .pg{font-size:8.6pt}
+  .chip{font-size:8.5pt}
+  .tool{margin:0;break-before:page}
+  .th{padding:5.6mm 7mm 6mm;border-radius:6.5mm;margin-bottom:3.6mm;break-after:avoid}
+  .th-no{font-size:46pt;right:6mm;top:3mm}
+  .th h2{font-size:21pt;margin-top:3mm;margin-bottom:1.2mm;padding-right:30mm}
+  .th .one{font-size:11pt;padding-right:24mm}
+  .th-n{font-size:8.5pt}
+  .strip{gap:2.4mm;grid-template-columns:1fr 9mm 1fr;margin-bottom:3.6mm;break-inside:avoid}
+  .strip > div:not(.arr){padding:3mm 3mm 3.4mm;border-radius:5.5mm;gap:2.4mm}
+  .strip .arr{width:8mm;height:8mm;font-size:11pt;box-shadow:none}
+  .strip .cap{font-size:8.6pt}
+  .strip table{font-size:7.6pt}.strip th,.strip td{padding:2px 3px}
+  .inbox{font-size:9.4pt;padding:3mm 3.4mm}
+  pre{font-size:8.2pt;padding:3mm 3.4mm;white-space:pre-wrap;overflow-wrap:anywhere}
+  .steps{gap:3.2mm}.two{gap:3.2mm}
+  .step{padding:3.4mm 3.6mm 3.8mm;border-radius:5.5mm;break-inside:avoid}
+  .step .t{gap:3mm;margin-bottom:2.8mm}
+  .step .n{width:9mm;height:9mm;border-radius:3mm;font-size:11.5pt;box-shadow:none}
+  .step .t p{font-size:10.5pt}
+  .step .frame{box-shadow:none}
+  .step .frame::before{height:4.2mm;background:radial-gradient(circle at 3.2mm 2.1mm,#d3d6dc .7mm,transparent .85mm),radial-gradient(circle at 5.9mm 2.1mm,#d3d6dc .7mm,transparent .85mm),radial-gradient(circle at 8.6mm 2.1mm,#d3d6dc .7mm,transparent .85mm),#f2f3f5}
+  .step .frame img{max-height:132mm;width:auto;margin-inline:auto}
+  .lic{grid-template-columns:repeat(3,1fr);gap:1.8mm}.lic li{padding:1.8mm 2.8mm;border-radius:3.2mm;font-size:8.8pt;break-inside:avoid}.lic a{font-size:7pt;line-height:1.35}
+  .colophon{break-before:page;margin:0;height:263mm;display:flex;flex-direction:column;justify-content:flex-end;padding:14mm 13mm;border-radius:9mm}  /* 뒤표지 */
+  .colophon p:first-child{font-size:22pt}.colophon p{font-size:9pt}
+  .src{font-size:8.4pt}
+}
 </style>
-</head><body><nav class="gbar"><div class="in"><a class="back" href="/">← 포털로</a><a class="t" href="#top">에이전트 포털 사용 설명서</a><details><summary>목차 ▾</summary><div class="menu"><div><span>포털</span><a href="#agent-page-portal">에이전트 포털</a></div><div><span>문서</span><a href="#humanize-kr-local">Humanize KR</a><a href="#kordoc-local">kordoc</a><a href="#notebook-local">Notebook</a><a href="#writer-local">Writer</a><a href="#mail-local">메일</a><a href="#award-local">상장 생성기</a><a href="#review-local">논문 리뷰</a><a href="#weekly-local">주간보고</a><a href="#coach-local">글쓰기 코치</a></div><div><span>회의</span><a href="#meeting-local">Meeting</a></div><div><span>음성</span><a href="#tts-local">TTS</a></div><div><span>그림</span><a href="#diagram-local">Diagram</a><a href="#sketch-local">Sketch</a><a href="#agent-cad-local">CAD Agent</a><a href="#image-local">그림 생성</a></div><div><span>데이터</span><a href="#sql-local">SQL (demoDB)</a><a href="#chart-local">그래프</a><a href="#digitizer-local">그래프 디지타이저</a></div><div><span>연구</span><a href="#protein-local">단백질 구조 예측</a><a href="#battery-local">배터리</a></div><div><span>원자력</span><a href="#shield-local">차폐 계산기</a></div><div><span>재미</span><a href="#saju-local">팀 밸런스 맵</a></div><div><span>토이</span><a href="#persona-local">Persona</a><a href="#avatar-local">Avatar</a><a href="#padong-local">파동이</a></div></div></details><span class="nd">내부 시험용 · 배포용 아님</span><a class="pdf" href="agent-portal.pdf" download="에이전트-포털-사용-설명서.pdf">PDF 내려받기</a></div></nav>
+</head><body><nav class="gbar"><div class="in"><a class="back" href="/">← 포털로</a><a class="t" href="#top">에이전트 포털 사용 설명서</a><details><summary>목차</summary><div class="menu"><div class="c-portal"><span>포털</span><a href="#agent-page-portal">에이전트 포털</a></div><div class="c-doc"><span>문서</span><a href="#humanize-kr-local">Humanize KR</a><a href="#kordoc-local">kordoc</a><a href="#notebook-local">Notebook</a><a href="#writer-local">Writer</a><a href="#mail-local">메일</a><a href="#award-local">상장 생성기</a><a href="#review-local">논문 리뷰</a><a href="#weekly-local">주간보고</a><a href="#coach-local">글쓰기 코치</a></div><div class="c-meet"><span>회의</span><a href="#meeting-local">Meeting</a></div><div class="c-voice"><span>음성</span><a href="#tts-local">TTS</a></div><div class="c-art"><span>그림</span><a href="#diagram-local">Diagram</a><a href="#sketch-local">Sketch</a><a href="#agent-cad-local">CAD Agent</a><a href="#image-local">그림 생성</a></div><div class="c-data"><span>데이터</span><a href="#sql-local">SQL (demoDB)</a><a href="#chart-local">그래프</a><a href="#digitizer-local">그래프 디지타이저</a></div><div class="c-research"><span>연구</span><a href="#protein-local">단백질 구조 예측</a><a href="#battery-local">배터리</a></div><div class="c-nuclear"><span>원자력</span><a href="#shield-local">차폐 계산기</a></div><div class="c-fun"><span>재미</span><a href="#saju-local">팀 밸런스 맵</a></div><div class="c-toy"><span>토이</span><a href="#persona-local">Persona</a><a href="#avatar-local">Avatar</a><a href="#padong-local">파동이</a></div></div></details><span class="nd">내부 시험용 · 배포용 아님</span><a class="pdf" href="agent-portal.pdf" download="에이전트-포털-사용-설명서.pdf">PDF 내려받기</a></div></nav>
 <script>addEventListener("click",e=>{const d=document.querySelector(".gbar details");if(d.open&&(e.target.closest(".menu a")||!e.target.closest(".gbar details")))d.open=false})</script>
 <div class="wrap">
-<header id="top">
-  <h1>에이전트 포털 사용 설명서</h1>
-  <p class="cat">인공지능응용연구실 · 2026. 10. 12. · 내부 시험용 · 배포용 아님</p>
-  <p class="lead">연구실 서버에서 돌아가는 도구 25개를 한 화면에서 찾아 씁니다. 도구마다 쓰는 순서를 화면으로 정리했습니다.</p>
-  <ul class="toc">
-  <li><span>포털</span><a href="#agent-page-portal"><b>에이전트 포털</b></a></li>
-  <li><span>문서</span><a href="#humanize-kr-local"><b>Humanize KR</b> · 한국어 문장 다듬기</a></li>
-  <li><span>문서</span><a href="#kordoc-local"><b>kordoc</b> · 공문서 읽기·초안 HWPX</a></li>
-  <li><span>문서</span><a href="#notebook-local"><b>Notebook</b> · 출처 기반 질의·노트</a></li>
-  <li><span>문서</span><a href="#writer-local"><b>Writer</b> · 건배사·경조사·공지문</a></li>
-  <li><span>문서</span><a href="#mail-local"><b>메일</b> · 업무 메일 작성·회신·윤문</a></li>
-  <li><span>문서</span><a href="#award-local"><b>상장 생성기</b> · 상장·표창장·감사장</a></li>
-  <li><span>문서</span><a href="#review-local"><b>논문 리뷰</b> · 투고 전 사전 심사</a></li>
-  <li><span>문서</span><a href="#weekly-local"><b>주간보고</b> · 개인 작성 · 실(소본부) 취합 · HWPX/DOCX</a></li>
-  <li><span>문서</span><a href="#coach-local"><b>글쓰기 코치</b> · 준실시간 첨삭</a></li>
-  <li><span>회의</span><a href="#meeting-local"><b>Meeting</b> · 회의 녹음 회의록</a></li>
-  <li><span>음성</span><a href="#tts-local"><b>TTS</b> · 한국어 음성 합성</a></li>
-  <li><span>그림</span><a href="#diagram-local"><b>Diagram</b> · 말로 그리는 다이어그램</a></li>
-  <li><span>그림</span><a href="#sketch-local"><b>Sketch</b> · 손그림을 figure로</a></li>
-  <li><span>그림</span><a href="#agent-cad-local"><b>CAD Agent</b> · 로컬 CAD 초안·검증</a></li>
-  <li><span>그림</span><a href="#image-local"><b>그림 생성</b> · 말로 그리기 · 말로 고치기 (Qwen-Image)</a></li>
-  <li><span>데이터</span><a href="#sql-local"><b>SQL (demoDB)</b> · 자연어 데이터 질의 (demoDB: 가상 데이터)</a></li>
-  <li><span>데이터</span><a href="#chart-local"><b>그래프</b> · 표 → 다중 후보 → 편집 가능한 문서</a></li>
-  <li><span>데이터</span><a href="#digitizer-local"><b>그래프 디지타이저</b> · 논문 그래프 그림에서 데이터 뽑기</a></li>
-  <li><span>연구</span><a href="#protein-local"><b>단백질 구조 예측</b> · 구조·결합 친화도·서열 설계</a></li>
-  <li><span>연구</span><a href="#battery-local"><b>배터리</b> · PyBaMM 리튬이온 셀 성능·수명 예측</a></li>
-  <li><span>원자력</span><a href="#shield-local"><b>차폐 계산기</b> · 방사선 차폐·선량 간이 계산</a></li>
-  <li><span>재미</span><a href="#saju-local"><b>팀 밸런스 맵</b> · 사주·MBTI 궁합</a></li>
-  <li><span>토이</span><a href="#persona-local"><b>Persona</b> · AI 캐릭터 대화 (토이)</a></li>
-  <li><span>토이</span><a href="#avatar-local"><b>Avatar</b> · 가상 캐릭터 그림·말하기·움직이기 영상</a></li>
-  <li><span>토이</span><a href="#padong-local"><b>파동이</b> · 3D·2D 캐릭터 리그</a></li>
-</ul>
+<header id="top" class="cover">
+  <div class="cv">
+    <p class="cv-org">인공지능응용연구실 · 2026</p>
+    <h1>에이전트 포털<br>사용 설명서</h1>
+    <p class="lead">연구실 서버에서 돌아가는 도구 25개를 한 화면에서 찾아 씁니다. 도구마다 쓰는 순서를 화면으로 정리했습니다.</p>
+    <div class="cv-cats"><a class="c-portal" href="#agent-page-portal"><b>1</b><span>포털</span></a><a class="c-doc" href="#humanize-kr-local"><b>9</b><span>문서</span></a><a class="c-meet" href="#meeting-local"><b>1</b><span>회의</span></a><a class="c-voice" href="#tts-local"><b>1</b><span>음성</span></a><a class="c-art" href="#diagram-local"><b>4</b><span>그림</span></a><a class="c-data" href="#sql-local"><b>3</b><span>데이터</span></a><a class="c-research" href="#protein-local"><b>2</b><span>연구</span></a><a class="c-nuclear" href="#shield-local"><b>1</b><span>원자력</span></a><a class="c-fun" href="#saju-local"><b>1</b><span>재미</span></a><a class="c-toy" href="#persona-local"><b>3</b><span>토이</span></a></div>
+    <p class="cv-foot"><span>2026. 10. 12.</span><span>내부 시험용 · 배포용 아님</span></p>
+  </div>
 </header>
+<section class="tocpage" id="toc">
+  <h2>목차</h2>
+  <div class="toc">
+  <div class="tg c-portal"><p class="chip">포털<i>1</i></p><ol><li><a href="#agent-page-portal"><span class="no">01</span><span class="pg"></span><b>에이전트 포털</b></a></li></ol></div>
+  <div class="tg c-doc"><p class="chip">문서<i>9</i></p><ol><li><a href="#humanize-kr-local"><span class="no">02</span><span class="pg"></span><b>Humanize KR</b><small>한국어 문장 다듬기</small></a></li><li><a href="#kordoc-local"><span class="no">03</span><span class="pg"></span><b>kordoc</b><small>공문서 읽기·초안 HWPX</small></a></li><li><a href="#notebook-local"><span class="no">04</span><span class="pg"></span><b>Notebook</b><small>출처 기반 질의·노트</small></a></li><li><a href="#writer-local"><span class="no">05</span><span class="pg"></span><b>Writer</b><small>건배사·경조사·공지문</small></a></li><li><a href="#mail-local"><span class="no">06</span><span class="pg"></span><b>메일</b><small>업무 메일 작성·회신·윤문</small></a></li><li><a href="#award-local"><span class="no">07</span><span class="pg"></span><b>상장 생성기</b><small>상장·표창장·감사장</small></a></li><li><a href="#review-local"><span class="no">08</span><span class="pg"></span><b>논문 리뷰</b><small>투고 전 사전 심사</small></a></li><li><a href="#weekly-local"><span class="no">09</span><span class="pg"></span><b>주간보고</b><small>개인 작성 · 실(소본부) 취합 · HWPX/DOCX</small></a></li><li><a href="#coach-local"><span class="no">26</span><span class="pg"></span><b>글쓰기 코치</b><small>준실시간 첨삭</small></a></li></ol></div>
+  <div class="tg c-meet"><p class="chip">회의<i>1</i></p><ol><li><a href="#meeting-local"><span class="no">10</span><span class="pg"></span><b>Meeting</b><small>회의 녹음 회의록</small></a></li></ol></div>
+  <div class="tg c-voice"><p class="chip">음성<i>1</i></p><ol><li><a href="#tts-local"><span class="no">11</span><span class="pg"></span><b>TTS</b><small>한국어 음성 합성</small></a></li></ol></div>
+  <div class="tg c-art"><p class="chip">그림<i>4</i></p><ol><li><a href="#diagram-local"><span class="no">12</span><span class="pg"></span><b>Diagram</b><small>말로 그리는 다이어그램</small></a></li><li><a href="#sketch-local"><span class="no">13</span><span class="pg"></span><b>Sketch</b><small>손그림을 figure로</small></a></li><li><a href="#agent-cad-local"><span class="no">14</span><span class="pg"></span><b>CAD Agent</b><small>로컬 CAD 초안·검증</small></a></li><li><a href="#image-local"><span class="no">25</span><span class="pg"></span><b>그림 생성</b><small>말로 그리기 · 말로 고치기 (Qwen-Image)</small></a></li></ol></div>
+  <div class="tg c-data"><p class="chip">데이터<i>3</i></p><ol><li><a href="#sql-local"><span class="no">15</span><span class="pg"></span><b>SQL (demoDB)</b><small>자연어 데이터 질의 (demoDB: 가상 데이터)</small></a></li><li><a href="#chart-local"><span class="no">16</span><span class="pg"></span><b>그래프</b><small>표 → 다중 후보 → 편집 가능한 문서</small></a></li><li><a href="#digitizer-local"><span class="no">17</span><span class="pg"></span><b>그래프 디지타이저</b><small>논문 그래프 그림에서 데이터 뽑기</small></a></li></ol></div>
+  <div class="tg c-research"><p class="chip">연구<i>2</i></p><ol><li><a href="#protein-local"><span class="no">18</span><span class="pg"></span><b>단백질 구조 예측</b><small>구조·결합 친화도·서열 설계</small></a></li><li><a href="#battery-local"><span class="no">19</span><span class="pg"></span><b>배터리</b><small>PyBaMM 리튬이온 셀 성능·수명 예측</small></a></li></ol></div>
+  <div class="tg c-nuclear"><p class="chip">원자력<i>1</i></p><ol><li><a href="#shield-local"><span class="no">20</span><span class="pg"></span><b>차폐 계산기</b><small>방사선 차폐·선량 간이 계산</small></a></li></ol></div>
+  <div class="tg c-fun"><p class="chip">재미<i>1</i></p><ol><li><a href="#saju-local"><span class="no">21</span><span class="pg"></span><b>팀 밸런스 맵</b><small>사주·MBTI 궁합</small></a></li></ol></div>
+  <div class="tg c-toy"><p class="chip">토이<i>3</i></p><ol><li><a href="#persona-local"><span class="no">22</span><span class="pg"></span><b>Persona</b><small>AI 캐릭터 대화 (토이)</small></a></li><li><a href="#avatar-local"><span class="no">23</span><span class="pg"></span><b>Avatar</b><small>가상 캐릭터 그림·말하기·움직이기 영상</small></a></li><li><a href="#padong-local"><span class="no">24</span><span class="pg"></span><b>파동이</b><small>3D·2D 캐릭터 리그</small></a></li></ol></div>
+</div>
+</section>
 
-<section class="tool" id="agent-page-portal">
-  <p class="cat">포털</p>
-  <h2>에이전트 포털</h2>
-  <p>로그인한 뒤 로컬 LLM 도구를 검색·분류로 찾아 한 주소에서 엽니다.</p>
+<section class="tool c-portal" id="agent-page-portal">
+  <header class="th"><div class="th-meta"><p class="cat chip">포털</p><span class=th-n>5단계</span></div><span class="th-no">01</span><h2>에이전트 포털</h2><p class="one">로그인한 뒤 로컬 LLM 도구를 검색·분류로 찾아 한 주소에서 엽니다.</p></header>
   <div class="strip s2">
     <div><div class="frame inbox">메일</div><div class="cap">검색어</div></div>
     <div class="arr">→</div>
     <div><div class="frame"><img src="img/agent-page-portal-strip-r.png" alt=""></div><div class="cap">맞는 도구 카드</div></div>
   </div>
   <div class="steps">
-    <div class="step"><div class="t"><span class="n">1</span><p>아이디와 PIN을 넣고 <b>로그인</b>합니다. 처음이면 <b>처음이에요 (가입)</b>에서 만듭니다.</p></div><div class="frame"><img src="img/agent-page-portal-s1.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">2</span><p>검색창에 하고 싶은 일을 쓰고 Enter.</p></div><div class="frame"><img src="img/agent-page-portal-s2.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">3</span><p>카테고리 칩으로 범위를 좁힙니다.</p></div><div class="frame"><img src="img/agent-page-portal-s3.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">01</span><p>아이디와 PIN을 넣고 <b>로그인</b>합니다. 처음이면 <b>처음이에요 (가입)</b>에서 만듭니다.</p></div><div class="frame"><img src="img/agent-page-portal-s1.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">02</span><p>검색창에 하고 싶은 일을 쓰고 Enter.</p></div><div class="frame"><img src="img/agent-page-portal-s2.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">03</span><p>카테고리 칩으로 범위를 좁힙니다.</p></div><div class="frame"><img src="img/agent-page-portal-s3.png" alt=""></div></div>
     <div class="two">
-      <div class="step"><div class="t"><span class="n">4</span><p>카드에서 <b>열기</b>로 도구로 들어갑니다.</p></div><div class="frame"><img src="img/agent-page-portal-s4.png" alt=""></div></div>
-      <div class="step"><div class="t"><span class="n">5</span><p>도구 화면 오른쪽 위 <b>?</b>로 사용법을 봅니다.</p></div><div class="frame"><img src="img/agent-page-portal-s5.png" alt=""></div></div>
+      <div class="step"><div class="t"><span class="n">04</span><p>카드에서 <b>열기</b>로 도구로 들어갑니다.</p></div><div class="frame"><img src="img/agent-page-portal-s4.png" alt=""></div></div>
+      <div class="step"><div class="t"><span class="n">05</span><p>도구 화면 오른쪽 위 <b>?</b>로 사용법을 봅니다.</p></div><div class="frame"><img src="img/agent-page-portal-s5.png" alt=""></div></div>
     </div>
   </div>
 </section>
 
-<section class="tool" id="humanize-kr-local">
-  <p class="cat">문서</p>
-  <h2>Humanize KR</h2>
-  <p>한글 문장을 다듬고 원문과 바뀐 곳을 보여 줍니다.</p>
+<section class="tool c-doc" id="humanize-kr-local">
+  <header class="th"><div class="th-meta"><p class="cat chip">문서</p><span class=th-n>3단계</span></div><span class="th-no">02</span><h2>Humanize KR</h2><p class="one">한글 문장을 다듬고 원문과 바뀐 곳을 보여 줍니다.</p></header>
   <div class="strip s2">
     <div><div class="frame inbox">이번 주에는 사내 문서 자료 정리 작업이 진행되었습니다.<br>총 12건의 문서를 검토했으며, 이 과정에서 날짜 표기의 통일이 필요하다는 점을 확인했습니다.<br><br>보고자: 김동주 석사후연수생 / 인공지능응용연구실</div><div class="cap">입력한 내용</div></div>
     <div class="arr">→</div>
     <div><div class="frame inbox">이번 주에는 사내 문서 자료 정리 작업을 진행했습니다. 총 12건의 문서를 검토하며 날짜 표기를 통일할 필요가 있음을 확인했습니다. 또한 파일 이름을 정리해 자료 검색 시간을 줄였습니다. 앞으로도 이러한 개선을 지속적으로 추진할 필요가 있습니다. 다음 주에는 안내문 초안을 작성할 예정입니다.<br><br>보고자: 김동주 석사후연수생 / 인공지능응용연구실</div><div class="cap">실행 결과</div></div>
   </div>
-  <div class="steps"><div class="step"><div class="t"><span class="n">1</span><p>글을 붙여 넣고 장르와 경로를 고른 뒤 <b>윤문</b>을 누릅니다.</p></div><div class="frame"><img src="img/humanize-kr-local-s1.png" alt=""></div></div><div class="step"><div class="t"><span class="n">2</span><p><b>변경 비교</b>에서 바뀐 문장을 확인합니다.</p></div><div class="frame"><img src="img/humanize-kr-local-s2.png" alt=""></div></div><div class="step"><div class="t"><span class="n">3</span><p>윤문 결과를 읽고 <b>결과 복사</b>를 누릅니다.</p></div><div class="frame"><img src="img/humanize-kr-local-s3.png" alt=""></div></div></div>
+  <div class="steps"><div class="step"><div class="t"><span class="n">01</span><p>글을 붙여 넣고 장르와 경로를 고른 뒤 <b>윤문</b>을 누릅니다.</p></div><div class="frame"><img src="img/humanize-kr-local-s1.png" alt=""></div></div><div class="step"><div class="t"><span class="n">02</span><p><b>변경 비교</b>에서 바뀐 문장을 확인합니다.</p></div><div class="frame"><img src="img/humanize-kr-local-s2.png" alt=""></div></div><div class="step"><div class="t"><span class="n">03</span><p>윤문 결과를 읽고 <b>결과 복사</b>를 누릅니다.</p></div><div class="frame"><img src="img/humanize-kr-local-s3.png" alt=""></div></div></div>
 </section>
 
-<section class="tool" id="kordoc-local">
-  <p class="cat">문서</p>
-  <h2>kordoc</h2>
-  <p>문서를 요약하거나 질문에 답하고, 공문서 초안을 HWPX로 만듭니다.</p>
+<section class="tool c-doc" id="kordoc-local">
+  <header class="th"><div class="th-meta"><p class="cat chip">문서</p><span class=th-n>3단계</span></div><span class="th-no">03</span><h2>kordoc</h2><p class="one">문서를 요약하거나 질문에 답하고, 공문서 초안을 HWPX로 만듭니다.</p></header>
   <div class="strip s2">
     <div><div class="frame inbox">문서 자료 정리 시범운영 결과 보고서 초안<br>작성자: 인공지능응용연구실 김동주 석사후연수생<br>기간: 2026. 10. 5.~10. 9.<br>대상: 가상 문서 12건<br>수행: 파일명 통일, 날짜 표기 점검</div><div class="cap">입력한 내용</div></div>
     <div class="arr">→</div>
     <div><div class="frame inbox">문서 자료 정리 시범운영 결과 보고서<br>Ⅲ. 개선방안<br>- 기간: 2026. 10. 5. ~ 10. 9.<br>- 대상: 가상 문서 12건<br>Ⅴ. 행정사항<br>- 향후 계획: 2026. 10. 12. 안내문 배포 예정<br>- 작성자: 인공지능응용연구실 김동주 석사후연수생</div><div class="cap">실행 결과 (발췌)</div></div>
   </div>
-  <div class="steps"><div class="step"><div class="t"><span class="n">1</span><p>작업에서 <b>공문서 초안 → HWPX</b>를 고르고 프리셋 <b>보고서</b>를 고릅니다.</p></div><div class="frame"><img src="img/kordoc-local-s1.png" alt=""></div></div><div class="step"><div class="t"><span class="n">2</span><p>작성자와 작성할 내용을 적고 <b>실행</b>을 누릅니다.</p></div><div class="frame"><img src="img/kordoc-local-s2.png" alt=""></div></div><div class="step"><div class="t"><span class="n">3</span><p>초안을 읽고 <b>보고서.hwpx 내려받기</b>를 누릅니다.</p></div><div class="frame"><img src="img/kordoc-local-s3.png" alt=""></div></div></div>
+  <div class="steps"><div class="step"><div class="t"><span class="n">01</span><p>작업에서 <b>공문서 초안 → HWPX</b>를 고르고 프리셋 <b>보고서</b>를 고릅니다.</p></div><div class="frame"><img src="img/kordoc-local-s1.png" alt=""></div></div><div class="step"><div class="t"><span class="n">02</span><p>작성자와 작성할 내용을 적고 <b>실행</b>을 누릅니다.</p></div><div class="frame"><img src="img/kordoc-local-s2.png" alt=""></div></div><div class="step"><div class="t"><span class="n">03</span><p>초안을 읽고 <b>보고서.hwpx 내려받기</b>를 누릅니다.</p></div><div class="frame"><img src="img/kordoc-local-s3.png" alt=""></div></div></div>
 </section>
 
-<section class="tool" id="notebook-local">
-  <p class="cat">문서</p>
-  <h2>Notebook</h2>
-  <p>출처를 모아 질문하고 답변의 근거 문단을 확인합니다.</p>
+<section class="tool c-doc" id="notebook-local">
+  <header class="th"><div class="th-meta"><p class="cat chip">문서</p><span class=th-n>3단계</span></div><span class="th-no">04</span><h2>Notebook</h2><p class="one">출처를 모아 질문하고 답변의 근거 문단을 확인합니다.</p></header>
   <div class="strip s2">
     <div><div class="frame inbox">자료 정리 시범운영 안내<br>대상: 가상 문서 12건<br>담당자: 김동주 석사후연수생(인공지능응용연구실)<br>안내문 배포: 10월 12일<br>질문: 시범운영 담당자와 안내문 배포일은 언제인가요? 예산도 알려주세요.</div><div class="cap">입력한 내용</div></div>
     <div class="arr">→</div>
     <div><div class="frame inbox">시범운영 담당자는 김동주 석사후연수생(인공지능응용연구실)이며, 안내문 배포일은 10월 12일입니다 [1]. 예산은 출처에 없음(자료에 기재되지 않음) [1].</div><div class="cap">실행 결과</div></div>
   </div>
-  <div class="steps"><div class="step"><div class="t"><span class="n">1</span><p><b>+ 새로</b>로 노트북을 만들고 <b>글 붙여넣기</b>로 출처를 넣습니다.</p></div><div class="frame"><img src="img/notebook-local-s1.png" alt=""></div></div><div class="step"><div class="t"><span class="n">2</span><p>출처에 대해 묻고 <b>질문</b>을 누릅니다.</p></div><div class="frame"><img src="img/notebook-local-s2.png" alt=""></div></div><div class="step"><div class="t"><span class="n">3</span><p>답변의 인용 번호를 눌러 근거 문단을 확인합니다.</p></div><div class="frame"><img src="img/notebook-local-s3.png" alt=""></div></div></div>
+  <div class="steps"><div class="step"><div class="t"><span class="n">01</span><p><b>+ 새로</b>로 노트북을 만들고 <b>글 붙여넣기</b>로 출처를 넣습니다.</p></div><div class="frame"><img src="img/notebook-local-s1.png" alt=""></div></div><div class="step"><div class="t"><span class="n">02</span><p>출처에 대해 묻고 <b>질문</b>을 누릅니다.</p></div><div class="frame"><img src="img/notebook-local-s2.png" alt=""></div></div><div class="step"><div class="t"><span class="n">03</span><p>답변의 인용 번호를 눌러 근거 문단을 확인합니다.</p></div><div class="frame"><img src="img/notebook-local-s3.png" alt=""></div></div></div>
 </section>
 
-<section class="tool" id="writer-local">
-  <p class="cat">문서</p>
-  <h2>Writer</h2>
-  <p>글의 종류를 고르고 필요한 내용을 넣으면 문안을 만듭니다.</p>
+<section class="tool c-doc" id="writer-local">
+  <header class="th"><div class="th-meta"><p class="cat chip">문서</p><span class=th-n>3단계</span></div><span class="th-no">05</span><h2>Writer</h2><p class="one">글의 종류를 고르고 필요한 내용을 넣으면 문안을 만듭니다.</p></header>
   <div class="strip s2">
     <div><div class="frame inbox">제목: 자료 정리 시범운영 안내<br>내용: 가상 문서 12건의 파일명과 날짜 표기를 점검합니다. 문의: 김동주 석사후연수생(인공지능응용연구실)<br>일정: 2026. 10. 13.(화) ~ 10. 16.(금)<br>대상: 시범운영 참여자<br>요청: 10. 16.까지 수정 의견 전달</div><div class="cap">입력한 내용</div></div>
     <div class="arr">→</div>
     <div><div class="frame inbox">자료 정리 시범운영 안내<br>시범운영 참여자분들은 2026. 10. 13.(화)부터 10. 16.(금)까지 가상 문서 12건의 파일명과 날짜 표기를 점검해 주세요. 문의는 인공지능응용연구실 김동주 석사후연수생에게 하시면 됩니다. 10. 16.(금)까지 수정 의견을 전달해 주시기 바랍니다.</div><div class="cap">실행 결과 (2안)</div></div>
   </div>
-  <div class="steps"><div class="step"><div class="t"><span class="n">1</span><p><b>공문</b>에서 <b>사내 공지문</b>을 고릅니다.</p></div><div class="frame"><img src="img/writer-local-s1.png" alt=""></div></div><div class="step"><div class="t"><span class="n">2</span><p>제목·내용·일정·대상을 적고 <b>생성</b>을 누릅니다.</p></div><div class="frame"><img src="img/writer-local-s2.png" alt=""></div></div><div class="step"><div class="t"><span class="n">3</span><p><b>1안</b>과 <b>2안</b>을 비교하고 <b>복사</b>를 누릅니다.</p></div><div class="frame"><img src="img/writer-local-s3.png" alt=""></div></div></div>
+  <div class="steps"><div class="step"><div class="t"><span class="n">01</span><p><b>공문</b>에서 <b>사내 공지문</b>을 고릅니다.</p></div><div class="frame"><img src="img/writer-local-s1.png" alt=""></div></div><div class="step"><div class="t"><span class="n">02</span><p>제목·내용·일정·대상을 적고 <b>생성</b>을 누릅니다.</p></div><div class="frame"><img src="img/writer-local-s2.png" alt=""></div></div><div class="step"><div class="t"><span class="n">03</span><p><b>1안</b>과 <b>2안</b>을 비교하고 <b>복사</b>를 누릅니다.</p></div><div class="frame"><img src="img/writer-local-s3.png" alt=""></div></div></div>
 </section>
 
-<section class="tool" id="mail-local">
-  <p class="cat">문서</p>
-  <h2>메일</h2>
-  <p>요점을 넣어 업무 메일을 작성하거나 받은 메일에 회신을 만듭니다.</p>
+<section class="tool c-doc" id="mail-local">
+  <header class="th"><div class="th-meta"><p class="cat chip">문서</p><span class=th-n>4단계</span></div><span class="th-no">06</span><h2>메일</h2><p class="one">요점을 넣어 업무 메일을 작성하거나 받은 메일에 회신을 만듭니다.</p></header>
   <div class="strip s2">
     <div><div class="frame inbox">받는 사람: 박OO 과장 · 시범운영팀<br>요청: 안내문 초안 검토와 수정 의견<br>마감일: 2026. 10. 14.<br>배포 예정일: 10월 16일<br>보내는 사람: 김동주 석사후연수생 / 인공지능응용연구실</div><div class="cap">입력한 내용</div></div>
     <div class="arr">→</div>
     <div><div class="frame inbox">[요청] 가상 문서 안내문 초안 검토 요청<br><br>박OO 과장님, 안녕하십니까.<br>인공지능응용연구실 김동주입니다.<br>…<br>일정에 맞추어 진행될 수 있도록 10월 14일(수)까지 회신 주시면 감사하겠습니다.<br><br>--<br>김동주 석사후연수생 | 인공지능응용연구실<br>gggg8657@gmail.com</div><div class="cap">작성된 메일</div></div>
   </div>
-  <div class="steps"><div class="two"><div class="step"><div class="t"><span class="n">1</span><p>받는 사람을 적고 목적을 고릅니다.</p></div><div class="frame"><img src="img/mail-local-s1.png" alt=""></div></div><div class="step"><div class="t"><span class="n">2</span><p>핵심 내용과 마감일을 적습니다.</p></div><div class="frame"><img src="img/mail-local-s2.png" alt=""></div></div></div><div class="step"><div class="t"><span class="n">3</span><p>보내는 사람·서명을 한 번 채우고 <b>메일 작성</b>을 누릅니다.</p></div><div class="frame"><img src="img/mail-local-s3.png" alt=""></div></div><div class="step"><div class="t"><span class="n">4</span><p>제목을 고르고 본문을 확인한 뒤 <b>제목+본문 복사</b>를 누릅니다.</p></div><div class="frame"><img src="img/mail-local-s4.png" alt=""></div></div></div>
+  <div class="steps"><div class="two"><div class="step"><div class="t"><span class="n">01</span><p>받는 사람을 적고 목적을 고릅니다.</p></div><div class="frame"><img src="img/mail-local-s1.png" alt=""></div></div><div class="step"><div class="t"><span class="n">02</span><p>핵심 내용과 마감일을 적습니다.</p></div><div class="frame"><img src="img/mail-local-s2.png" alt=""></div></div></div><div class="step"><div class="t"><span class="n">03</span><p>보내는 사람·서명을 한 번 채우고 <b>메일 작성</b>을 누릅니다.</p></div><div class="frame"><img src="img/mail-local-s3.png" alt=""></div></div><div class="step"><div class="t"><span class="n">04</span><p>제목을 고르고 본문을 확인한 뒤 <b>제목+본문 복사</b>를 누릅니다.</p></div><div class="frame"><img src="img/mail-local-s4.png" alt=""></div></div></div>
 </section>
 
-<section class="tool" id="award-local">
-  <p class="cat">문서</p>
-  <h2>상장 생성기</h2>
-  <p>디자인과 수상 내용을 넣어 상장·표창장·감사장을 만듭니다.</p>
+<section class="tool c-doc" id="award-local">
+  <header class="th"><div class="th-meta"><p class="cat chip">문서</p><span class=th-n>4단계</span></div><span class="th-no">07</span><h2>상장 생성기</h2><p class="one">디자인과 수상 내용을 넣어 상장·표창장·감사장을 만듭니다.</p></header>
   <div class="strip s2">
     <div><div class="frame inbox">종류: 감사장 · 자료 정리 교육 강의<br>받는 분: 경영지원팀 박OO 과장<br>기관: 인공지능응용연구실<br>수여자: 교육 담당 김동주<br>번호: 2026-003</div><div class="cap">입력한 내용</div></div>
     <div class="arr">→</div>
     <div><div class="frame"><img src="img/award-local-result.png" alt="실행 결과"></div><div class="cap">상장 미리보기</div></div>
   </div>
-  <div class="steps"><div class="two"><div class="step"><div class="t"><span class="n">1</span><p>디자인과 상훈 종류를 고릅니다.</p></div><div class="frame"><img src="img/award-local-s1.png" alt=""></div></div><div class="step"><div class="t"><span class="n">2</span><p>수상자와 수상 문구를 적습니다.</p></div><div class="frame"><img src="img/award-local-s2.png" alt=""></div></div></div><div class="two"><div class="step"><div class="t"><span class="n">3</span><p>수여 일자·기관·수여자를 적고 직인을 고릅니다.</p></div><div class="frame"><img src="img/award-local-s3.png" alt=""></div></div><div class="step"><div class="t"><span class="n">4</span><p>미리보기를 확인하고 <b>PDF 내려받기</b>를 누릅니다.</p></div><div class="frame"><img src="img/award-local-s4.png" alt=""></div></div></div></div>
+  <div class="steps"><div class="two"><div class="step"><div class="t"><span class="n">01</span><p>디자인과 상훈 종류를 고릅니다.</p></div><div class="frame"><img src="img/award-local-s1.png" alt=""></div></div><div class="step"><div class="t"><span class="n">02</span><p>수상자와 수상 문구를 적습니다.</p></div><div class="frame"><img src="img/award-local-s2.png" alt=""></div></div></div><div class="two"><div class="step"><div class="t"><span class="n">03</span><p>수여 일자·기관·수여자를 적고 직인을 고릅니다.</p></div><div class="frame"><img src="img/award-local-s3.png" alt=""></div></div><div class="step"><div class="t"><span class="n">04</span><p>미리보기를 확인하고 <b>PDF 내려받기</b>를 누릅니다.</p></div><div class="frame"><img src="img/award-local-s4.png" alt=""></div></div></div></div>
 </section>
 
-<section class="tool" id="review-local">
-  <p class="cat">문서</p>
-  <h2>논문 리뷰</h2>
-  <p>원고를 올리면 심사 지적과 원문 인용을 보여 줍니다.</p>
+<section class="tool c-doc" id="review-local">
+  <header class="th"><div class="th-meta"><p class="cat chip">문서</p><span class=th-n>5단계</span></div><span class="th-no">08</span><h2>논문 리뷰</h2><p class="one">원고를 올리면 심사 지적과 원문 인용을 보여 줍니다.</p></header>
   <div class="strip s2">
     <div><div class="frame inbox">원고: 파일명 규칙이 사내 문서 검색 정확도에 미치는 영향<br>저자: 김동주 (인공지능응용연구실)<br>초록: 검색 정확도 97.3%<br>결과: 검색 정확도 95.1%<br>표준편차와 신뢰구간은 계산하지 않았다.</div><div class="cap">입력한 내용</div></div>
     <div class="arr">→</div>
     <div><div class="frame"><img src="img/review-local-result.png" alt="실행 결과"></div><div class="cap">실행 결과</div></div>
   </div>
   <div class="steps">
-    <div class="step"><div class="t"><span class="n">1</span><p>원고를 올리고 읽어 들인 파일과 제목·저자를 확인합니다.</p></div><div class="frame"><img src="img/review-local-s1.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">2</span><p>리뷰 설정을 고른 뒤 <b>LLM 리뷰 시작</b>을 누릅니다.</p></div><div class="frame"><img src="img/review-local-s2.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">3</span><p>지적을 읽고 인용 문장을 누릅니다.</p></div><div class="frame"><img src="img/review-local-s3.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">4</span><p>원문에서 표시된 문장을 확인합니다.</p></div><div class="frame"><img src="img/review-local-s4.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">5</span><p><b>Markdown</b>·<b>DOCX</b>·<b>TXT</b> 중 필요한 형식으로 받습니다.</p></div><div class="frame"><img src="img/review-local-s5.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">01</span><p>원고를 올리고 읽어 들인 파일과 제목·저자를 확인합니다.</p></div><div class="frame"><img src="img/review-local-s1.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">02</span><p>리뷰 설정을 고른 뒤 <b>LLM 리뷰 시작</b>을 누릅니다.</p></div><div class="frame"><img src="img/review-local-s2.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">03</span><p>지적을 읽고 인용 문장을 누릅니다.</p></div><div class="frame"><img src="img/review-local-s3.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">04</span><p>원문에서 표시된 문장을 확인합니다.</p></div><div class="frame"><img src="img/review-local-s4.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">05</span><p><b>Markdown</b>·<b>DOCX</b>·<b>TXT</b> 중 필요한 형식으로 받습니다.</p></div><div class="frame"><img src="img/review-local-s5.png" alt=""></div></div>
   </div>
 </section>
 
-<section class="tool" id="weekly-local">
-  <p class="cat">문서</p>
-  <h2>주간보고</h2>
-  <p>이번 주 메모를 수행업무와 향후 계획으로 정리합니다.</p>
+<section class="tool c-doc" id="weekly-local">
+  <header class="th"><div class="th-meta"><p class="cat chip">문서</p><span class=th-n>3단계</span></div><span class="th-no">09</span><h2>주간보고</h2><p class="one">이번 주 메모를 수행업무와 향후 계획으로 정리합니다.</p></header>
   <div class="strip s2">
     <div><div class="frame inbox">[자료 정리 교육 준비]<br>10/12 교육 준비 회의, 일정·담당 확정<br>10/13~10/14 실습 예제 파일 점검<br>10/16 교육 안내문 배포<br>다음 주: 10/20 자료 정리 교육 (3층 세미나실)</div><div class="cap">입력한 내용</div></div>
     <div class="arr">→</div>
     <div><div class="frame"><img src="img/weekly-local-result.png" alt="실행 결과"></div><div class="cap">주간보고 미리보기</div></div>
   </div>
-  <div class="steps"><div class="step"><div class="t"><span class="n">1</span><p>작성자와 주차를 확인하고 메모를 적은 뒤 <b>항목으로 정리 (LLM)</b>를 누릅니다.</p></div><div class="frame"><img src="img/weekly-local-s1.png" alt=""></div></div><div class="step"><div class="t"><span class="n">2</span><p>수행업무와 향후 계획의 과제명·기간·내용을 고칩니다.</p></div><div class="frame"><img src="img/weekly-local-s2.png" alt=""></div></div><div class="step"><div class="t"><span class="n">3</span><p>미리보기를 확인하고 <b>HWPX</b>나 <b>DOCX</b>로 받습니다.</p></div><div class="frame"><img src="img/weekly-local-s3.png" alt=""></div></div></div>
+  <div class="steps"><div class="step"><div class="t"><span class="n">01</span><p>작성자와 주차를 확인하고 메모를 적은 뒤 <b>항목으로 정리 (LLM)</b>를 누릅니다.</p></div><div class="frame"><img src="img/weekly-local-s1.png" alt=""></div></div><div class="step"><div class="t"><span class="n">02</span><p>수행업무와 향후 계획의 과제명·기간·내용을 고칩니다.</p></div><div class="frame"><img src="img/weekly-local-s2.png" alt=""></div></div><div class="step"><div class="t"><span class="n">03</span><p>미리보기를 확인하고 <b>HWPX</b>나 <b>DOCX</b>로 받습니다.</p></div><div class="frame"><img src="img/weekly-local-s3.png" alt=""></div></div></div>
 </section>
 
-<section class="tool" id="meeting-local">
-  <p class="cat">회의</p>
-  <h2>Meeting</h2>
-  <p>녹음 파일을 올리면 화자별로 분리해 받아쓰고 회의록과 액션아이템을 정리합니다.</p>
+<section class="tool c-meet" id="meeting-local">
+  <header class="th"><div class="th-meta"><p class="cat chip">회의</p><span class=th-n>4단계</span></div><span class="th-no">10</span><h2>Meeting</h2><p class="one">녹음 파일을 올리면 화자별로 분리해 받아쓰고 회의록과 액션아이템을 정리합니다.</p></header>
   <div class="strip s2">
     <div><pre>화자1  00:00  인공지능 응용 연구실 김동주입니다.
 화자2  00:13  교육은 다음 주 화요일 오후 2시입니다.
@@ -242,36 +367,32 @@ pre{font:13px/1.6 var(--mono);background:var(--soft);border-radius:6px;padding:1
   2. 예제 파일 준비 (박OO 과장, 수요일)</pre><div class="cap">회의록 및 액션아이템</div></div>
   </div>
   <div class="steps">
-    <div class="step"><div class="t"><span class="n">1</span><p>녹음 파일을 올리고 화자 수를 넣은 뒤 <b>1. 전사 + 화자 분리</b>를 누릅니다.</p></div><div class="frame"><img src="img/meeting-local-s1.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">2</span><p>재생 버튼으로 목소리를 확인해 화자 이름을 적고 제목·일시·장소를 입력합니다.</p></div><div class="frame"><img src="img/meeting-local-s2.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">3</span><p><b>3. 회의록 생성</b>을 누르면 안건별 논의 내용과 결정사항, 액션아이템이 정리됩니다.</p></div><div class="frame"><img src="img/meeting-local-s3.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">4</span><p><b>인사이트</b> 탭에서 안건별 핵심과 리스크를 확인하고 Markdown이나 HWPX로 받습니다.</p></div><div class="frame"><img src="img/meeting-local-s4.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">01</span><p>녹음 파일을 올리고 화자 수를 넣은 뒤 <b>1. 전사 + 화자 분리</b>를 누릅니다.</p></div><div class="frame"><img src="img/meeting-local-s1.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">02</span><p>재생 버튼으로 목소리를 확인해 화자 이름을 적고 제목·일시·장소를 입력합니다.</p></div><div class="frame"><img src="img/meeting-local-s2.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">03</span><p><b>3. 회의록 생성</b>을 누르면 안건별 논의 내용과 결정사항, 액션아이템이 정리됩니다.</p></div><div class="frame"><img src="img/meeting-local-s3.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">04</span><p><b>인사이트</b> 탭에서 안건별 핵심과 리스크를 확인하고 Markdown이나 HWPX로 받습니다.</p></div><div class="frame"><img src="img/meeting-local-s4.png" alt=""></div></div>
   </div>
 </section>
 
-<section class="tool" id="tts-local">
-  <p class="cat">음성</p>
-  <h2>TTS</h2>
-  <p>글을 넣으면 한국어 음성 파일로 만들어 줍니다.</p>
+<section class="tool c-voice" id="tts-local">
+  <header class="th"><div class="th-meta"><p class="cat chip">음성</p><span class=th-n>4단계</span></div><span class="th-no">11</span><h2>TTS</h2><p class="one">글을 넣으면 한국어 음성 파일로 만들어 줍니다.</p></header>
   <div class="strip s2">
     <div><div class="frame inbox">안녕하세요, 인공지능응용연구실 김동주입니다. 다음 주 화요일 오후 두 시에 자료 정리 교육이 있습니다.</div><div class="cap">읽을 글</div></div>
     <div class="arr">→</div>
     <div><div class="frame inbox">▶ 0:00 / 0:09 · 9.36초 분량 · WAV</div><div class="cap">합성된 한국어 음성</div></div>
   </div>
   <div class="steps">
-    <div class="step"><div class="t"><span class="n">1</span><p>읽을 글을 입력창에 적습니다.</p></div><div class="frame"><img src="img/tts-local-s1.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">01</span><p>읽을 글을 입력창에 적습니다.</p></div><div class="frame"><img src="img/tts-local-s1.png" alt=""></div></div>
     <div class="two">
-      <div class="step"><div class="t"><span class="n">2</span><p>속도와 파일 형식을 고르고 <b>합성</b>을 누릅니다.</p></div><div class="frame"><img src="img/tts-local-s2.png" alt=""></div></div>
-      <div class="step"><div class="t"><span class="n">3</span><p>플레이어로 듣고 <b>내려받기</b>로 저장합니다.</p></div><div class="frame"><img src="img/tts-local-s3.png" alt=""></div></div>
+      <div class="step"><div class="t"><span class="n">02</span><p>속도와 파일 형식을 고르고 <b>합성</b>을 누릅니다.</p></div><div class="frame"><img src="img/tts-local-s2.png" alt=""></div></div>
+      <div class="step"><div class="t"><span class="n">03</span><p>플레이어로 듣고 <b>내려받기</b>로 저장합니다.</p></div><div class="frame"><img src="img/tts-local-s3.png" alt=""></div></div>
     </div>
-    <div class="step"><div class="t"><span class="n">4</span><p><b>이전 합성 기록</b>을 누르면 지난 결과를 다시 재생할 수 있습니다.</p></div><div class="frame"><img src="img/tts-local-s4.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">04</span><p><b>이전 합성 기록</b>을 누르면 지난 결과를 다시 재생할 수 있습니다.</p></div><div class="frame"><img src="img/tts-local-s4.png" alt=""></div></div>
   </div>
 </section>
 
-<section class="tool" id="diagram-local">
-  <p class="cat">그림</p>
-  <h2>Diagram</h2>
-  <p>말로 설명하면 Mermaid 다이어그램을 그려 주고, 대화로 수정합니다.</p>
+<section class="tool c-art" id="diagram-local">
+  <header class="th"><div class="th-meta"><p class="cat chip">그림</p><span class=th-n>4단계</span></div><span class="th-no">12</span><h2>Diagram</h2><p class="one">말로 설명하면 Mermaid 다이어그램을 그려 주고, 대화로 수정합니다.</p></header>
   <div class="strip s2">
     <div><div class="frame inbox">학회 출장비 정산 결재 절차: 김동주 석사후연수생이 정산서 기안 → 박OO 선임 검토 → 인공지능응용연구실장 승인 → 경비 지급. 검토나 승인에서 반려되면 김동주가 수정 후 재기안.</div><div class="cap">자연어 설명</div></div>
     <div class="arr">→</div>
@@ -279,18 +400,16 @@ pre{font:13px/1.6 var(--mono);background:var(--soft);border-radius:6px;padding:1
   </div>
   <div class="steps">
     <div class="two">
-      <div class="step"><div class="t"><span class="n">1</span><p>유형을 고르고 그릴 내용을 설명합니다. 예시 버튼을 눌러도 됩니다.</p></div><div class="frame"><img src="img/diagram-local-s1.png" alt=""></div></div>
-      <div class="step"><div class="t"><span class="n">2</span><p><b>그리기</b>를 누르면 오른쪽에 다이어그램이 그려집니다.</p></div><div class="frame"><img src="img/diagram-local-s2.png" alt=""></div></div>
+      <div class="step"><div class="t"><span class="n">01</span><p>유형을 고르고 그릴 내용을 설명합니다. 예시 버튼을 눌러도 됩니다.</p></div><div class="frame"><img src="img/diagram-local-s1.png" alt=""></div></div>
+      <div class="step"><div class="t"><span class="n">02</span><p><b>그리기</b>를 누르면 오른쪽에 다이어그램이 그려집니다.</p></div><div class="frame"><img src="img/diagram-local-s2.png" alt=""></div></div>
     </div>
-    <div class="step"><div class="t"><span class="n">3</span><p>대화창에 고칠 점을 쓰면 다시 그려 줍니다. 아래 Mermaid 소스를 직접 고쳐도 됩니다.</p></div><div class="frame"><img src="img/diagram-local-s3.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">4</span><p><b>SVG</b>나 <b>PNG</b>를 눌러 이미지로 저장합니다.</p></div><div class="frame"><img src="img/diagram-local-s4.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">03</span><p>대화창에 고칠 점을 쓰면 다시 그려 줍니다. 아래 Mermaid 소스를 직접 고쳐도 됩니다.</p></div><div class="frame"><img src="img/diagram-local-s3.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">04</span><p><b>SVG</b>나 <b>PNG</b>를 눌러 이미지로 저장합니다.</p></div><div class="frame"><img src="img/diagram-local-s4.png" alt=""></div></div>
   </div>
 </section>
 
-<section class="tool" id="sketch-local">
-  <p class="cat">그림</p>
-  <h2>Sketch</h2>
-  <p>손그림 사진을 올리면 구조를 읽어 논문 스타일 다이어그램으로 다시 그립니다.</p>
+<section class="tool c-art" id="sketch-local">
+  <header class="th"><div class="th-meta"><p class="cat chip">그림</p><span class=th-n>4단계</span></div><span class="th-no">13</span><h2>Sketch</h2><p class="one">손그림 사진을 올리면 구조를 읽어 논문 스타일 다이어그램으로 다시 그립니다.</p></header>
   <div class="strip s2">
     <div><div class="frame"><img src="img/sketch-local-in.png" alt="설문 응답 분석 흐름 손그림"></div><div class="cap">손그림 사진</div></div>
     <div class="arr">→</div>
@@ -298,18 +417,16 @@ pre{font:13px/1.6 var(--mono);background:var(--soft);border-radius:6px;padding:1
   </div>
   <div class="steps">
     <div class="two">
-      <div class="step"><div class="t"><span class="n">1</span><p>손그림 사진을 올리고 <b>1. 읽기</b>를 누릅니다.</p></div><div class="frame"><img src="img/sketch-local-s1.png" alt=""></div></div>
-      <div class="step"><div class="t"><span class="n">2</span><p>읽은 글자와 연결을 확인해 틀린 곳을 고치고 <b>2. 확인 → 방향 정하기</b>를 누릅니다.</p></div><div class="frame"><img src="img/sketch-local-s2.png" alt=""></div></div>
+      <div class="step"><div class="t"><span class="n">01</span><p>손그림 사진을 올리고 <b>1. 읽기</b>를 누릅니다.</p></div><div class="frame"><img src="img/sketch-local-s1.png" alt=""></div></div>
+      <div class="step"><div class="t"><span class="n">02</span><p>읽은 글자와 연결을 확인해 틀린 곳을 고치고 <b>2. 확인 → 방향 정하기</b>를 누릅니다.</p></div><div class="frame"><img src="img/sketch-local-s2.png" alt=""></div></div>
     </div>
-    <div class="step"><div class="t"><span class="n">3</span><p><b>원본 그대로 재현</b> 같은 그리는 방식을 고르면 스타일과 유형을 추천해 줍니다. 필요하면 바꾸고 <b>4. 그리기</b>를 누릅니다.</p></div><div class="frame"><img src="img/sketch-local-s3.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">4</span><p><b>SVG</b>나 <b>PNG</b>로 내려받습니다.</p></div><div class="frame"><img src="img/sketch-local-s4.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">03</span><p><b>원본 그대로 재현</b> 같은 그리는 방식을 고르면 스타일과 유형을 추천해 줍니다. 필요하면 바꾸고 <b>4. 그리기</b>를 누릅니다.</p></div><div class="frame"><img src="img/sketch-local-s3.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">04</span><p><b>SVG</b>나 <b>PNG</b>로 내려받습니다.</p></div><div class="frame"><img src="img/sketch-local-s4.png" alt=""></div></div>
   </div>
 </section>
 
-<section class="tool" id="agent-cad-local">
-  <p class="cat">그림</p>
-  <h2>CAD Agent</h2>
-  <p>말로 3D 부품을 요청하면 모델과 도면을 만들고, 이어서 수정·파일로 받을 수 있습니다.</p>
+<section class="tool c-art" id="agent-cad-local">
+  <header class="th"><div class="th-meta"><p class="cat chip">그림</p><span class=th-n>5단계</span></div><span class="th-no">14</span><h2>CAD Agent</h2><p class="one">말로 3D 부품을 요청하면 모델과 도면을 만들고, 이어서 수정·파일로 받을 수 있습니다.</p></header>
   <div class="strip s2">
     <div><div class="frame inbox">L형 카메라 마운트 브래킷: 바닥 다리 60, 세운 다리 45, 폭 40, 두께 4, 알루미늄. 세운 다리 중앙에 Ø6.5 카메라 나사 구멍, 바닥에 Ø5.5 구멍 2개. 부품명: 카메라 마운트 브래킷 (설계 김동주)</div><div class="cap">요청</div></div>
     <div class="arr">→</div>
@@ -317,21 +434,19 @@ pre{font:13px/1.6 var(--mono);background:var(--soft);border-radius:6px;padding:1
   </div>
   <div class="steps">
     <div class="two">
-    <div class="step"><div class="t"><span class="n">1</span><p>요청을 쓰고 <b>실행</b>을 누릅니다. 예시 버튼을 눌러도 됩니다.</p></div><div class="frame"><img src="img/agent-cad-local-s1.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">2</span><p><b>3D</b> 탭에서 모양을 돌려 보며 확인합니다.</p></div><div class="frame"><img src="img/agent-cad-local-s2.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">01</span><p>요청을 쓰고 <b>실행</b>을 누릅니다. 예시 버튼을 눌러도 됩니다.</p></div><div class="frame"><img src="img/agent-cad-local-s1.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">02</span><p><b>3D</b> 탭에서 모양을 돌려 보며 확인합니다.</p></div><div class="frame"><img src="img/agent-cad-local-s2.png" alt=""></div></div>
     </div>
-    <div class="step"><div class="t"><span class="n">3</span><p><b>도면</b> 탭에는 3면도와 표제란이 들어간 부품도가 나옵니다.</p></div><div class="frame"><img src="img/agent-cad-local-s5.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">03</span><p><b>도면</b> 탭에는 3면도와 표제란이 들어간 부품도가 나옵니다.</p></div><div class="frame"><img src="img/agent-cad-local-s5.png" alt=""></div></div>
     <div class="two">
-    <div class="step"><div class="t"><span class="n">4</span><p>같은 칸에 수정을 쓰면 새 리비전(R01…)이 생깁니다.</p></div><div class="frame"><img src="img/agent-cad-local-s3.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">5</span><p><b>파일</b> 탭에서 STEP·STL·DXF 등을 받습니다.</p></div><div class="frame"><img src="img/agent-cad-local-s4.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">04</span><p>같은 칸에 수정을 쓰면 새 리비전(R01…)이 생깁니다.</p></div><div class="frame"><img src="img/agent-cad-local-s3.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">05</span><p><b>파일</b> 탭에서 STEP·STL·DXF 등을 받습니다.</p></div><div class="frame"><img src="img/agent-cad-local-s4.png" alt=""></div></div>
     </div>
   </div>
 </section>
 
-<section class="tool" id="sql-local">
-  <p class="cat">데이터</p>
-  <h2>SQL (demoDB)</h2>
-  <p>질문을 쓰면 SQL을 만들어 demoDB에서 표와 차트로 보여 줍니다.</p>
+<section class="tool c-data" id="sql-local">
+  <header class="th"><div class="th-meta"><p class="cat chip">데이터</p><span class=th-n>4단계</span></div><span class="th-no">15</span><h2>SQL (demoDB)</h2><p class="one">질문을 쓰면 SQL을 만들어 demoDB에서 표와 차트로 보여 줍니다.</p></header>
   <div class="strip s2">
     <div><div class="frame inbox">2025년 집행 항목별 금액 합계를 큰 순서로 (김동주 주간보고용)</div><div class="cap">질문</div></div>
     <div class="arr">→</div>
@@ -339,18 +454,16 @@ pre{font:13px/1.6 var(--mono);background:var(--soft);border-radius:6px;padding:1
   </div>
   <div class="steps">
     <div class="two">
-    <div class="step"><div class="t"><span class="n">1</span><p>왼쪽에서 테이블과 컬럼을 확인합니다. 설명을 적고 <b>설명 저장</b>을 누르면 질문할 때 반영됩니다.</p></div><div class="frame"><img src="img/sql-local-s1.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">2</span><p>궁금한 것을 문장으로 쓰고 <b>질문</b>을 누릅니다.</p></div><div class="frame"><img src="img/sql-local-s2.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">01</span><p>왼쪽에서 테이블과 컬럼을 확인합니다. 설명을 적고 <b>설명 저장</b>을 누르면 질문할 때 반영됩니다.</p></div><div class="frame"><img src="img/sql-local-s1.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">02</span><p>궁금한 것을 문장으로 쓰고 <b>질문</b>을 누릅니다.</p></div><div class="frame"><img src="img/sql-local-s2.png" alt=""></div></div>
     </div>
-    <div class="step"><div class="t"><span class="n">3</span><p>만들어진 SQL을 실행한 결과가 차트와 표로 나옵니다.</p></div><div class="frame"><img src="img/sql-local-s3.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">4</span><p><b>SQL 보기 / 수정 후 재실행</b>에서 SQL과 차트 종류를 고쳐 <b>재실행</b>하거나 <b>CSV 내려받기</b>로 받습니다.</p></div><div class="frame"><img src="img/sql-local-s4.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">03</span><p>만들어진 SQL을 실행한 결과가 차트와 표로 나옵니다.</p></div><div class="frame"><img src="img/sql-local-s3.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">04</span><p><b>SQL 보기 / 수정 후 재실행</b>에서 SQL과 차트 종류를 고쳐 <b>재실행</b>하거나 <b>CSV 내려받기</b>로 받습니다.</p></div><div class="frame"><img src="img/sql-local-s4.png" alt=""></div></div>
   </div>
 </section>
 
-<section class="tool" id="chart-local">
-  <p class="cat">데이터</p>
-  <h2>그래프</h2>
-  <p>표를 넣으면 차트 후보를 그려 주고, 고른 차트를 수정 가능한 문서로 만들어 줍니다.</p>
+<section class="tool c-data" id="chart-local">
+  <header class="th"><div class="th-meta"><p class="cat chip">데이터</p><span class=th-n>4단계</span></div><span class="th-no">16</span><h2>그래프</h2><p class="one">표를 넣으면 차트 후보를 그려 주고, 고른 차트를 수정 가능한 문서로 만들어 줍니다.</p></header>
   <div class="strip s2">
     <div><pre>분기    웹      모바일   메신저
 1분기   1,240   2,310    860
@@ -361,17 +474,15 @@ pre{font:13px/1.6 var(--mono);background:var(--soft);border-radius:6px;padding:1
     <div><div class="frame"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 440" role="img" aria-label="2025 분기별 전체 이용자 수 및 구성" font-family="'Pretendard','Malgun Gothic','맑은 고딕','Apple SD Gothic Neo','Noto Sans KR','Noto Sans CJK KR',sans-serif" style="font-variant-numeric:tabular-nums"><rect width="720" height="440" fill="#ffffff"></rect><text x="18.0" y="33.0" font-size="17" fill="#0b0b0b" text-anchor="start" font-weight="600">2025 분기별 전체 이용자 수 및 구성</text><text x="18.0" y="54.0" font-size="12.5" fill="#52514e" text-anchor="start">출처: gggg8657 집계 · 2025년 기준</text><rect x="18.0" y="67.0" width="13" height="12" rx="3" fill="#2a78d6"></rect><text x="38.0" y="77.5" font-size="12" fill="#52514e" text-anchor="start">웹</text><rect x="64.0" y="67.0" width="13" height="12" rx="3" fill="#eb6834"></rect><text x="84.0" y="77.5" font-size="12" fill="#52514e" text-anchor="start">모바일</text><rect x="134.0" y="67.0" width="13" height="12" rx="3" fill="#1baf7a"></rect><text x="154.0" y="77.5" font-size="12" fill="#52514e" text-anchor="start">메신저</text><text x="18.0" y="97.0" font-size="12" fill="#52514e" text-anchor="start">단위: 명</text><text x="48.2" y="384.0" font-size="11.5" fill="#898781" text-anchor="end">0</text><line x1="55.2" y1="312.2" x2="702.0" y2="312.2" stroke="#e1e0d9" stroke-width="1"></line><text x="48.2" y="316.2" font-size="11.5" fill="#898781" text-anchor="end">2,000</text><line x1="55.2" y1="244.5" x2="702.0" y2="244.5" stroke="#e1e0d9" stroke-width="1"></line><text x="48.2" y="248.5" font-size="11.5" fill="#898781" text-anchor="end">4,000</text><line x1="55.2" y1="176.8" x2="702.0" y2="176.8" stroke="#e1e0d9" stroke-width="1"></line><text x="48.2" y="180.8" font-size="11.5" fill="#898781" text-anchor="end">6,000</text><line x1="55.2" y1="109.0" x2="702.0" y2="109.0" stroke="#e1e0d9" stroke-width="1"></line><text x="48.2" y="113.0" font-size="11.5" fill="#898781" text-anchor="end">8,000</text><line x1="55.2" y1="380.0" x2="702.0" y2="380.0" stroke="#c3c2b7" stroke-width="1"></line><text x="136.1" y="396.0" font-size="11.5" fill="#898781" text-anchor="middle">1분기</text><text x="297.8" y="396.0" font-size="11.5" fill="#898781" text-anchor="middle">2분기</text><text x="459.5" y="396.0" font-size="11.5" fill="#898781" text-anchor="middle">3분기</text><text x="621.2" y="396.0" font-size="11.5" fill="#898781" text-anchor="middle">4분기</text><text x="378.6" y="416.0" font-size="12" fill="#52514e" text-anchor="middle">분기</text><path d="M122.1,340.0h28.0v40.0h-28.0Z" fill="#2a78d6" data-tip="1분기 · 웹 · 1,240 명"></path><path d="M122.1,261.7h28.0v76.3h-28.0Z" fill="#eb6834" data-tip="1분기 · 모바일 · 2,310 명"></path><path d="M122.1,232.6h28.0v27.1h-28.0Z" fill="#1baf7a" data-tip="1분기 · 메신저 · 860 명"></path><text x="136.1" y="225.6" font-size="11" fill="#0b0b0b" text-anchor="middle">4,410</text><path d="M283.8,342.0h28.0v38.0h-28.0Z" fill="#2a78d6" data-tip="2분기 · 웹 · 1,180 명"></path><path d="M283.8,250.9h28.0v89.1h-28.0Z" fill="#eb6834" data-tip="2분기 · 모바일 · 2,690 명"></path><path d="M283.8,216.4h28.0v32.6h-28.0Z" fill="#1baf7a" data-tip="2분기 · 메신저 · 1,020 명"></path><text x="297.8" y="209.4" font-size="11" fill="#0b0b0b" text-anchor="middle">4,890</text><path d="M445.5,345.1h28.0v34.9h-28.0Z" fill="#2a78d6" data-tip="3분기 · 웹 · 1,090 명"></path><path d="M445.5,241.8h28.0v101.3h-28.0Z" fill="#eb6834" data-tip="3분기 · 모바일 · 3,050 명"></path><path d="M445.5,197.4h28.0v42.4h-28.0Z" fill="#1baf7a" data-tip="3분기 · 메신저 · 1,310 명"></path><text x="459.5" y="190.4" font-size="11" fill="#0b0b0b" text-anchor="middle">5,450</text><path d="M607.2,347.4h28.0v32.6h-28.0Z" fill="#2a78d6" data-tip="4분기 · 웹 · 1,020 명"></path><path d="M607.2,231.6h28.0v113.9h-28.0Z" fill="#eb6834" data-tip="4분기 · 모바일 · 3,420 명"></path><path d="M607.2,178.1h28.0v51.5h-28.0Z" fill="#1baf7a" data-tip="4분기 · 메신저 · 1,580 명"></path><text x="621.2" y="171.1" font-size="11" fill="#0b0b0b" text-anchor="middle">6,020</text></svg></div><div class="cap">파워포인트·엑셀·워드 차트 (값 수정 가능)</div></div>
   </div>
   <div class="steps">
-    <div class="step"><div class="t"><span class="n">1</span><p>표를 붙여 넣고 <b>표 읽기</b>.</p></div><div class="frame"><img src="img/chart-local-c1.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">2</span><p><b>그래프 후보 만들기</b>를 누르고, 마음에 드는 것에 <b>문서에 담기</b>를 체크합니다.</p></div><div class="frame"><img src="img/chart-local-c2.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">3</span><p><b>편집</b>을 눌러 부제(출처), 종류, 색 등을 고칩니다.</p></div><div class="frame"><img src="img/chart-local-c3.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">4</span><p>파일 형식을 누르면 차트가 들어간 문서가 만들어집니다. 차트를 우클릭해 <b>데이터 편집</b>하면 값을 고칠 수 있습니다.</p></div><div class="frame"><img src="img/chart-local-c4.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">01</span><p>표를 붙여 넣고 <b>표 읽기</b>.</p></div><div class="frame"><img src="img/chart-local-c1.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">02</span><p><b>그래프 후보 만들기</b>를 누르고, 마음에 드는 것에 <b>문서에 담기</b>를 체크합니다.</p></div><div class="frame"><img src="img/chart-local-c2.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">03</span><p><b>편집</b>을 눌러 부제(출처), 종류, 색 등을 고칩니다.</p></div><div class="frame"><img src="img/chart-local-c3.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">04</span><p>파일 형식을 누르면 차트가 들어간 문서가 만들어집니다. 차트를 우클릭해 <b>데이터 편집</b>하면 값을 고칠 수 있습니다.</p></div><div class="frame"><img src="img/chart-local-c4.png" alt=""></div></div>
   </div>
 </section>
 
-<section class="tool" id="digitizer-local">
-  <p class="cat">데이터</p>
-  <h2>그래프 디지타이저</h2>
-  <p>그림이나 PDF를 넣으면 그래프 값을 표로 만들어 줍니다.</p>
+<section class="tool c-data" id="digitizer-local">
+  <header class="th"><div class="th-meta"><p class="cat chip">데이터</p><span class=th-n>4단계</span></div><span class="th-no">17</span><h2>그래프 디지타이저</h2><p class="one">그림이나 PDF를 넣으면 그래프 값을 표로 만들어 줍니다.</p></header>
   <div class="strip s2">
     <div><div class="frame"><img src="img/digitizer-local-in.png" alt="논문 그림"></div><div class="cap">논문 그림 (Nature Commun. 16, 988, Fig. 6e)</div></div>
     <div class="arr">→</div>
@@ -386,20 +497,18 @@ pre{font:13px/1.6 var(--mono);background:var(--soft);border-radius:6px;padding:1
   </div>
   <div class="steps">
     <div class="two">
-      <div class="step"><div class="t"><span class="n">1</span><p>PDF를 올리고 그래프가 있는 쪽을 고른 뒤 <b>이 쪽 불러오기</b>.</p></div><div class="frame"><img src="img/digitizer-local-s1.png" alt=""></div></div>
-      <div class="step"><div class="t"><span class="n">2</span><p>찾아낸 그래프 중 하나를 누릅니다.</p></div><div class="frame"><img src="img/digitizer-local-s2.png" alt=""></div></div>
+      <div class="step"><div class="t"><span class="n">01</span><p>PDF를 올리고 그래프가 있는 쪽을 고른 뒤 <b>이 쪽 불러오기</b>.</p></div><div class="frame"><img src="img/digitizer-local-s1.png" alt=""></div></div>
+      <div class="step"><div class="t"><span class="n">02</span><p>찾아낸 그래프 중 하나를 누릅니다.</p></div><div class="frame"><img src="img/digitizer-local-s2.png" alt=""></div></div>
     </div>
     <div class="two">
-      <div class="step"><div class="t"><span class="n">3</span><p>값을 읽은 자리가 원본 위에 표시됩니다. 맞는지 확인합니다.</p></div><div class="frame"><img src="img/digitizer-local-s3.png" alt=""></div></div>
-      <div class="step"><div class="t"><span class="n">4</span><p><b>이름</b>을 정하고 <b>CSV</b>나 <b>엑셀</b>로 받습니다.</p></div><div class="frame"><img src="img/digitizer-local-s4.png" alt=""></div></div>
+      <div class="step"><div class="t"><span class="n">03</span><p>값을 읽은 자리가 원본 위에 표시됩니다. 맞는지 확인합니다.</p></div><div class="frame"><img src="img/digitizer-local-s3.png" alt=""></div></div>
+      <div class="step"><div class="t"><span class="n">04</span><p><b>이름</b>을 정하고 <b>CSV</b>나 <b>엑셀</b>로 받습니다.</p></div><div class="frame"><img src="img/digitizer-local-s4.png" alt=""></div></div>
     </div>
   </div>
 </section>
 
-<section class="tool" id="protein-local">
-  <p class="cat">연구</p>
-  <h2>단백질 구조 예측</h2>
-  <p>아미노산 서열을 넣으면 3D 구조와 pLDDT·PAE를 GPU에서 계산합니다.</p>
+<section class="tool c-research" id="protein-local">
+  <header class="th"><div class="th-meta"><p class="cat chip">연구</p><span class=th-n>4단계</span></div><span class="th-no">18</span><h2>단백질 구조 예측</h2><p class="one">아미노산 서열을 넣으면 3D 구조와 pLDDT·PAE를 GPU에서 계산합니다.</p></header>
   <div class="strip s2">
     <div><pre>&gt;Ubiquitin_human
 MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIF
@@ -409,18 +518,16 @@ AGKQLEDGRTLSDYNIQKESTLHLVLRLRGG</pre><div class="cap">FASTA 서열 (유비퀴틴
   </div>
   <div class="steps">
     <div class="two">
-    <div class="step"><div class="t"><span class="n">1</span><p>서열을 붙여 넣거나 예시 <b>유비퀴틴</b>을 고릅니다.</p></div><div class="frame"><img src="img/protein-local-s1.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">2</span><p>모드 <b>빠름</b>, 작업 이름을 적고 <b>구조 예측 실행</b>.</p></div><div class="frame"><img src="img/protein-local-s2.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">01</span><p>서열을 붙여 넣거나 예시 <b>유비퀴틴</b>을 고릅니다.</p></div><div class="frame"><img src="img/protein-local-s1.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">02</span><p>모드 <b>빠름</b>, 작업 이름을 적고 <b>구조 예측 실행</b>.</p></div><div class="frame"><img src="img/protein-local-s2.png" alt=""></div></div>
     </div>
-    <div class="step"><div class="t"><span class="n">3</span><p>3D 뷰어에서 돌려 보며 신뢰도(pLDDT) 색을 봅니다.</p></div><div class="frame"><img src="img/protein-local-s3.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">4</span><p>점수를 확인하고 <b>PDB 받기</b>로 구조 파일을 받습니다.</p></div><div class="frame"><img src="img/protein-local-s4.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">03</span><p>3D 뷰어에서 돌려 보며 신뢰도(pLDDT) 색을 봅니다.</p></div><div class="frame"><img src="img/protein-local-s3.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">04</span><p>점수를 확인하고 <b>PDB 받기</b>로 구조 파일을 받습니다.</p></div><div class="frame"><img src="img/protein-local-s4.png" alt=""></div></div>
   </div>
 </section>
 
-<section class="tool" id="battery-local">
-  <p class="cat">연구</p>
-  <h2>배터리</h2>
-  <p>PyBaMM으로 방전·충전 곡선과 C-rate별 성능을 계산합니다.</p>
+<section class="tool c-research" id="battery-local">
+  <header class="th"><div class="th-meta"><p class="cat chip">연구</p><span class=th-n>4단계</span></div><span class="th-no">19</span><h2>배터리</h2><p class="one">PyBaMM으로 방전·충전 곡선과 C-rate별 성능을 계산합니다.</p></header>
   <div class="strip s2">
     <div><div class="frame inbox">Chen2020 셀 · SPMe · 25°C<br>방전 C-rate: 0.5, 1, 2</div><div class="cap">성능 시뮬레이션 입력</div></div>
     <div class="arr">→</div>
@@ -428,20 +535,18 @@ AGKQLEDGRTLSDYNIQKESTLHLVLRLRGG</pre><div class="cap">FASTA 서열 (유비퀴틴
   </div>
   <div class="steps">
     <div class="two">
-    <div class="step"><div class="t"><span class="n">1</span><p>셀·모델·온도를 고릅니다.</p></div><div class="frame"><img src="img/battery-local-s1.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">2</span><p>방전 C-rate를 쉼표로 넣고 <b>계산</b>.</p></div><div class="frame"><img src="img/battery-local-s2.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">01</span><p>셀·모델·온도를 고릅니다.</p></div><div class="frame"><img src="img/battery-local-s1.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">02</span><p>방전 C-rate를 쉼표로 넣고 <b>계산</b>.</p></div><div class="frame"><img src="img/battery-local-s2.png" alt=""></div></div>
     </div>
-    <div class="step"><div class="t"><span class="n">3</span><p>C-rate별 용량·에너지·온도 표와 그래프를 봅니다.</p></div><div class="frame"><img src="img/battery-local-s3.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">03</span><p>C-rate별 용량·에너지·온도 표와 그래프를 봅니다.</p></div><div class="frame"><img src="img/battery-local-s3.png" alt=""></div></div>
     <div class="two">
-    <div class="step"><div class="t"><span class="n">4</span><p><b>작업·이력</b>에서 지난 계산을 다시 엽니다. <b>AI 질문</b>으로 맡긴 계산은 질문도 함께 남습니다.</p></div><div class="frame"><img src="img/battery-local-s4.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">04</span><p><b>작업·이력</b>에서 지난 계산을 다시 엽니다. <b>AI 질문</b>으로 맡긴 계산은 질문도 함께 남습니다.</p></div><div class="frame"><img src="img/battery-local-s4.png" alt=""></div></div>
     </div>
   </div>
 </section>
 
-<section class="tool" id="shield-local">
-  <p class="cat">원자력</p>
-  <h2>차폐 계산기</h2>
-  <p>선원·거리·차폐층을 넣으면 선량률과 단계별 식을 계산합니다.</p>
+<section class="tool c-nuclear" id="shield-local">
+  <header class="th"><div class="th-meta"><p class="cat chip">원자력</p><span class=th-n>4단계</span></div><span class="th-no">20</span><h2>차폐 계산기</h2><p class="one">선원·거리·차폐층을 넣으면 선량률과 단계별 식을 계산합니다.</p></header>
   <div class="strip s2">
     <div><div class="frame inbox">Cs-137 10 mCi, 30 cm, 납 10 mm</div><div class="cap">입력</div></div>
     <div class="arr">→</div>
@@ -449,114 +554,102 @@ AGKQLEDGRTLSDYNIQKESTLHLVLRLRGG</pre><div class="cap">FASTA 서열 (유비퀴틴
   </div>
   <div class="steps">
     <div class="two">
-    <div class="step"><div class="t"><span class="n">1</span><p>핵종·방사능·거리를 넣습니다.</p></div><div class="frame"><img src="img/shield-local-s1.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">2</span><p>차폐층을 추가하고 <b>계산</b>.</p></div><div class="frame"><img src="img/shield-local-s2.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">01</span><p>핵종·방사능·거리를 넣습니다.</p></div><div class="frame"><img src="img/shield-local-s1.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">02</span><p>차폐층을 추가하고 <b>계산</b>.</p></div><div class="frame"><img src="img/shield-local-s2.png" alt=""></div></div>
     </div>
-    <div class="step"><div class="t"><span class="n">3</span><p>차폐 후 선량률과 그래프를 봅니다.</p></div><div class="frame"><img src="img/shield-local-s3.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">4</span><p><b>자연어 질문</b> 탭에 문장으로 묻고 <b>질문 → 계산</b>. 읽은 입력값과 설명이 나옵니다.</p></div><div class="frame"><img src="img/shield-local-s4.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">03</span><p>차폐 후 선량률과 그래프를 봅니다.</p></div><div class="frame"><img src="img/shield-local-s3.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">04</span><p><b>자연어 질문</b> 탭에 문장으로 묻고 <b>질문 → 계산</b>. 읽은 입력값과 설명이 나옵니다.</p></div><div class="frame"><img src="img/shield-local-s4.png" alt=""></div></div>
   </div>
 </section>
 
-<section class="tool" id="saju-local">
-  <p class="cat">재미</p>
-  <h2>팀 밸런스 맵</h2>
-  <p>이름, 부서, 생년월일시와 MBTI를 넣으면 성향 분포와 오늘의 운세를 보여 줍니다.</p>
+<section class="tool c-fun" id="saju-local">
+  <header class="th"><div class="th-meta"><p class="cat chip">재미</p><span class=th-n>4단계</span></div><span class="th-no">21</span><h2>팀 밸런스 맵</h2><p class="one">이름, 부서, 생년월일시와 MBTI를 넣으면 성향 분포와 오늘의 운세를 보여 줍니다.</p></header>
   <div class="strip s2">
     <div><div class="frame inbox">김동주 · 인공지능응용연구실<br>2000. 01. 01 12:00 (가상의 생일) · INTP · A형</div><div class="cap">입력 정보</div></div>
     <div class="arr">→</div>
     <div><div class="frame"><img src="img/saju-local-result.png" alt="성향 오각형"></div><div class="cap">성향 분포 (오행 오각형)</div></div>
   </div>
   <div class="steps">
-    <div class="step"><div class="t"><span class="n">1</span><p><b>등록</b> 탭에서 이름, 부서, 생년월일시를 넣고 아래 <b>등록</b>을 누릅니다.</p></div><div class="frame"><img src="img/saju-local-s1.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">2</span><p><b>나 · 오늘</b> 탭에서 내 성향 오각형과 팀에서의 역할 분포를 봅니다.</p></div><div class="frame"><img src="img/saju-local-s2.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">3</span><p>오늘의 기운과 연구 운, 협업 운, 추천 점심을 봅니다.</p></div><div class="frame"><img src="img/saju-local-s3.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">4</span><p>사주 원국 8자와 일간, 격국·용신을 봅니다.</p></div><div class="frame"><img src="img/saju-local-s4.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">01</span><p><b>등록</b> 탭에서 이름, 부서, 생년월일시를 넣고 아래 <b>등록</b>을 누릅니다.</p></div><div class="frame"><img src="img/saju-local-s1.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">02</span><p><b>나 · 오늘</b> 탭에서 내 성향 오각형과 팀에서의 역할 분포를 봅니다.</p></div><div class="frame"><img src="img/saju-local-s2.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">03</span><p>오늘의 기운과 연구 운, 협업 운, 추천 점심을 봅니다.</p></div><div class="frame"><img src="img/saju-local-s3.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">04</span><p>사주 원국 8자와 일간, 격국·용신을 봅니다.</p></div><div class="frame"><img src="img/saju-local-s4.png" alt=""></div></div>
   </div>
 </section>
 
-<section class="tool" id="persona-local">
-  <p class="cat">토이</p>
-  <h2>Persona</h2>
-  <p>캐릭터를 골라 대화하면 사용자에 대한 사실을 기억하고 호감도가 쌓입니다.</p>
+<section class="tool c-toy" id="persona-local">
+  <header class="th"><div class="th-meta"><p class="cat chip">토이</p><span class=th-n>4단계</span></div><span class="th-no">22</span><h2>Persona</h2><p class="one">캐릭터를 골라 대화하면 사용자에 대한 사실을 기억하고 호감도가 쌓입니다.</p></header>
   <div class="strip s2">
     <div><div class="frame inbox">안녕하세요, 저는 동주라고 해요. 이번 주에 처음으로 논문 초록을 써 보는데 어떤 순서로 쓰면 좋을까요?</div><div class="cap">사용자 말</div></div>
     <div class="arr">→</div>
     <div><div class="frame inbox">반가워요, 동주 씨. 처음 쓰는 초록은 원래 막막한 법이죠. 일단 배경, 목적, 방법, 결과, 결론 순으로 뼈대만 잡아봐요. … 지금 생각하고 있는 핵심 결과가 뭐예요?<br>기억: 이름 동주 · 직업 학생(또는 연구자)</div><div class="cap">선배 연구원 멘토의 답과 기억</div></div>
   </div>
   <div class="steps">
-    <div class="step"><div class="t"><span class="n">1</span><p>왼쪽 목록에서 대화할 캐릭터를 고릅니다.</p></div><div class="frame"><img src="img/persona-local-s1.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">2</span><p>메시지를 입력하고 <b>보내기</b>를 누릅니다.</p></div><div class="frame"><img src="img/persona-local-s2.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">3</span><p>답이 오면 말풍선 옆 스피커 버튼을 눌러 캐릭터 목소리로 듣습니다.</p></div><div class="frame"><img src="img/persona-local-s3.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">01</span><p>왼쪽 목록에서 대화할 캐릭터를 고릅니다.</p></div><div class="frame"><img src="img/persona-local-s1.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">02</span><p>메시지를 입력하고 <b>보내기</b>를 누릅니다.</p></div><div class="frame"><img src="img/persona-local-s2.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">03</span><p>답이 오면 말풍선 옆 스피커 버튼을 눌러 캐릭터 목소리로 듣습니다.</p></div><div class="frame"><img src="img/persona-local-s3.png" alt=""></div></div>
     <div class="two">
-      <div class="step"><div class="t"><span class="n">4</span><p>오른쪽 <b>기억</b>에서 대화로 쌓인 사실을 보고 고칩니다.</p></div><div class="frame"><img src="img/persona-local-s4.png" alt=""></div></div>
+      <div class="step"><div class="t"><span class="n">04</span><p>오른쪽 <b>기억</b>에서 대화로 쌓인 사실을 보고 고칩니다.</p></div><div class="frame"><img src="img/persona-local-s4.png" alt=""></div></div>
     </div>
   </div>
 </section>
 
-<section class="tool" id="avatar-local">
-  <p class="cat">토이</p>
-  <h2>Avatar</h2>
-  <p>가상 캐릭터를 묘사해 그림을 만들고, 대사를 말하는 영상이나 동작 영상을 만듭니다.</p>
+<section class="tool c-toy" id="avatar-local">
+  <header class="th"><div class="th-meta"><p class="cat chip">토이</p><span class=th-n>4단계</span></div><span class="th-no">23</span><h2>Avatar</h2><p class="one">가상 캐릭터를 묘사해 그림을 만들고, 대사를 말하는 영상이나 동작 영상을 만듭니다.</p></header>
   <div class="strip s2">
     <div><div class="frame inbox">30대 초반 사내 안내 캐릭터 남성, 짧은 머리, 네이비 니트, 차분한 미소<br>대사: 안녕하세요, 동주님. 오늘 오후 두 시에 회의가 하나 있어요.</div><div class="cap">캐릭터 묘사와 대사</div></div>
     <div class="arr">→</div>
     <div><div class="frame"><img src="img/avatar-local-result.png" alt="대사를 말하는 가상 캐릭터 영상"></div><div class="cap">말하는 영상 (6초)</div></div>
   </div>
   <div class="steps">
-    <div class="step"><div class="t"><span class="n">1</span><p>캐릭터를 묘사하고 스타일, 구도, 장수를 고른 뒤 <b>그리기</b>를 누릅니다.</p></div><div class="frame"><img src="img/avatar-local-s1.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">2</span><p>생성된 후보 중 마음에 드는 그림을 클릭합니다.</p></div><div class="frame"><img src="img/avatar-local-s2.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">01</span><p>캐릭터를 묘사하고 스타일, 구도, 장수를 고른 뒤 <b>그리기</b>를 누릅니다.</p></div><div class="frame"><img src="img/avatar-local-s1.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">02</span><p>생성된 후보 중 마음에 드는 그림을 클릭합니다.</p></div><div class="frame"><img src="img/avatar-local-s2.png" alt=""></div></div>
     <div class="two">
-      <div class="step"><div class="t"><span class="n">3</span><p>캐릭터가 말할 대사를 적고 품질을 고른 뒤 <b>말하게 하기</b>를 누릅니다.</p></div><div class="frame"><img src="img/avatar-local-s3.png" alt=""></div></div>
-      <div class="step"><div class="t"><span class="n">4</span><p>완성된 영상을 <b>결과</b>에서 재생합니다.</p></div><div class="frame"><img src="img/avatar-local-s4.png" alt=""></div></div>
+      <div class="step"><div class="t"><span class="n">03</span><p>캐릭터가 말할 대사를 적고 품질을 고른 뒤 <b>말하게 하기</b>를 누릅니다.</p></div><div class="frame"><img src="img/avatar-local-s3.png" alt=""></div></div>
+      <div class="step"><div class="t"><span class="n">04</span><p>완성된 영상을 <b>결과</b>에서 재생합니다.</p></div><div class="frame"><img src="img/avatar-local-s4.png" alt=""></div></div>
     </div>
   </div>
 </section>
 
-<section class="tool" id="padong-local">
-  <p class="cat">토이</p>
-  <h2>파동이</h2>
-  <p>캐릭터를 3D와 2D로 보여 주고, 말로 시키거나 버튼으로 동작을 시킵니다. 포털 화면 아래의 파동이에게 하고 싶은 일을 말하면 맞는 도구를 열어 줍니다.</p>
+<section class="tool c-toy" id="padong-local">
+  <header class="th"><div class="th-meta"><p class="cat chip">토이</p><span class=th-n>5단계</span></div><span class="th-no">24</span><h2>파동이</h2><p class="one">캐릭터를 3D와 2D로 보여 주고, 말로 시키거나 버튼으로 동작을 시킵니다. 포털 화면 아래의 파동이에게 하고 싶은 일을 말하면 맞는 도구를 열어 줍니다.</p></header>
   <div class="strip s2">
     <div><div class="frame inbox">손 흔들면서 동주님한테 반갑다고 인사해 줘</div><div class="cap">동작 지시 문장</div></div>
     <div class="arr">→</div>
     <div><div class="frame"><img src="ext/padong-local/padong-local-result.png" alt="3D와 2D 파동이가 손 흔들며 인사"></div><div class="cap">손 흔들기 (활짝) “동주님 반가워!”</div></div>
   </div>
   <div class="steps">
-    <div class="step"><div class="t"><span class="n">1</span><p>위에서 <b>3D</b>, <b>2D</b>, <b>나란히</b> 중 보기 방식을 고릅니다.</p></div><div class="frame"><img src="ext/padong-local/padong-local-s1.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">01</span><p>위에서 <b>3D</b>, <b>2D</b>, <b>나란히</b> 중 보기 방식을 고릅니다.</p></div><div class="frame"><img src="ext/padong-local/padong-local-s1.png" alt=""></div></div>
     <div class="two">
-      <div class="step"><div class="t"><span class="n">2</span><p>입력창에 동작과 대사를 적고 <b>보내기</b>를 누릅니다. 위에 알아들은 동작이 적힙니다.</p></div><div class="frame"><img src="ext/padong-local/padong-local-s2.png" alt=""></div></div>
-      <div class="step"><div class="t"><span class="n">3</span><p><b>동작</b> 탭의 버튼을 누르면 그 동작을 바로 합니다.</p></div><div class="frame"><img src="ext/padong-local/padong-local-s3.png" alt=""></div></div>
+      <div class="step"><div class="t"><span class="n">02</span><p>입력창에 동작과 대사를 적고 <b>보내기</b>를 누릅니다. 위에 알아들은 동작이 적힙니다.</p></div><div class="frame"><img src="ext/padong-local/padong-local-s2.png" alt=""></div></div>
+      <div class="step"><div class="t"><span class="n">03</span><p><b>동작</b> 탭의 버튼을 누르면 그 동작을 바로 합니다.</p></div><div class="frame"><img src="ext/padong-local/padong-local-s3.png" alt=""></div></div>
     </div>
     <div class="two">
-      <div class="step"><div class="t"><span class="n">4</span><p><b>분해·내보내기</b> 탭에서 <b>3D 모델 .glb</b>나 <b>2D 표정 시트 PNG</b>로 내려받습니다.</p></div><div class="frame"><img src="ext/padong-local/padong-local-s4.png" alt=""></div></div>
-      <div class="step"><div class="t"><span class="n">5</span><p>포털 화면 아래 파동이를 두 번 눌러 하고 싶은 일을 말하면, 맞는 도구의 <b>열기</b> 버튼이 뜹니다.</p></div><div class="frame"><img src="ext/padong-local/padong-local-s5.png" alt=""></div></div>
+      <div class="step"><div class="t"><span class="n">04</span><p><b>분해·내보내기</b> 탭에서 <b>3D 모델 .glb</b>나 <b>2D 표정 시트 PNG</b>로 내려받습니다.</p></div><div class="frame"><img src="ext/padong-local/padong-local-s4.png" alt=""></div></div>
+      <div class="step"><div class="t"><span class="n">05</span><p>포털 화면 아래 파동이를 두 번 눌러 하고 싶은 일을 말하면, 맞는 도구의 <b>열기</b> 버튼이 뜹니다.</p></div><div class="frame"><img src="ext/padong-local/padong-local-s5.png" alt=""></div></div>
     </div>
   </div>
 </section>
 
-<section class="tool" id="image-local">
-  <p class="cat">그림</p>
-  <h2>그림 생성</h2>
-  <p>원하는 그림을 한국어로 적으면 서버 GPU에서 그려 줍니다.</p>
+<section class="tool c-art" id="image-local">
+  <header class="th"><div class="th-meta"><p class="cat chip">그림</p><span class=th-n>4단계</span></div><span class="th-no">25</span><h2>그림 생성</h2><p class="one">원하는 그림을 한국어로 적으면 서버 GPU에서 그려 줍니다.</p></header>
   <div class="strip s2">
     <div><div class="frame inbox">연구실 책상 위 작은 화분, 옆에 "gggg8657" 이라고 적힌 나무 팻말, 창가의 따뜻한 오후 햇살<br>일러스트 · 4:3 · 빠르게 · 1장</div><div class="cap">요청</div></div>
     <div class="arr">→</div>
     <div><div class="frame"><img src="img/image-local-strip-r.png" alt=""></div><div class="cap">그린 그림 (1472×1104)</div></div>
   </div>
   <div class="steps">
-    <div class="step"><div class="t"><span class="n">1</span><p>그릴 것을 적고 <b>스타일</b>과 <b>비율</b>을 고릅니다. 그림 안에 넣을 글자는 따옴표로 감쌉니다.</p></div><div class="frame"><img src="img/image-local-s1.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">2</span><p>장수와 품질을 정하고 <b>그리기</b>.</p></div><div class="frame"><img src="img/image-local-s2.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">01</span><p>그릴 것을 적고 <b>스타일</b>과 <b>비율</b>을 고릅니다. 그림 안에 넣을 글자는 따옴표로 감쌉니다.</p></div><div class="frame"><img src="img/image-local-s1.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">02</span><p>장수와 품질을 정하고 <b>그리기</b>.</p></div><div class="frame"><img src="img/image-local-s2.png" alt=""></div></div>
     <div class="two">
-      <div class="step"><div class="t"><span class="n">3</span><p>결과가 바로 아래에 뜹니다. <b>받기</b>나 <b>이걸로 고치기</b>를 누릅니다.</p></div><div class="frame"><img src="img/image-local-s3.png" alt=""></div></div>
-      <div class="step"><div class="t"><span class="n">4</span><p>갤러리에서 그림을 누르면 크게 보고, <b>같은 설정으로 다시</b> 그릴 수 있습니다.</p></div><div class="frame"><img src="img/image-local-s4.png" alt=""></div></div>
+      <div class="step"><div class="t"><span class="n">03</span><p>결과가 바로 아래에 뜹니다. <b>받기</b>나 <b>이걸로 고치기</b>를 누릅니다.</p></div><div class="frame"><img src="img/image-local-s3.png" alt=""></div></div>
+      <div class="step"><div class="t"><span class="n">04</span><p>갤러리에서 그림을 누르면 크게 보고, <b>같은 설정으로 다시</b> 그릴 수 있습니다.</p></div><div class="frame"><img src="img/image-local-s4.png" alt=""></div></div>
     </div>
   </div>
 </section>
 
-<section class="tool" id="coach-local">
-  <p class="cat">문서</p>
-  <h2>글쓰기 코치</h2>
-  <p>글 종류와 목적을 정하고 글을 쓰면, 잠깐 멈출 때마다 고칠 곳에 밑줄을 긋고 제안을 보여 줍니다.</p>
+<section class="tool c-doc" id="coach-local">
+  <header class="th"><div class="th-meta"><p class="cat chip">문서</p><span class=th-n>5단계</span></div><span class="th-no">26</span><h2>글쓰기 코치</h2><p class="one">글 종류와 목적을 정하고 글을 쓰면, 잠깐 멈출 때마다 고칠 곳에 밑줄을 긋고 제안을 보여 줍니다.</p></header>
   <div class="strip s2">
     <div><pre>수신: 총무팀장
 제목: 3층 세미나실 프로젝터 교체 요청
@@ -575,49 +668,50 @@ AGKQLEDGRTLSDYNIQKESTLHLVLRLRGG</pre><div class="cap">FASTA 서열 (유비퀴틴
     <div><div class="frame"><img src="img/coach-local-result.png" alt="밑줄과 제안 카드"></div><div class="cap">고칠 곳 밑줄 (제안 7건: 맞춤법 2 · 문체 2 · 형식 2 · 사실 확인 1)</div></div>
   </div>
   <div class="steps">
-    <div class="step"><div class="t"><span class="n">1</span><p><b>글 종류</b>를 고르고 목적을 한 줄 적습니다.</p></div><div class="frame"><img src="img/coach-local-s1.png" alt=""></div></div>
-    <div class="step"><div class="t"><span class="n">2</span><p>글을 쓰고 잠깐 멈추면 고칠 곳에 밑줄이 생깁니다. 밑줄을 누르면 제안 상자가 뜨고 <b>적용</b>이나 <b>확인함</b>을 누릅니다.</p></div><div class="frame"><img src="img/coach-local-s2.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">01</span><p><b>글 종류</b>를 고르고 목적을 한 줄 적습니다.</p></div><div class="frame"><img src="img/coach-local-s1.png" alt=""></div></div>
+    <div class="step"><div class="t"><span class="n">02</span><p>글을 쓰고 잠깐 멈추면 고칠 곳에 밑줄이 생깁니다. 밑줄을 누르면 제안 상자가 뜨고 <b>적용</b>이나 <b>확인함</b>을 누릅니다.</p></div><div class="frame"><img src="img/coach-local-s2.png" alt=""></div></div>
     <div class="two">
-      <div class="step"><div class="t"><span class="n">3</span><p>오른쪽 <b>제안</b> 탭에서 분류별로 <b>모두 적용</b>하거나 <b>모두 무시</b>합니다.</p></div><div class="frame"><img src="img/coach-local-s3.png" alt=""></div></div>
-      <div class="step"><div class="t"><span class="n">4</span><p><b>글 파악</b>을 펼치면 코치가 이해한 문체, 용어, 인물·기관, 숫자·날짜, 요청을 봅니다. 문체와 고정 표기는 직접 정할 수 있습니다.</p></div><div class="frame"><img src="img/coach-local-s4.png" alt=""></div></div>
+      <div class="step"><div class="t"><span class="n">03</span><p>오른쪽 <b>제안</b> 탭에서 분류별로 <b>모두 적용</b>하거나 <b>모두 무시</b>합니다.</p></div><div class="frame"><img src="img/coach-local-s3.png" alt=""></div></div>
+      <div class="step"><div class="t"><span class="n">04</span><p><b>글 파악</b>을 펼치면 코치가 이해한 문체, 용어, 인물·기관, 숫자·날짜, 요청을 봅니다. 문체와 고정 표기는 직접 정할 수 있습니다.</p></div><div class="frame"><img src="img/coach-local-s4.png" alt=""></div></div>
     </div>
     <div class="two">
-      <div class="step"><div class="t"><span class="n">5</span><p><b>전체 검토</b>를 누르면 총평과 함께 구조, 빠진 요소, 형식을 짚어 줍니다.</p></div><div class="frame"><img src="img/coach-local-s5.png" alt=""></div></div>
+      <div class="step"><div class="t"><span class="n">05</span><p><b>전체 검토</b>를 누르면 총평과 함께 구조, 빠진 요소, 형식을 짚어 줍니다.</p></div><div class="frame"><img src="img/coach-local-s5.png" alt=""></div></div>
     </div>
   </div>
 </section>
 
-<section class="tool" id="licenses">
-  <h2>출처·라이선스</h2>
-  <p>도구마다 쓰는 오픈소스·모델의 출처와 라이선스는 각 저장소의 THIRD_PARTY_NOTICES.md 에 있습니다.</p>
-  <ul class="files">
-  <li><b>에이전트 포털</b> · <a href="https://github.com/gggg8657/agent-page-portal/blob/master/THIRD_PARTY_NOTICES.md">github.com/gggg8657/agent-page-portal/blob/master/THIRD_PARTY_NOTICES.md</a></li>
-  <li><b>Humanize KR</b> · <a href="https://github.com/gggg8657/humanize-kr-local/blob/master/THIRD_PARTY_NOTICES.md">github.com/gggg8657/humanize-kr-local/blob/master/THIRD_PARTY_NOTICES.md</a></li>
-  <li><b>kordoc</b> · <a href="https://github.com/gggg8657/kordoc-local/blob/master/THIRD_PARTY_NOTICES.md">github.com/gggg8657/kordoc-local/blob/master/THIRD_PARTY_NOTICES.md</a></li>
-  <li><b>Notebook</b> · <a href="https://github.com/gggg8657/notebook-local/blob/master/THIRD_PARTY_NOTICES.md">github.com/gggg8657/notebook-local/blob/master/THIRD_PARTY_NOTICES.md</a></li>
-  <li><b>Writer</b> · <a href="https://github.com/gggg8657/writer-local/blob/master/THIRD_PARTY_NOTICES.md">github.com/gggg8657/writer-local/blob/master/THIRD_PARTY_NOTICES.md</a></li>
-  <li><b>메일</b> · <a href="https://github.com/gggg8657/mail-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/mail-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
-  <li><b>상장 생성기</b> · <a href="https://github.com/gggg8657/award-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/award-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
-  <li><b>논문 리뷰</b> · <a href="https://github.com/gggg8657/review-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/review-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
-  <li><b>주간보고</b> · <a href="https://github.com/gggg8657/weekly-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/weekly-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
-  <li><b>글쓰기 코치</b> · <a href="https://github.com/gggg8657/coach-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/coach-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
-  <li><b>Meeting</b> · <a href="https://github.com/gggg8657/meeting-local/blob/master/THIRD_PARTY_NOTICES.md">github.com/gggg8657/meeting-local/blob/master/THIRD_PARTY_NOTICES.md</a></li>
-  <li><b>TTS</b> · <a href="https://github.com/gggg8657/tts-local/blob/master/THIRD_PARTY_NOTICES.md">github.com/gggg8657/tts-local/blob/master/THIRD_PARTY_NOTICES.md</a></li>
-  <li><b>Diagram</b> · <a href="https://github.com/gggg8657/diagram-local/blob/master/THIRD_PARTY_NOTICES.md">github.com/gggg8657/diagram-local/blob/master/THIRD_PARTY_NOTICES.md</a></li>
-  <li><b>Sketch</b> · <a href="https://github.com/gggg8657/sketch-local/blob/master/THIRD_PARTY_NOTICES.md">github.com/gggg8657/sketch-local/blob/master/THIRD_PARTY_NOTICES.md</a></li>
-  <li><b>CAD Agent</b> · <a href="https://github.com/gggg8657/agent-cad-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/agent-cad-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
-  <li><b>그림 생성</b> · <a href="https://github.com/gggg8657/image-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/image-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
-  <li><b>SQL (demoDB)</b> · <a href="https://github.com/gggg8657/sql-local/blob/master/THIRD_PARTY_NOTICES.md">github.com/gggg8657/sql-local/blob/master/THIRD_PARTY_NOTICES.md</a></li>
-  <li><b>그래프</b> · <a href="https://github.com/gggg8657/chart-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/chart-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
-  <li><b>그래프 디지타이저</b> · <a href="https://github.com/gggg8657/digitizer-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/digitizer-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
-  <li><b>단백질 구조 예측</b> · <a href="https://github.com/gggg8657/protein-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/protein-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
-  <li><b>배터리</b> · <a href="https://github.com/gggg8657/battery-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/battery-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
-  <li><b>차폐 계산기</b> · <a href="https://github.com/gggg8657/shield-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/shield-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
-  <li><b>팀 밸런스 맵</b> · <a href="https://github.com/gggg8657/saju-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/saju-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
-  <li><b>Persona</b> · <a href="https://github.com/gggg8657/persona-local/blob/master/THIRD_PARTY_NOTICES.md">github.com/gggg8657/persona-local/blob/master/THIRD_PARTY_NOTICES.md</a></li>
-  <li><b>Avatar</b> · <a href="https://github.com/gggg8657/avatar-local/blob/master/THIRD_PARTY_NOTICES.md">github.com/gggg8657/avatar-local/blob/master/THIRD_PARTY_NOTICES.md</a></li>
-  <li><b>파동이</b> · <a href="https://github.com/gggg8657/padong-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/padong-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
+<section class="tool closing c-etc" id="licenses">
+  <header class="th"><div class="th-meta"><p class="cat chip">부록</p></div><h2>출처·라이선스</h2>
+  <p class="one">도구마다 쓰는 오픈소스·모델의 출처와 라이선스는 각 저장소의 THIRD_PARTY_NOTICES.md 에 있습니다.</p></header>
+  <ul class="lic">
+  <li><b>에이전트 포털</b><a href="https://github.com/gggg8657/agent-page-portal/blob/master/THIRD_PARTY_NOTICES.md">github.com/gggg8657/agent-page-portal/blob/master/THIRD_PARTY_NOTICES.md</a></li>
+  <li><b>Humanize KR</b><a href="https://github.com/gggg8657/humanize-kr-local/blob/master/THIRD_PARTY_NOTICES.md">github.com/gggg8657/humanize-kr-local/blob/master/THIRD_PARTY_NOTICES.md</a></li>
+  <li><b>kordoc</b><a href="https://github.com/gggg8657/kordoc-local/blob/master/THIRD_PARTY_NOTICES.md">github.com/gggg8657/kordoc-local/blob/master/THIRD_PARTY_NOTICES.md</a></li>
+  <li><b>Notebook</b><a href="https://github.com/gggg8657/notebook-local/blob/master/THIRD_PARTY_NOTICES.md">github.com/gggg8657/notebook-local/blob/master/THIRD_PARTY_NOTICES.md</a></li>
+  <li><b>Writer</b><a href="https://github.com/gggg8657/writer-local/blob/master/THIRD_PARTY_NOTICES.md">github.com/gggg8657/writer-local/blob/master/THIRD_PARTY_NOTICES.md</a></li>
+  <li><b>메일</b><a href="https://github.com/gggg8657/mail-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/mail-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
+  <li><b>상장 생성기</b><a href="https://github.com/gggg8657/award-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/award-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
+  <li><b>논문 리뷰</b><a href="https://github.com/gggg8657/review-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/review-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
+  <li><b>주간보고</b><a href="https://github.com/gggg8657/weekly-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/weekly-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
+  <li><b>글쓰기 코치</b><a href="https://github.com/gggg8657/coach-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/coach-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
+  <li><b>Meeting</b><a href="https://github.com/gggg8657/meeting-local/blob/master/THIRD_PARTY_NOTICES.md">github.com/gggg8657/meeting-local/blob/master/THIRD_PARTY_NOTICES.md</a></li>
+  <li><b>TTS</b><a href="https://github.com/gggg8657/tts-local/blob/master/THIRD_PARTY_NOTICES.md">github.com/gggg8657/tts-local/blob/master/THIRD_PARTY_NOTICES.md</a></li>
+  <li><b>Diagram</b><a href="https://github.com/gggg8657/diagram-local/blob/master/THIRD_PARTY_NOTICES.md">github.com/gggg8657/diagram-local/blob/master/THIRD_PARTY_NOTICES.md</a></li>
+  <li><b>Sketch</b><a href="https://github.com/gggg8657/sketch-local/blob/master/THIRD_PARTY_NOTICES.md">github.com/gggg8657/sketch-local/blob/master/THIRD_PARTY_NOTICES.md</a></li>
+  <li><b>CAD Agent</b><a href="https://github.com/gggg8657/agent-cad-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/agent-cad-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
+  <li><b>그림 생성</b><a href="https://github.com/gggg8657/image-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/image-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
+  <li><b>SQL (demoDB)</b><a href="https://github.com/gggg8657/sql-local/blob/master/THIRD_PARTY_NOTICES.md">github.com/gggg8657/sql-local/blob/master/THIRD_PARTY_NOTICES.md</a></li>
+  <li><b>그래프</b><a href="https://github.com/gggg8657/chart-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/chart-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
+  <li><b>그래프 디지타이저</b><a href="https://github.com/gggg8657/digitizer-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/digitizer-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
+  <li><b>단백질 구조 예측</b><a href="https://github.com/gggg8657/protein-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/protein-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
+  <li><b>배터리</b><a href="https://github.com/gggg8657/battery-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/battery-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
+  <li><b>차폐 계산기</b><a href="https://github.com/gggg8657/shield-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/shield-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
+  <li><b>팀 밸런스 맵</b><a href="https://github.com/gggg8657/saju-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/saju-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
+  <li><b>Persona</b><a href="https://github.com/gggg8657/persona-local/blob/master/THIRD_PARTY_NOTICES.md">github.com/gggg8657/persona-local/blob/master/THIRD_PARTY_NOTICES.md</a></li>
+  <li><b>Avatar</b><a href="https://github.com/gggg8657/avatar-local/blob/master/THIRD_PARTY_NOTICES.md">github.com/gggg8657/avatar-local/blob/master/THIRD_PARTY_NOTICES.md</a></li>
+  <li><b>파동이</b><a href="https://github.com/gggg8657/padong-local/blob/main/THIRD_PARTY_NOTICES.md">github.com/gggg8657/padong-local/blob/main/THIRD_PARTY_NOTICES.md</a></li>
   </ul>
+  <div class="colophon"><p>에이전트 포털 사용 설명서</p><p>인공지능응용연구실 · 2026 · 내부 시험용 · 배포용 아님</p></div>
 </section>
 
 </div></body></html>

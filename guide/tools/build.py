@@ -24,20 +24,39 @@ parts = sorted(glob.glob('parts/[0-9][0-9]-*.html'))
 body = '\n'.join(open(f, encoding='utf-8').read() for f in parts)
 try: titles = {t['dir']: t['title'] for t in json.load(open('../tools.json', encoding='utf-8'))}
 except OSError: titles = {}
-groups = {}
+groups, order = {}, {}
 for m in re.finditer(r'<section class="tool" id="([^"]+)">\s*<p class="cat">([^<]*)</p>\s*<h2>(.*?)</h2>', body, re.S):
     d, cat, name = m.group(1), m.group(2).strip(), re.sub(r'<[^>]+>', '', m.group(3)).strip()
     t = titles.get(d, '')
     desc = t.split(' — ', 1)[1] if ' — ' in t else ''
-    groups.setdefault(cat, []).append((d, name, desc))
-toc = '<ul class="toc">\n' + '\n'.join(
-    f'  <li><span>{html.escape(c)}</span><a href="#{d}"><b>{html.escape(n)}</b>{" · " + html.escape(s) if s else ""}</a></li>'
-    for c, items in groups.items() for d, n, s in items) + '\n</ul>'
-menu = ''.join(f'<div><span>{html.escape(c)}</span>' + ''.join(f'<a href="#{d}">{html.escape(n)}</a>' for d, n, _ in items) + '</div>'
+    groups.setdefault(cat, []).append((d, name, desc)); order[d] = len(order) + 1
+# 분류 색 토큰(style.css 의 .c-<slug>) — 모르는 분류는 c-etc
+SLUG = {'포털': 'portal', '문서': 'doc', '회의': 'meet', '음성': 'voice', '그림': 'art', '데이터': 'data',
+        '연구': 'research', '원자력': 'nuclear', '재미': 'fun', '토이': 'toy'}
+cc = lambda c: 'c-' + SLUG.get(c, 'etc')
+toc = '<div class="toc">\n' + '\n'.join(
+    f'  <div class="tg {cc(c)}"><p class="chip">{html.escape(c)}<i>{len(items)}</i></p><ol>'
+    + ''.join(f'<li><a href="#{d}"><span class="no">{order[d]:02d}</span><span class="pg">{{{{PG:{d}}}}}</span><b>{html.escape(n)}</b>'
+              f'{"<small>" + html.escape(s) + "</small>" if s else ""}</a></li>' for d, n, s in items) + '</ol></div>'
+    for c, items in groups.items()) + '\n</div>'
+cats = '<div class="cv-cats">' + ''.join(
+    f'<a class="{cc(c)}" href="#{items[0][0]}"><b>{len(items)}</b><span>{html.escape(c)}</span></a>'
+    for c, items in groups.items()) + '</div>'
+menu = ''.join(f'<div class="{cc(c)}"><span>{html.escape(c)}</span>' + ''.join(f'<a href="#{d}">{html.escape(n)}</a>' for d, n, _ in items) + '</div>'
                for c, items in groups.items())
+# 도구 섹션 머리: 분류 칩 · 번호 · 단계 수를 붙이고 번호를 01 꼴로 (parts 의 HTML 은 그대로)
+def head(m):
+    d, cat, name, one = m.group(1), m.group(2).strip(), m.group(3), m.group(4)
+    sec = body[m.end():body.find('</section>', m.end())]
+    n = sec.count('class="step"')
+    return (f'<section class="tool {cc(cat)}" id="{d}">\n  <header class="th"><div class="th-meta"><p class="cat chip">{cat}</p>'
+            f'{f"<span class=th-n>{n}단계</span>" if n else ""}</div><span class="th-no">{order[d]:02d}</span>'
+            f'<h2>{name}</h2><p class="one">{one}</p></header>')
+body = re.sub(r'<section class="tool" id="([^"]+)">\s*<p class="cat">([^<]*)</p>\s*<h2>(.*?)</h2>\s*<p>(.*?)</p>', head, body, flags=re.S)
+body = re.sub(r'<span class="n">(\d)</span>', r'<span class="n">0\1</span>', body)
 n_tools = sum(len(v) for c, v in groups.items() if c != '포털')
 today = datetime.date.today()
-body = body.replace('{{TOC}}', toc).replace('{{N}}', str(n_tools)).replace('{{DATE}}', f'{today.year}. {today.month}. {today.day}.')
+body = body.replace('{{TOC}}', toc).replace('{{CATS}}', cats).replace('{{N}}', str(n_tools)).replace('{{DATE}}', f'{today.year}. {today.month}. {today.day}.')
 # 끝: 출처·라이선스 — 도구 저장소마다 THIRD_PARTY_NOTICES.md (없으면 저장소 첫 화면)
 def repo(d):
     g = lambda *a: subprocess.run(['git', '-C', os.path.join('..', '..', d), *a], capture_output=True, text=True).stdout.strip()
@@ -50,42 +69,29 @@ for c, items in groups.items():
     for d, n, _ in items:
         u, has = repo(d)
         if not has: missing.append(d)
-        if u: lic.append(f'  <li><b>{html.escape(n)}</b> · <a href="{u}">{html.escape(u.replace("https://", ""))}</a></li>')
-closing = ('<section class="tool" id="licenses">\n  <h2>출처·라이선스</h2>\n'
-           '  <p>도구마다 쓰는 오픈소스·모델의 출처와 라이선스는 각 저장소의 THIRD_PARTY_NOTICES.md 에 있습니다.</p>\n'
-           '  <ul class="files">\n' + '\n'.join(lic) + '\n  </ul>\n</section>\n')
-body += '\n' + closing
+        if u: lic.append(f'  <li><b>{html.escape(n)}</b><a href="{u}">{html.escape(u.replace("https://", ""))}</a></li>')
 src = '<p class="src">예시 그림: Machala et al., Nature Communications 16, 988 (2025), Fig. 6e (CC BY 4.0)</p>\n' if 'Machala' in body else ''
+closing = ('<section class="tool closing c-etc" id="licenses">\n  <header class="th"><div class="th-meta"><p class="cat chip">부록</p></div>'
+           '<h2>출처·라이선스</h2>\n  <p class="one">도구마다 쓰는 오픈소스·모델의 출처와 라이선스는 각 저장소의 THIRD_PARTY_NOTICES.md 에 있습니다.</p></header>\n'
+           '  <ul class="lic">\n' + '\n'.join(lic) + '\n  </ul>\n' + src +
+           '  <div class="colophon"><p>에이전트 포털 사용 설명서</p><p>인공지능응용연구실 · 2026 · 내부 시험용 · 배포용 아님</p></div>\n</section>\n')
+body += '\n' + closing
 
 # 3) 화면용 위쪽 막대(포털로 · 목차 · PDF) — 인쇄·PDF 에서는 숨김
-bar_css = '''
-.gbar{position:sticky;top:0;z-index:10;background:rgba(255,255,255,.96);border-bottom:1px solid var(--line);backdrop-filter:blur(4px)}
-.gbar .in{max-width:1000px;margin:0 auto;padding:8px 24px;display:flex;align-items:center;gap:14px;font-size:14px}
-.gbar a{color:var(--ink);text-decoration:none}.gbar .t{font-weight:700;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gbar .back{color:var(--ink-2)}.gbar .back:hover,.gbar .menu a:hover{text-decoration:underline}
-.gbar details{position:relative}.gbar summary{cursor:pointer;list-style:none;color:var(--ink-2)}.gbar summary::-webkit-details-marker{display:none}
-.gbar .menu{position:absolute;right:0;top:30px;width:min(560px,calc(100vw - 32px));max-height:70vh;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.12);padding:10px 14px;columns:2;column-gap:24px}
-.gbar .menu div{break-inside:avoid;margin-bottom:8px}.gbar .menu span{display:block;font-size:12px;color:#888}.gbar .menu a{display:block;padding:2px 0}
-.gbar .pdf{border:1px solid var(--ink);border-radius:6px;padding:4px 12px;font-weight:500;white-space:nowrap}.gbar .pdf:hover{background:var(--ink);color:#fff}
-.gbar .nd{font-size:12px;color:#999;white-space:nowrap}
-.tool,#top{scroll-margin-top:60px}
-@media screen and (max-width:760px){.gbar .in{padding:8px 16px;gap:10px}.gbar .t,.gbar .nd{display:none}.gbar details{margin-left:auto}.gbar .menu{position:fixed;left:16px;right:16px;top:44px;width:auto;columns:1}}
-@media print{.gbar{display:none}}
-'''
 bar = ('<nav class="gbar"><div class="in"><a class="back" href="/">← 포털로</a><a class="t" href="#top">에이전트 포털 사용 설명서</a>'
-       f'<details><summary>목차 ▾</summary><div class="menu">{menu}</div></details>'
+       f'<details><summary>목차</summary><div class="menu">{menu}</div></details>'
        '<span class="nd">내부 시험용 · 배포용 아님</span><a class="pdf" href="agent-portal.pdf" download="에이전트-포털-사용-설명서.pdf">PDF 내려받기</a></div></nav>\n'
        '<script>addEventListener("click",e=>{const d=document.querySelector(".gbar details");if(d.open&&(e.target.closest(".menu a")||!e.target.closest(".gbar details")))d.open=false})</script>\n')
 
 css = open('style.css', encoding='utf-8').read()
 head = ('<title>에이전트 포털 사용 설명서</title>\n<meta name="author" content="DongJu Kim (gggg8657)">\n'
-        '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
-        '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap">\n'
-        '<style>' + css + bar_css + '</style>\n')
-frag = '<div class="wrap">\n' + body + '\n' + src + '</div>'
+        '<link rel="preload" href="fonts/PretendardVariable.woff2" as="font" type="font/woff2" crossorigin>\n'
+        '<style>' + css + '</style>\n')
+frag = '<div class="wrap">\n' + body + '\n</div>'
 full = lambda s: ('<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
                   + head + '</head><body>' + s + '</body></html>')
-open('index.html', 'w', encoding='utf-8').write(full(bar + frag))
+pg = lambda s, f: re.sub(r'\{\{PG:([^}]+)\}\}', lambda m: f(m.group(1)), s)  # 목차 쪽번호 자리 (화면은 비움)
+open('index.html', 'w', encoding='utf-8').write(full(bar + pg(frag, lambda d: '')))
 
 # 4) PDF: 그림을 JPEG 로 줄여 넣은 임시 HTML → tools/pdf.mjs
 def emb(m):  # img/<그림> 또는 ext/<도구>/<그림>(= ../../<도구>/static/guide/, 공개 저장소에 안 넣는 그림)
@@ -98,9 +104,19 @@ def emb(m):  # img/<그림> 또는 ext/<도구>/<그림>(= ../../<도구>/static
 print(len(parts), 'parts ·', n_tools, 'tools ·', stamped, 'img stamped')
 if missing: print('THIRD_PARTY_NOTICES.md 없음:', ' '.join(missing))
 if '--no-pdf' not in sys.argv:
-    tmp = 'tools/_print.html'
-    open(tmp, 'w', encoding='utf-8').write(full(re.sub(r'src="((?:img|ext)/[^"]+)"', emb, frag)))
-    subprocess.run(['node', 'tools/pdf.mjs', tmp, 'agent-portal.pdf'], check=True)
+    tmp, pfrag = 'tools/_print.html', re.sub(r'src="((?:img|ext)/[^"]+)"', emb, frag)
+    def pdf(f):
+        fonts = 'file://' + os.path.abspath('fonts') + '/'  # 임시 HTML 은 tools/ 에 있으므로 글꼴은 절대 경로로
+        open(tmp, 'w', encoding='utf-8').write(full(pg(pfrag, f)).replace('url(fonts/', 'url(' + fonts).replace('href="fonts/', 'href="' + fonts))
+        subprocess.run(['node', 'tools/pdf.mjs', tmp, 'agent-portal.pdf'], check=True)
+    pdf(lambda d: '00')  # 1차: 자리만 잡고 찍어서 섹션 시작 쪽을 PDF 이름표(#id)에서 읽는다
+    try:
+        import logging; logging.getLogger('pypdf').setLevel(logging.ERROR)
+        from pypdf import PdfReader
+        r = PdfReader('agent-portal.pdf')
+        pages = {k.lstrip('/'): r.get_destination_page_number(v) + 1 for k, v in r.named_destinations.items()}
+        pdf(lambda d: str(pages.get(d, '')))
+    except ImportError: pass
     os.remove(tmp)
     try:  # PDF 정보에 작성자
         import logging; logging.getLogger('pypdf').setLevel(logging.ERROR)  # Chromium PDF 의 trailer 크기 경고
