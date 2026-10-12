@@ -92,7 +92,10 @@
       if (r.cssRules) walk(r.cssRules);
     }
   }
-  function sheetOk(sh) { return !(sh.href && /\/theme\//.test(sh.href)) && !(sh.ownerNode && sh.ownerNode.id && /^ag-th-/.test(sh.ownerNode.id)); }
+  function sheetOk(sh) {  // 테마 자체 CSS·SVG 안 <style>(Mermaid 등 그림 내용)은 건너뜀
+    var n = sh.ownerNode;
+    return !(sh.href && /\/theme\//.test(sh.href)) && !(n && n.id && /^ag-th-/.test(n.id)) && !(n && n.closest && n.closest("svg"));
+  }
   function hasNative(sh) {
     try { return Array.prototype.some.call(sh.cssRules, function (r) { return /\[data-theme=["']?dark/.test(r.selectorText || "") || (r.cssRules && hasNative({ cssRules: r.cssRules })); }); } catch (e) { return false; }
   }

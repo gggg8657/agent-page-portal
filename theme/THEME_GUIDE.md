@@ -66,7 +66,7 @@
 - color·fill 의 어두운 색 → 밝은 글자, 이미 밝은 글자(흰 글씨 버튼)는 그대로
 - `color: var(--acc)` 처럼 강조색을 글자로 쓴 곳 → 밝은 강조색
 - `@media (prefers-color-scheme: dark)` 안·`print` 규칙은 안 건드림
-- **그림·캔버스·영상·SVG 속성은 절대 안 바꿈**(반전 금지 — 색이 곧 내용)
+- **그림·캔버스·영상·SVG(속성과 SVG 안 `<style>` — Mermaid 등) 은 절대 안 바꿈**(반전 금지 — 색이 곧 내용)
 - 도구에 자체 어둡게 모드(`[data-theme=dark]` 선택자)가 있으면 dark.js 는 손대지 않고 `html[data-ag-native]` 를 붙이고,
   boot.js 가 `html[data-theme=dark|light]` 를 붙여서 도구 것이 켜집니다(chart-local, battery-local 등). classic-light 일 때는 `data-theme` 를 안 붙임.
 
