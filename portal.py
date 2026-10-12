@@ -547,7 +547,12 @@ class H(BaseHTTPRequestHandler):
             return self.need_login()
         if self.path.startswith("/t/"):
             return self.proxy()
-        req = json.loads(self.rfile.read(int(self.headers["Content-Length"])) or b"{}")
+        try:
+            req = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+            if not isinstance(req, dict):
+                raise ValueError
+        except ValueError:
+            return self._send({"error": "요청 본문은 JSON 객체여야 합니다"}, code=400)
         try:
             with db() as c:
                 if self.path == "/api/pin":  # PIN 바꾸기: 지금 PIN 확인 → 새 PIN, 다른 기기 세션은 끊음
@@ -568,7 +573,7 @@ class H(BaseHTTPRequestHandler):
                     if not (req.get("title") or "").strip():
                         raise ValueError("제목이 비었습니다")
                     c.execute("INSERT INTO posts(title,body,author,dept,tags,ts) VALUES(?,?,?,?,?,?)",
-                              (req["title"].strip(), req.get("body", "").strip(), req.get("author") or self.uname, req.get("dept", ""),
+                              (req["title"].strip(), req.get("body", "").strip(), self.uname, req.get("dept", ""),  # 작성자는 로그인 계정 이름(남의 이름으로 쓰기 방지)
                                json.dumps(["#" + x.strip("#") for x in (req.get("tags") or "").split() if x]), now()))
                     return self._send({"ok": True})
                 if self.path == "/api/post_like":
@@ -581,9 +586,13 @@ class H(BaseHTTPRequestHandler):
                     return self._send({"error": "unknown tool"}, code=404)
                 if self.path in ("/api/open", "/api/like"):
                     c.execute("INSERT INTO events VALUES(?,?,?,?)", (self.path[5:], t["dir"], now(), self.user))
-                elif self.path == "/api/start":
+                elif self.path == "/api/start":  # 꺼진 도구 켜기는 누구나, 이미 켜진 도구 재시작은 관리자만
+                    if alive(t["port"]) and not self.is_owner:
+                        return self._send({"error": "이미 실행 중입니다"}, code=409)
                     start(t)
                 elif self.path == "/api/stop":
+                    if not self.is_owner:
+                        return self._send({"error": "도구 중지는 관리자만 할 수 있습니다"}, code=403)
                     stop(t)
                 else:
                     return self._send({"error": "not found"}, code=404)
