@@ -420,7 +420,11 @@ def signed(html):
     name, mail = _SIG.split(" · ")
     if 'name="author"' not in html:
         meta = f'<meta name="author" content="{name[7:]} <{mail}>">'
-        html = html.replace("<head>", "<head>" + meta, 1) if "<head>" in html else meta + html
+        if "<head>" in html:
+            html = html.replace("<head>", "<head>" + meta, 1)
+        else:  # <head> 없는 화면: <!doctype> 앞에 넣으면 브라우저가 호환 모드(quirks)로 그림 → doctype 뒤에
+            m = re.match(r"\s*<!doctype[^>]*>", html, re.I)
+            html = html[:m.end()] + meta + html[m.end():] if m else meta + html
     if "data-sig" not in html:
         tag = (f'<!-- {_SIG} --><div data-sig title="{mail}" style="text-align:center;font-size:11px;color:#9aa0a6;'
                f'opacity:.55;margin:28px 0 8px">{name} · 내부 시험용 · 배포용 아님</div>')
