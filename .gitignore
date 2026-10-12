@@ -6,3 +6,23 @@ _data/
 # local UI audit (absolute local paths, screenshots of real sessions)
 ui_audit.js
 ui_audit_report*.json
+# 사용 설명서: PDF 는 모든 그림이 들어가므로(파동이 등 비공개 그림 포함) 커밋하지 않음 — 서버에서 guide/tools/build.py 로 만듦
+guide/agent-portal.pdf
+guide/agent-portal.html
+guide/tools/_print.html
+guide/shots/
+guide/tools/node_modules
+guide/img/padong-local-*
+# 설명서 캡처 작업 스크립트·작업 메모(에이전트별) — 로컬에만
+guide/tools/agy-*
+guide/tools/codex-*
+guide/tools/cursor-*
+guide/tools/g1-*
+guide/tools/g2-*
+guide/tools/g4-*
+guide/tools/g5-*
+guide/tools/guide3-*
+guide/tools/prompt.txt
+guide/parts/*NOTES.md
+guide/BRIEF.md
+guide/_preview.html

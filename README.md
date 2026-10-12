@@ -3,6 +3,8 @@
 > **한 줄 요약** — 같은 상위 폴더에 나란히 둔 로컬 LLM 도구 25개(목록 노출 24개)를 한 화면에 모은 포털. 검색·카테고리로 도구를 찾고, `/t/<도구>/` 프록시로 UI를 열고, README·사용법 팝업·시작/중지·사용 통계를 한곳에서 다룹니다. 파이썬 표준 라이브러리만.
 > 각 도구는 **따로따로 별도 저장소**로 공개되어 있고, 이 저장소는 그 도구들을 묶어 띄우는 포털입니다.
 
+> ⚠️ 연구·내부 시험용 프로토타입입니다(배포·상업 서비스용 아님). 제3자 구성요소의 라이선스는 THIRD_PARTY_NOTICES.md 를 확인하세요.
+
 ![포털 홈 — 검색, 카테고리 칩, 인기·신규 요약, 내 에이전트 만들기](docs/img/home.png)
 
 ## 사용 방법
@@ -11,9 +13,9 @@
 1. **검색**(홈 ①) — 도구 이름·설명·태그를 한 번에 찾습니다(예: 회의록, HWP, 그림).
 2. **카테고리 칩**(홈 ②) — 문서·회의·그림·음성·데이터·재미·토이·연구·원자력으로 목록을 좁힙니다.
 3. **홈 요약**(홈 ③) — 인기 TOP·신규·최근 사용 카드에서 바로 고릅니다. 사용자 랭킹은 계정 이름으로 표시됩니다(IP 는 보이지 않음).
-4. **내 에이전트 만들기**(홈 ④) — 새 도구 등록 안내로 연결됩니다.
+4. **내 에이전트 만들기**(홈 ④) — 새 도구 등록 안내로 연결됩니다. 오른쪽 위 **📘 사용 설명서**(홈 ⑤)는 도구마다 쓰는 순서를 화면으로 정리한 설명서(`/guide/`, PDF 내려받기)를 엽니다.
 5. **전체 에이전트** 목록에서 정렬(이름순·최신순, 아래 ①)과 카테고리 필터로 카드를 고르고 **열기**(아래 ②) — 또는 `http://<포털>:8700/t/<도구폴더>/` 로 바로 갑니다.
-6. 카드의 **README**는 저장소 설명을, 도구 화면 오른쪽 위 **?** 는 `guides/<도구폴더>.md` 짧은 사용법을 엽니다.
+6. 카드의 **README**는 저장소 설명을, 도구 화면 오른쪽 위 **?**(아래 ①)는 `guides/<도구폴더>.md` 짧은 사용법(②)을 열고, **설명서에서 보기**(③)는 설명서의 그 도구 부분으로 갑니다.
 
 <p>
 <img src="docs/img/list.png" alt="전체 목록 — 정렬·필터·카드" width="49%">
@@ -136,8 +138,10 @@ bash audit.sh                     # 전체 점검: CDN 유출·포트 중복·LI
 
 ## 출처·감사 (Credits)
 
-- 파이썬 표준 라이브러리만 씁니다. 연결된 각 도구가 쓰는 오픈소스·모델·데이터의 출처는 위 표의 각 저장소 README 'Credits' 와 `NOTICE` 에 있습니다.
-- 기본 LLM: [Ollama](https://github.com/ollama/ollama) (MIT) + Google [Gemma](https://ai.google.dev/gemma) `gemma4:31b` (모델 이용 조건은 Gemma 배포처 참고) — 포털은 환경변수로 넘겨 줄 뿐 동봉하지 않습니다.
+- 포털 서버는 파이썬 표준 라이브러리만 씁니다. 제3자 구성요소 전체 목록·라이선스·상업 이용 여부는 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) 에 있습니다. 연결된 각 도구의 출처는 각 저장소의 `THIRD_PARTY_NOTICES.md`·README 'Credits' 를 보세요.
+- 기본 LLM: [Ollama](https://github.com/ollama/ollama) (MIT) + Google [Gemma](https://ai.google.dev/gemma) `gemma4:31b` (Apache-2.0) — 포털은 환경변수로 넘겨 줄 뿐 동봉하지 않습니다.
+- 사용 설명서(`/guide`): 글꼴 [Noto Sans KR](https://fonts.google.com/noto/specimen/Noto+Sans+KR) (SIL OFL 1.1, Google Fonts), 캡처·PDF 생성에 [Playwright](https://github.com/microsoft/playwright) (Apache-2.0)·[Pillow](https://github.com/python-pillow/Pillow) (MIT-CMU).
+- 상업 이용 확인이 필요한 항목(캐릭터 파동이 그림, 생성 얼굴, 연결 도구의 비상업 요소)은 [#1](https://github.com/gggg8657/agent-page-portal/issues/1) 에 모았습니다.
 
 저작권 표기는 `NOTICE` 를 보세요.
 
@@ -159,3 +163,7 @@ GPU 를 도구마다 미리 정해 두지 않습니다. 포털 기동 스크립�
 - 꼭 고정해야 할 때만(예외용): `tools.json` 의 그 도구에 `"gpus": "0"` 을 적으면 포털이 그 도구를 `CUDA_VISIBLE_DEVICES=<값>` 으로 띄워, 그 안에서만 고릅니다.
 
 > portrait-local(LivePortrait)은 2026-10-06 포털에서 뺐습니다 — 얼굴 인식 모델(InsightFace)이 비상업 연구용 라이선스라 기술이전 등에 걸릴 수 있고 효용이 낮아서. 저장소 [gggg8657/portrait-local](https://github.com/gggg8657/portrait-local) 은 남겨 둡니다.
+
+## 만든 사람
+
+DongJu Kim (gggg8657) — 설계·구현

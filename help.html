@@ -13,15 +13,16 @@
 #agHelp .agh-b ol,#agHelp .agh-b ul{padding-left:22px;margin:4px 0}#agHelp .agh-b li{margin:3px 0}#agHelp .agh-b code{display:inline;background:#f1f3f6;padding:1px 5px;border-radius:4px;font-size:12.5px;word-break:break-all;overflow-wrap:anywhere;white-space:normal}
 #agHelp .agh-f{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;padding:10px 18px;border-top:1px solid #eee;font-size:12.5px;color:#6b7280}
 #agHelp .agh-f label{display:inline-flex;flex-direction:row;align-items:center;gap:4px;margin:0;padding:0;font:inherit;color:inherit;width:auto}#agHelp .agh-f input{width:auto;margin:0}
+#agHelp .agh-f a{color:#1f3a5f;margin-left:auto;margin-right:4px}
 #agHelp .agh-f button{background:#1f3a5f;color:#fff;border:none;border-radius:6px;padding:7px 18px;font:inherit;font-weight:600;cursor:pointer}
-#agNote{position:fixed;left:14px;bottom:14px;z-index:99998;display:flex;flex-direction:column;gap:8px;max-width:min(340px,calc(100vw - 28px));font:13px/1.5 -apple-system,"Pretendard","Apple SD Gothic Neo",system-ui,sans-serif}
-#agNote>div{background:#fff;color:#1f2937;border:1px solid #c7d2e3;border-left:4px solid #1f3a5f;border-radius:8px;padding:9px 12px;box-shadow:0 3px 12px rgba(0,0,0,.15);display:flex;gap:10px;align-items:center}
+#agNote{position:fixed;left:14px;bottom:14px;z-index:99998;pointer-events:none;display:flex;flex-direction:column;gap:8px;max-width:min(340px,calc(100vw - 28px));font:13px/1.5 -apple-system,"Pretendard","Apple SD Gothic Neo",system-ui,sans-serif}
+#agNote>div{pointer-events:auto;background:#fff;color:#1f2937;border:1px solid #c7d2e3;border-left:4px solid #1f3a5f;border-radius:8px;padding:9px 12px;box-shadow:0 3px 12px rgba(0,0,0,.15);display:flex;gap:10px;align-items:center}
 #agNote>div.bad{border-left-color:#dc2626}#agNote>div span{flex:1;min-width:0;overflow-wrap:anywhere}
 #agNote button{border:none;background:none;color:#6b7280;cursor:pointer;font:inherit;padding:2px 4px;white-space:nowrap}#agNote button.y{background:#1f3a5f;color:#fff;border-radius:6px;padding:4px 10px;font-weight:600}
 </style>
 <button id="agHelpBtn" title="사용법 보기">?</button>
 <dialog id="agHelp"><div class="agh-h"><span id="agHelpT">사용법</span><button id="agHelpX" aria-label="닫기">×</button></div><div class="agh-b" id="agHelpB">불러오는 중…</div>
-<div class="agh-f"><label><input type="checkbox" id="agHelpNo" checked> 다음부터 자동으로 띄우지 않기</label><label title="1분 넘게 걸린 내 작업이 끝나면 알려 줌"><input type="checkbox" id="agNoteOn"> 작업 끝 알림</label><button id="agHelpOk" autofocus>시작하기</button></div></dialog>
+<div class="agh-f"><label><input type="checkbox" id="agHelpNo" checked> 다음부터 자동으로 띄우지 않기</label><label title="1분 넘게 걸린 내 작업이 끝나면 알려 줌"><input type="checkbox" id="agNoteOn"> 작업 끝 알림</label><a id="agHelpG" href="/guide/#%DIR%" target="_blank">설명서에서 보기</a><button id="agHelpOk" autofocus>시작하기</button></div></dialog>
 <script>(function(){
   if (window.top !== window) { document.getElementById('agHelpBtn').remove(); return; }  // iframe(예: 파동이 펫) 안에서는 사용법 버튼·팝업 없음
   const DIR = "%DIR%", KEY = "agGuideSeen:%USER%:" + DIR;   // 계정별(포털 로그인 id) · 브라우저(localStorage) 기준
@@ -46,6 +47,7 @@
   const open = () => { if (!d.open) d.showModal(); };
   const shut = () => { d.close(); try { if (document.getElementById('agHelpNo').checked) localStorage.setItem(KEY, new Date().toISOString()); } catch (e) {} };
   document.getElementById('agHelpBtn').onclick = open;
+  if (DIR === 'portal') document.getElementById('agHelpG').href = '/guide/#agent-page-portal';  // 설명서 섹션 id = 도구 폴더
   document.getElementById('agHelpOk').onclick = shut; document.getElementById('agHelpX').onclick = shut;
   fetch('/api/guide/' + DIR).then(r => r.text()).then(t => {
     b.innerHTML = md(t);
@@ -65,7 +67,7 @@
   function ask(force) {  // 권한은 한 번만 공손하게 물음(버튼 눌러야 브라우저 창이 뜸)
     if (!sys() || Notification.permission !== 'default' || (!force && LS('agNotifyAsked'))) return;
     LS('agNotifyAsked', '1');
-    const d = toast('<span>🔔 1분 넘게 걸리는 작업이 끝나면 알려 드릴까요?</span><button class="y">알림 받기</button><button>괜찮아요</button>');
+    const d = toast('<span>🔔 1분 넘게 걸리는 작업이 끝나면 알려 드릴까요?</span><button class="y">알림 받기</button><button>괜찮아요</button><button aria-label="닫기">×</button>', '', 15000);
     d.querySelector('.y').onclick = () => { d.remove(); Notification.requestPermission(); };
   }
   let since = null, title = document.title, blink = null;
@@ -74,7 +76,7 @@
     const min = Math.max(1, Math.round(e.sec / 60)), msg = `${e.name} 작업 ${e.ok ? '끝' : '실패'} (${min}분)`;
     if (e.dir === DIR && !document.hidden) return;  // 지금 그 도구 화면을 보고 있으면 이미 보임
     if (sys() && Notification.permission === 'granted') { try { const n = new Notification(msg, { tag: 'ag-' + e.id, body: '눌러서 열기' }); n.onclick = () => { window.focus(); if (e.dir !== DIR) window.open('/t/' + e.dir + '/'); n.close(); }; return; } catch (x) {} }
-    toast(`<span>${e.ok ? '✅' : '⚠️'} ${msg.replace(/[&<>]/g, '')}</span>${e.dir !== DIR ? `<a href="/t/${e.dir}/" target="_blank" style="color:#2563eb;white-space:nowrap">열기</a>` : ''}<button aria-label="닫기">×</button>`, e.ok ? '' : 'bad', 60000);
+    toast(`<span>${e.ok ? '✅' : '⚠️'} ${msg.replace(/[&<>]/g, '')}</span>${e.dir !== DIR ? `<a href="/t/${e.dir}/" target="_blank" style="color:#2563eb;white-space:nowrap">열기</a>` : ''}<button aria-label="닫기">×</button>`, e.ok ? '' : 'bad', 15000);
     if (document.hidden && !blink) { let k = 0; blink = setInterval(() => { document.title = (k++ % 2) ? title : '🔔 ' + msg; }, 1000);
       document.addEventListener('visibilitychange', function f() { if (!document.hidden) { clearInterval(blink); blink = null; document.title = title; document.removeEventListener('visibilitychange', f); } }); }
   }

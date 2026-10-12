@@ -8,6 +8,7 @@
   .top{background:#fff;border-bottom:1px solid var(--line);padding:10px 20px;display:flex;align-items:center;gap:16px}
   .logo{font-weight:800;color:var(--navy);font-size:16px}.logo small{font-weight:500;color:var(--muted);font-size:11px;margin-left:6px}
   .top .sp{flex:1}.user{font-size:12px;color:var(--muted);margin-right:44px}
+  .gd{font-size:12px;color:var(--navy);text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:4px 12px;background:#fff;white-space:nowrap}.gd:hover{background:var(--chip)}.gd+.user{margin-left:-4px}
   .wrap{display:grid;grid-template-columns:200px 1fr 300px;gap:16px;padding:16px 20px;max-width:1500px;margin:0 auto}
   @media(max-width:1100px){.wrap{grid-template-columns:180px 1fr}.right{grid-column:1/-1}}
   @media(max-width:760px){.wrap{grid-template-columns:1fr}.side{display:none}}
@@ -43,7 +44,7 @@
   .wrap>*,.cols>*,.grid>*,.mini>div:last-child,.title>span,.post .m>span{min-width:0}.mini>div:last-child{flex:1}
   .wrap,dialog{overflow-wrap:anywhere}.post .m{flex-wrap:wrap}.box td:last-child{white-space:nowrap;padding-left:8px}.search span{white-space:nowrap}.search input{min-width:0}.top{flex-wrap:wrap;row-gap:4px}.top .logo{min-width:0}
 </style>
-<div class="top"><span class="logo">KAERI AI Agent Portal<small>내부망 로컬 LLM 에이전트</small></span><span class="sp"></span><span class="user" id="user"></span></div>
+<div class="top"><span class="logo">KAERI AI Agent Portal<small>내부망 로컬 LLM 에이전트</small></span><span class="sp"></span><a class="gd" href="/guide/" target="_blank">📘 사용 설명서</a><span class="user" id="user"></span></div>
 <div class="wrap">
   <aside class="side">
     <button class="mk" onclick="addTool.showModal()">+ 내 에이전트 만들기</button>

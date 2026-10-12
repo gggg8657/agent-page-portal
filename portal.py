@@ -16,6 +16,7 @@ HOST = os.environ.get("HOST", "")
 DATA = os.environ.get("AGENT_DATA") or os.path.join(BASE, "_data")  # 포털 DB + 모든 도구 workspace 가 이 아래로 모임
 os.makedirs(DATA, exist_ok=True)
 TOOLS_FILE = os.path.join(ROOT, "tools.json")
+GUIDE_DIR = os.path.join(ROOT, "guide")  # 사용 설명서 (/guide)
 
 
 # 서버 주인 → 도구에 X-Agent-User: owner (예전 기록 전부 보임). 나머지는 계정 id 별 폴더.
@@ -327,7 +328,7 @@ def signed(html):
         html = html.replace("<head>", "<head>" + meta, 1) if "<head>" in html else meta + html
     if "data-sig" not in html:
         tag = (f'<!-- {_SIG} --><div data-sig title="{mail}" style="text-align:center;font-size:11px;color:#9aa0a6;'
-               f'opacity:.55;margin:28px 0 8px">{name}</div>')
+               f'opacity:.55;margin:28px 0 8px">{name} · 내부 시험용 · 배포용 아님</div>')
         html = html.replace("</body>", tag + "</body>", 1) if "</body>" in html else html + tag
     return html
 
@@ -384,6 +385,32 @@ class H(BaseHTTPRequestHandler):
         if getattr(self, "_setcookie", None):
             self.send_header("Set-Cookie", self._setcookie)
         self.end_headers(); self.wfile.write(b)
+
+    def guide_file(self, p):
+        """사용 설명서(guide/ — tools/build.py 가 만듦): /guide/ · /guide/img/<그림> · /guide/ext/<도구>/<그림> · /guide/agent-portal.pdf. 이름 규칙에 맞는 파일만"""
+        if p == "/guide":  # 상대 경로(img/…)가 맞게 / 붙여서. #도구 앵커는 브라우저가 유지
+            self.send_response(302); self.send_header("Location", "/guide/"); self.send_header("Content-Length", "0"); self.end_headers(); return
+        rel = urllib.parse.unquote(p[len("/guide/"):]) or "index.html"
+        m = re.fullmatch(r"index\.html|agent-portal\.pdf|img/[A-Za-z0-9][\w.-]*\.(png|jpe?g|svg|webp)", rel)
+        top = GUIDE_DIR
+        e = re.fullmatch(r"ext/([a-z0-9-]+-local)/([A-Za-z0-9][\w.-]*\.(png|jpe?g|webp))", rel)
+        if e:  # 공개 저장소에 넣으면 안 되는 그림(예: 파동이 — 캐릭터 권리)은 비공개 도구 저장소 static/guide/ 에 두고 여기서 내보냄
+            m, top, rel = e, os.path.join(BASE, e[1], "static", "guide"), e[2]
+        f = os.path.join(top, rel)
+        if not m or not os.path.isfile(f) or not os.path.realpath(f).startswith(os.path.realpath(top) + os.sep):
+            return self._send({"error": "not found"}, code=404)
+        st = os.stat(f); lm = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime(st.st_mtime)); etag = f'"{int(st.st_mtime)}-{st.st_size}"'
+        cc = ("Cache-Control", "no-cache" if rel == "index.html" else "private, max-age=3600")  # 로그인 뒤 내용 → 공용 캐시 금지
+        if self.headers.get("If-None-Match") == etag:
+            self.send_response(304); self.send_header("ETag", etag); self.send_header(*cc); self.send_header("Content-Length", "0"); self.end_headers(); return
+        ext = rel.rsplit(".", 1)[1]
+        ctype = {"html": "text/html; charset=utf-8", "pdf": "application/pdf", "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+                 "svg": "image/svg+xml", "webp": "image/webp"}[ext]
+        hd = [cc, ("ETag", etag), ("Last-Modified", lm), ("X-Content-Type-Options", "nosniff")]
+        if ext == "pdf":
+            hd.append(("Content-Disposition", "attachment; filename=agent-portal.pdf; filename*=UTF-8''" + urllib.parse.quote("에이전트-포털-사용-설명서.pdf")))
+        body = open(f, "rb").read()
+        self._send(signed(body.decode("utf-8")).encode() if ext == "html" else body, ctype, headers=hd)
 
     def proxy(self):
         t0 = time.time()
@@ -504,6 +531,8 @@ class H(BaseHTTPRequestHandler):
             d = p.split("/")[-1]
             f = os.path.join(BASE, d, "README.md") if tool(d) else ""
             return self._send((open(f, encoding="utf-8").read() if f and os.path.exists(f) else "README 없음").encode(), "text/plain; charset=utf-8")
+        if p == "/guide" or p.startswith("/guide/"):
+            return self.guide_file(p)
         if p != "/":
             return self._send({"error": "not found"}, code=404)
         self._send(signed(HTML + self.help_html("portal")).encode(), "text/html; charset=utf-8")
