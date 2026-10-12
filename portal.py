@@ -456,6 +456,13 @@ def theme_head(pref, kind, d=""):
     return f"<script>{js}</script>{tags}"
 
 
+def first_html(rest):
+    """/t/<도구>/ 뒤 부분이 도구 첫 화면인가(사용법·테마를 붙일 곳): 쿼리 빼고 '' 또는 index.html. 딥링크(?job=…)도 포함.
+    단 파동이 펫(?pet=1)은 다른 화면 위에 뜨는 투명 iframe 이라 제외 — 테마 바탕색·? 버튼이 펫 뒤를 칠하면 안 됨"""
+    path, _, q = rest.partition("?")
+    return path in ("", "index.html") and "1" not in urllib.parse.parse_qs(q).get("pet", [])
+
+
 def themed(html, head):
     """테마 머리를 <meta charset> 뒤(없으면 <head> 뒤, 문서 맨 앞)에 — 도구 스타일보다 먼저, 본문 그리기 전에"""
     m = re.search(r"<meta\s+charset[^>]*>", html[:2048], re.I) or re.search(r"<head(\s[^>]*)?>", html[:4096], re.I) or re.search(r"<!doctype[^>]*>", html[:512], re.I)
@@ -769,7 +776,7 @@ class H(BaseHTTPRequestHandler):
             r = e
         except Exception as e:
             return self._send({"error": f"{t['dir']} 응답 없음 ({type(e).__name__}) — 포털에서 '시작'을 누르세요"}, code=502)
-        inject = self.command == "GET" and parts[3] in ("", "index.html") and "text/html" in (r.headers.get("Content-Type") or "")
+        inject = self.command == "GET" and first_html(parts[3]) and "text/html" in (r.headers.get("Content-Type") or "")
         body = self.html_page(r.read().decode("utf-8", "replace") + self.help_html(t["dir"]), "tool", t["dir"]) if inject else None  # 도구 화면에도 저작자 표기 + 테마
         self._status = r.status
         self.send_response(r.status)

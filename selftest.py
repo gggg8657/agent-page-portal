@@ -68,4 +68,9 @@ assert _h.startswith('<!doctype html><meta charset="utf-8"><!--T-->'), _h
 assert portal.themed("<p>x</p>", "<!--T-->") == "<!--T--><p>x</p>"
 assert "pref = \"trendy-auto\"" in portal.theme_head("trendy-auto", "tool", "mail-local")
 
+# 도구 첫 화면 판정: 딥링크(쿼리)도 테마·사용법을 붙이고, 펫 iframe(?pet=1)과 하위 경로는 안 붙임
+assert portal.first_html("") and portal.first_html("index.html") and portal.first_html("?job=abc") and portal.first_html("?id=3&token=x")
+assert not portal.first_html("?pet=1") and not portal.first_html("?mode=a&pet=1&date=2026-10-12") and not portal.first_html("v0.1?pet=1")
+assert not portal.first_html("static/app.js") and not portal.first_html("api/run?x=1")
+
 print("selftest OK")
