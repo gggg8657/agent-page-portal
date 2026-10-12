@@ -14,10 +14,14 @@
 #agHelp .agh-f{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;padding:10px 18px;border-top:1px solid #eee;font-size:12.5px;color:#6b7280}
 #agHelp .agh-f label{display:inline-flex;flex-direction:row;align-items:center;gap:4px;margin:0;padding:0;font:inherit;color:inherit;width:auto}#agHelp .agh-f input{width:auto;margin:0}
 #agHelp .agh-f button{background:#1f3a5f;color:#fff;border:none;border-radius:6px;padding:7px 18px;font:inherit;font-weight:600;cursor:pointer}
+#agNote{position:fixed;left:14px;bottom:14px;z-index:99998;display:flex;flex-direction:column;gap:8px;max-width:min(340px,calc(100vw - 28px));font:13px/1.5 -apple-system,"Pretendard","Apple SD Gothic Neo",system-ui,sans-serif}
+#agNote>div{background:#fff;color:#1f2937;border:1px solid #c7d2e3;border-left:4px solid #1f3a5f;border-radius:8px;padding:9px 12px;box-shadow:0 3px 12px rgba(0,0,0,.15);display:flex;gap:10px;align-items:center}
+#agNote>div.bad{border-left-color:#dc2626}#agNote>div span{flex:1;min-width:0;overflow-wrap:anywhere}
+#agNote button{border:none;background:none;color:#6b7280;cursor:pointer;font:inherit;padding:2px 4px;white-space:nowrap}#agNote button.y{background:#1f3a5f;color:#fff;border-radius:6px;padding:4px 10px;font-weight:600}
 </style>
 <button id="agHelpBtn" title="사용법 보기">?</button>
 <dialog id="agHelp"><div class="agh-h"><span id="agHelpT">사용법</span><button id="agHelpX" aria-label="닫기">×</button></div><div class="agh-b" id="agHelpB">불러오는 중…</div>
-<div class="agh-f"><label><input type="checkbox" id="agHelpNo" checked> 다음부터 자동으로 띄우지 않기</label><button id="agHelpOk" autofocus>시작하기</button></div></dialog>
+<div class="agh-f"><label><input type="checkbox" id="agHelpNo" checked> 다음부터 자동으로 띄우지 않기</label><label title="1분 넘게 걸린 내 작업이 끝나면 알려 줌"><input type="checkbox" id="agNoteOn"> 작업 끝 알림</label><button id="agHelpOk" autofocus>시작하기</button></div></dialog>
 <script>(function(){
   if (window.top !== window) { document.getElementById('agHelpBtn').remove(); return; }  // iframe(예: 파동이 펫) 안에서는 사용법 버튼·팝업 없음
   const DIR = "%DIR%", KEY = "agGuideSeen:" + DIR;   // ponytail: 계정 체계가 없어 브라우저(localStorage) 기준. 로그인 생기면 KEY 에 사용자 id 붙이기
@@ -49,6 +53,41 @@
     let seen = null; try { seen = localStorage.getItem(KEY); } catch (e) {}
     if (!seen) open();   // 최초 1회 자동
   }).catch(() => { b.textContent = '사용법을 불러오지 못했습니다.'; });
+})();</script>
+<script>(function(){  // 오래 걸린 내 작업(1분 넘는 요청)이 끝나면 알림 — 어느 포털 화면을 보고 있든. 끄기: ? 사용법 창 아래 '작업 끝 알림'
+  if (window.top !== window) return;
+  const DIR = "%DIR%", LS = (k, v) => { try { return v === undefined ? localStorage.getItem(k) : localStorage.setItem(k, v); } catch (e) { return null; } };
+  const on = () => LS('agNotify') !== 'off', sys = () => window.isSecureContext && 'Notification' in window;  // 시스템 알림은 https·localhost 에서만 됨 → 아니면 화면 안 알림
+  const box = document.createElement('div'); box.id = 'agNote'; document.body.appendChild(box);
+  const toast = (html, cls, ms) => { const d = document.createElement('div'); d.className = cls || ''; d.innerHTML = html; box.appendChild(d);
+    d.querySelectorAll('button:not(.y)').forEach(b => b.onclick = () => d.remove()); if (ms) setTimeout(() => d.remove(), ms); return d; };
+  const cb = document.getElementById('agNoteOn'); if (cb) { cb.checked = on(); cb.onchange = () => { LS('agNotify', cb.checked ? 'on' : 'off'); if (cb.checked) ask(true); }; }
+  function ask(force) {  // 권한은 한 번만 공손하게 물음(버튼 눌러야 브라우저 창이 뜸)
+    if (!sys() || Notification.permission !== 'default' || (!force && LS('agNotifyAsked'))) return;
+    LS('agNotifyAsked', '1');
+    const d = toast('<span>🔔 1분 넘게 걸리는 작업이 끝나면 알려 드릴까요?</span><button class="y">알림 받기</button><button>괜찮아요</button>');
+    d.querySelector('.y').onclick = () => { d.remove(); Notification.requestPermission(); };
+  }
+  let since = null, title = document.title, blink = null;
+  const seen = () => +(LS('agNotifyLast') || 0);
+  function show(e) {
+    const min = Math.max(1, Math.round(e.sec / 60)), msg = `${e.name} 작업 ${e.ok ? '끝' : '실패'} (${min}분)`;
+    if (e.dir === DIR && !document.hidden) return;  // 지금 그 도구 화면을 보고 있으면 이미 보임
+    if (sys() && Notification.permission === 'granted') { try { const n = new Notification(msg, { tag: 'ag-' + e.id, body: '눌러서 열기' }); n.onclick = () => { window.focus(); if (e.dir !== DIR) window.open('/t/' + e.dir + '/'); n.close(); }; return; } catch (x) {} }
+    toast(`<span>${e.ok ? '✅' : '⚠️'} ${msg.replace(/[&<>]/g, '')}</span>${e.dir !== DIR ? `<a href="/t/${e.dir}/" target="_blank" style="color:#2563eb;white-space:nowrap">열기</a>` : ''}<button aria-label="닫기">×</button>`, e.ok ? '' : 'bad', 60000);
+    if (document.hidden && !blink) { let k = 0; blink = setInterval(() => { document.title = (k++ % 2) ? title : '🔔 ' + msg; }, 1000);
+      document.addEventListener('visibilitychange', function f() { if (!document.hidden) { clearInterval(blink); blink = null; document.title = title; document.removeEventListener('visibilitychange', f); } }); }
+  }
+  function poll() {
+    if (!on()) return;
+    fetch('/api/events?since=' + (since ?? 0)).then(r => r.json()).then(j => {
+      const fresh = since !== null;  // 첫 조회는 기준점만 잡되, 탭이 닫혀 있던 사이 10분 안에 끝난 건 알려 줌
+      for (const e of j.events || []) if (e.id > seen() && (fresh || Date.now() / 1000 - e.t < 600)) { LS('agNotifyLast', e.id); show(e); }  // 여러 탭이어도 한 번만
+      since = j.last;
+    }).catch(() => {});
+  }
+  poll(); setInterval(poll, 15000);
+  setTimeout(() => { if (on() && !document.getElementById('agHelp').open) ask(); }, 4000);
 })();</script>
 <script>(function(){  // 파동이 펫 — 모든 화면 아래를 돌아다님(끄기: 펫 메뉴 ⋯ → 펫 끄기). padong-local 이 꺼져 있으면 아무것도 안 뜸
   if (window.top !== window || "%DIR%" === "padong-local") return;

@@ -12,4 +12,5 @@ export CUDA_VISIBLE_DEVICES="${AGENT_GPUS:-0,1,2,3}" CUDA_DEVICE_ORDER=PCI_BUS_I
   python3 -c "import json;[print(t['dir']) for t in json.load(open('agent-page-portal/tools.json'))]" | while read -r d; do
     [ -d "$d" ] && curl -s -X POST localhost:8700/api/start -d "{\"dir\":\"$d\"}" >/dev/null && echo "start $d"
   done
+  agent-page-portal/scripts/backup.sh && echo "backup → $(tail -1 backup.log)"   # 재시작 직후 한 번(같은 날이면 덮어씀). 매일 03시는 포털이 부름
 } >> autostart.log 2>&1

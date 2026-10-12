@@ -39,6 +39,10 @@ ORDER BY "예산합계" DESC LIMIT 500
 - **단일 진입점(프록시)** — 모든 도구를 `http://<포털>:8700/t/<도구폴더>/` 로 리버스 프록시(SSE·파일 다운로드 포함). 포트 하나만 열면 되고, 도구 UI 는 상대경로만 씀. 직접 포트 주소는 `url_direct`(`PORTAL_HOST=<server-ip>`).
 - **사용법 팝업** — 프록시하는 도구 첫 화면에 `guides/<도구폴더>.md` 를 오른쪽 위 **?** 팝업으로 붙임(포털 자체는 `guides/portal.md`).
 - **통계·피드** — `AGENT_DATA/portal.db` sqlite 하나(WAL)에 열기·좋아요·피드 글·사용자 랭킹(IP 또는 `X-Forwarded-User` 헤더). 즐겨찾기·최근 사용만 브라우저 localStorage.
+- **사용자 구분** — 로그인이 없어 접속 IP 로 구분. 도구로 넘길 때 `X-Agent-User` 헤더를 포털이 붙임(클라이언트가 보낸 값은 버림): 서버 주인(`AGENT_ADMINS`)은 `owner`, 나머지는 IP. 도구는 이 값으로 기록을 사용자별 폴더에 나눠 저장하고, 포털은 도구를 `BIND=127.0.0.1` 로 띄워 포털을 거쳐서만 열리게 함. `X-Forwarded-User` 는 이 서버 안의 리버스프록시(127.0.0.1)가 보낸 것만 믿음.
+- **작업 끝 알림** — 1분 넘게 걸린 도구 요청이 끝나면 그 사용자의 포털·도구 화면(어느 탭이든)에 알림(https·localhost 면 브라우저 알림, 아니면 화면 왼쪽 아래 알림 + 탭 제목 깜빡임). `/api/events` 는 자기 작업만(주인은 전부). 끄기: **?** 사용법 창 아래 '작업 끝 알림'.
+- **GPU 현황** — 홈 아래에 GPU별 메모리·사용률과 어느 도구가 쓰는지(`/api/gpu`, 5초 캐시, 10초마다 새로고침). 컨테이너 안에서는 `nvidia-smi` 의 pid 가 호스트 pid 라 생성 순서·GPU 집합으로 짝지은 **추정**입니다.
+- **백업** — `backup.sh`: `_data` 전체(캐시·모델·가상환경 제외, sqlite 는 backup API 로 일관된 사본)를 `~/agent-page-backup/agent-data-<날짜>.tar.gz` 로, 최근 7일치만 남김(로그 `backup.log`). 운영 포털(:8700)이 매일 03시(KST)쯤 부르고, `autostart.sh` 가 재시작 직후 한 번 부름. 되살리기: `tar xzf <파일> -C <상위폴더>`. 위치 `AGENT_BACKUP_DIR`, 개수 `BACKUP_KEEP`.
 - **점검** — `bash audit.sh`: 도구별 CDN 유출·포트 중복·LICENSE/NOTICE·selftest.
 
 ## 연결된 도구 (24개, `tools.json` 기준)
@@ -105,7 +109,8 @@ bash agent-page-portal/scripts/clone-all.sh     # tools.json 의 도구 전부 c
 ```bash
 bash agent-page-portal/scripts/start-portal.sh        # 운영 포털 :8700 (모든 주소에서 열림) — Ollama 확인 → LLM·도구 연결 환경변수 export → portal.py
 bash agent-page-portal/scripts/start-test-portal.sh   # 본인 테스트 포털 :8701, HOST=127.0.0.1, SHOW_HIDDEN=1 (숨긴 도구도 보임, SSH 터널로 접속)
-bash agent-page-portal/scripts/autostart.sh           # 재부팅 후 한 번: 포털 + tools.json 의 모든 도구 기동 (~/.zshrc 에서 백그라운드 호출용)
+bash agent-page-portal/scripts/autostart.sh           # 재부팅 후 한 번: 포털 + tools.json 의 모든 도구 기동 + 백업 (~/.zshrc 에서 백그라운드 호출용)
+bash agent-page-portal/scripts/backup.sh              # 지금 백업 한 번 (_data → ~/agent-page-backup, 7일치)
 python3 portal.py                 # 포털만 직접 — http://localhost:8700
 python3 portal.py start-all       # tools.json 의 설치된 도구 전부 기동 (각 폴더 setup.sh, PORT 전달)
 python3 portal.py stop-all
@@ -118,10 +123,13 @@ bash audit.sh                     # 전체 점검: CDN 유출·포트 중복·LI
 | `HOST` | (모든 주소) | `127.0.0.1` 이면 서버 안에서만 열림 |
 | `SHOW_HIDDEN` | 없음 | `1` 이면 `hidden: true` 도구도 목록에 |
 | `AGENT_DATA` | `../_data` | 포털 DB + 모든 도구 작업 폴더 루트 |
+| `AGENT_ADMINS` | 127.0.0.1 + 서버 자기 IP | 쉼표 목록 — 이 IP·사용자는 도구에 `owner`(예전 기록 포함 전부 보임) |
+| `BACKUP` | :8700 이면 1 | `1` 이면 포털이 매일 03시(KST) `backup.sh` 실행 |
+| `AGENT_BACKUP_DIR` / `BACKUP_KEEP` | `~/agent-page-backup` / 7 | 백업 위치·보관 개수 (`backup.sh` 가 읽음) |
 | `PORTAL_HOST` | 없음 | 카드의 '직접 주소'에 쓸 서버 주소(`<server-ip>`) |
 | `OLLAMA_PORT` / `LLM_MODEL` | 11436 / gemma4:31b | `scripts/start-*.sh` 가 읽음 |
 
-`scripts/` 의 세 스크립트는 원래 상위 폴더(`agent-page/`)에 있던 `start-portal.sh` · `start-test-portal.sh` · `autostart.sh` 의 사본입니다(상위 폴더로 `cd` 하도록만 바꾸고, 서버 주소는 `<server-ip>` 로 가림). 상위 폴더 쪽 원본도 그대로 쓸 수 있습니다.
+`scripts/` 의 네 스크립트는 원래 상위 폴더(`agent-page/`)에 있던 `start-portal.sh` · `start-test-portal.sh` · `autostart.sh` · `backup.sh` 의 사본입니다(상위 폴더로 `cd` 하도록만 바꾸고, 서버 주소는 `<server-ip>` 로 가림). 상위 폴더 쪽 원본도 그대로 쓸 수 있습니다.
 `~/.local/ollama-gpu/start.sh` 는 작성자 서버의 Ollama 기동 스크립트로, 없으면 건너뜁니다 — Ollama 는 각자 띄우세요.
 
 ## 출처·감사 (Credits)

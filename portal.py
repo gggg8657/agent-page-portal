@@ -2,8 +2,9 @@
 """에이전트 페이지 포털 — 도구 목록·상태·시작/중지·리버스 프록시(/t/<도구>/)·사용 통계·피드. stdlib + sqlite.
   python3 portal.py                 # http://localhost:8700
   python3 portal.py start-all|stop-all
-env: PORT(8700) AGENT_DATA(모든 도구 데이터 루트, 기본 ../_data)"""
-import datetime, json, os, socket, sqlite3, subprocess, sys, threading, time, urllib.error, urllib.request
+env: PORT(8700) AGENT_DATA(모든 도구 데이터 루트, 기본 ../_data)
+     AGENT_ADMINS(쉼표 — 서버 주인으로 볼 IP·사용자, 기본 127.0.0.1 + 서버 자기 IP) BACKUP(1=매일 03시 ../backup.sh, 기본 :8700 만)"""
+import datetime, json, os, re, socket, sqlite3, subprocess, sys, threading, time, urllib.error, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -14,6 +15,23 @@ HOST = os.environ.get("HOST", "")
 DATA = os.environ.get("AGENT_DATA") or os.path.join(BASE, "_data")  # 포털 DB + 모든 도구 workspace 가 이 아래로 모임
 os.makedirs(DATA, exist_ok=True)
 TOOLS_FILE = os.path.join(ROOT, "tools.json")
+
+
+def _own_ips():
+    ips = {"127.0.0.1", "::1"}
+    try:
+        ips |= set(subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=3).stdout.split())
+    except (OSError, subprocess.SubprocessError):
+        pass
+    try:
+        ips |= {a[4][0] for a in socket.getaddrinfo(socket.gethostname(), None)}
+    except OSError:
+        pass
+    return ips
+
+
+# 서버 주인 → 도구에 X-Agent-User: owner (예전 기록 전부 보임). 나머지 접속자는 자기 IP/사용자 이름별 폴더
+ADMINS = {x.strip() for x in os.environ["AGENT_ADMINS"].split(",") if x.strip()} if os.environ.get("AGENT_ADMINS") else _own_ips()
 
 
 def tools():  # 요청마다 다시 읽음 — 손으로 고치거나 다른 프로세스가 추가해도 새로고침이면 반영
@@ -83,7 +101,7 @@ EVENTS, EV_LOCK = [], threading.Lock()
 
 def start(t):
     cwd = os.path.join(BASE, t["dir"])
-    env = {**os.environ, "PORT": str(t["port"]), "WORKSPACE": os.path.join(DATA, t["dir"])}
+    env = {**os.environ, "PORT": str(t["port"]), "WORKSPACE": os.path.join(DATA, t["dir"]), "BIND": "127.0.0.1"}  # BIND: 도구는 포털을 거쳐서만(사용자 헤더 위조·우회 차단)
     if t.get("gpus"):  # 예외용 고정: tools.json 의 "gpus": "0". 보통은 비워 두고 도구가 그때그때 여유 많은 GPU 를 고른다(gpu_pick.py)
         env["CUDA_VISIBLE_DEVICES"] = str(t["gpus"])
     if os.path.exists(os.path.join(cwd, "setup.sh")):
@@ -151,6 +169,104 @@ def guide(d):
     return open(p, encoding="utf-8").read() if os.path.exists(p) else f"## {d}\n\n사용법이 아직 없습니다. `portal/guides/{d}.md` 를 만들면 여기에 뜹니다."
 
 
+# ── GPU 현황 (/api/gpu, 5초 캐시) ─────────────────────────────────────────
+_GPU = {"t": 0, "v": None}
+
+
+def _smi(q, kind):
+    r = subprocess.run(["nvidia-smi", f"--query-{kind}={q}", "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=10)
+    return [[x.strip() for x in l.split(",")] for l in r.stdout.splitlines() if l.strip()]
+
+
+def _owner_of(pid):
+    """pid → 도구 이름: 자기·부모 프로세스의 작업 폴더가 ~/agent-page/<dir> 이면 그 도구"""
+    names = {t["dir"]: t.get("name") or t["dir"] for t in tools()}
+    for _ in range(6):
+        try:
+            cwd = os.readlink(f"/proc/{pid}/cwd")
+        except OSError:
+            return None
+        if "ollama" in cwd:
+            return "LLM (Ollama)"
+        if cwd.startswith(BASE + os.sep):
+            d = cwd[len(BASE) + 1:].split(os.sep)[0]
+            if d in names:
+                return names[d]
+        try:
+            pid = int(open(f"/proc/{pid}/stat").read().rsplit(")", 1)[1].split()[1])  # ppid
+        except (OSError, ValueError, IndexError):
+            return None
+        if pid <= 1:
+            return None
+
+
+def _local_gpu_procs():
+    """이 컨테이너에서 GPU 를 쓰는 프로세스: [(시작시각, pid, {gpu index})] — /proc/<pid>/maps 의 /dev/nvidiaN"""
+    out = []
+    for p in os.listdir("/proc"):
+        if not p.isdigit():
+            continue
+        try:
+            g = {int(m) for m in re.findall(r"/dev/nvidia(\d+)", open(f"/proc/{p}/maps").read())}
+            if g:
+                out.append((int(open(f"/proc/{p}/stat").read().rsplit(")", 1)[1].split()[19]), int(p), g))
+        except (OSError, ValueError, IndexError):
+            pass
+    return sorted(out)
+
+
+def gpu_status():
+    if time.time() - _GPU["t"] < 5 and _GPU["v"]:
+        return _GPU["v"]
+    try:
+        gpus = [{"index": int(i), "uuid": u, "name": n, "used": int(mu), "total": int(mt), "util": int(ut) if ut.isdigit() else None, "procs": []}
+                for i, u, n, mu, mt, ut in _smi("index,uuid,name,memory.used,memory.total,utilization.gpu", "gpu")]
+        apps = _smi("gpu_uuid,pid,used_memory", "compute-apps")
+    except (OSError, subprocess.SubprocessError, ValueError) as e:
+        return {"gpus": [], "error": f"nvidia-smi 실패: {type(e).__name__}"}
+    by_uuid = {g["uuid"]: g for g in gpus}
+    host = {}  # nvidia-smi 의 pid 는 호스트 pid(컨테이너 안 /proc 에 없음) → 생성 순서 + 쓰는 GPU 집합으로 이 컨테이너 프로세스와 짝짓기(추정)
+    for u, pid, mem in apps:
+        if u in by_uuid and pid.isdigit():
+            host.setdefault(int(pid), {})[by_uuid[u]["index"]] = int(mem) if mem.isdigit() else 0
+    local, li, who = _local_gpu_procs(), 0, {}
+    for hp in sorted(host):
+        for j in range(li, len(local)):
+            if set(host[hp]) <= local[j][2]:
+                who[hp], li = _owner_of(local[j][1]), j + 1
+                break
+    for hp, per in host.items():
+        for gi, mem in per.items():
+            g = next(g for g in gpus if g["index"] == gi)
+            name = who.get(hp) or "기타 (이 서버 밖·알 수 없음)"
+            hit = next((p for p in g["procs"] if p["tool"] == name), None)
+            if hit:
+                hit["mem"] += mem
+            else:
+                g["procs"].append({"tool": name, "mem": mem})
+    for g in gpus:
+        g.pop("uuid"); g["procs"].sort(key=lambda p: -p["mem"])
+    _GPU.update(t=time.time(), v={"gpus": gpus, "t": int(time.time())})
+    return _GPU["v"]
+
+
+# ── 매일 백업 (../backup.sh, 03시 KST) ────────────────────────────────────
+def backup_loop():
+    """cron·systemd 없는 컨테이너라 포털이 부른다: 03시대(KST)에 마지막 백업이 20시간 넘었으면, 또는 30시간 넘게 못 했으면 실행"""
+    out = os.environ.get("AGENT_BACKUP_DIR") or os.path.expanduser("~/agent-page-backup")
+    kst = datetime.timezone(datetime.timedelta(hours=9))
+    while True:
+        try:
+            ages = [time.time() - os.path.getmtime(os.path.join(out, f)) for f in os.listdir(out) if f.startswith("agent-data-")] if os.path.isdir(out) else []
+            age = min(ages) / 3600 if ages else 1e9
+            if (datetime.datetime.now(kst).hour == 3 and age > 20) or age > 30:
+                sh = os.path.join(BASE, "backup.sh")
+                subprocess.run(["bash", sh if os.path.exists(sh) else os.path.join(ROOT, "scripts", "backup.sh")], timeout=3600)
+        except Exception as e:  # 백업 실패가 포털을 죽이면 안 됨
+            print("backup:", e, flush=True)
+        time.sleep(600)
+
+
 # ── HTTP ────────────────────────────────────────────────────────────────
 
 # ── 저작권 표기 (LICENSE·NOTICE 참고) ─────────────────────────────────────
@@ -178,8 +294,13 @@ class H(BaseHTTPRequestHandler):
         pass
 
     @property
-    def user(self):  # ponytail: 로그인 없음 → 리버스프록시 헤더(X-Forwarded-User/X-User) 있으면 그것, 아니면 IP
-        return self.headers.get("X-Forwarded-User") or self.headers.get("X-User") or self.client_address[0]
+    def user(self):  # ponytail: 로그인 없음 → IP. 사용자 헤더(X-Forwarded-User/X-User)는 이 서버 안의 리버스프록시가 보낸 것만 믿음(밖에서 보내면 위조 가능)
+        ip = self.client_address[0]
+        return (self.headers.get("X-Forwarded-User") or self.headers.get("X-User") or ip) if ip in ("127.0.0.1", "::1") else ip
+
+    @property
+    def agent_user(self):  # 도구로 넘기는 사용자 id — 서버 주인은 owner, 나머지는 [A-Za-z0-9_.-] 로 정리
+        return "owner" if self.user in ADMINS else (re.sub(r"[^A-Za-z0-9_.-]", "_", self.user)[:64] or "_")
 
     def _send(self, body, ctype="application/json", code=200):
         b = body if isinstance(body, bytes) else json.dumps(body, ensure_ascii=False).encode()
@@ -193,7 +314,7 @@ class H(BaseHTTPRequestHandler):
             parts = self.path.split("/", 3); sec = time.time() - t0
             if self.command == "POST" and sec > 60 and len(parts) > 2 and parts[2] != "padong-local" and tool(parts[2]):
                 with EV_LOCK:
-                    EVENTS.append({"id": (EVENTS[-1]["id"] + 1) if EVENTS else int(t0), "dir": parts[2], "name": tool(parts[2]).get("name", parts[2]),
+                    EVENTS.append({"id": (EVENTS[-1]["id"] + 1) if EVENTS else int(t0), "dir": parts[2], "name": tool(parts[2]).get("name", parts[2]), "user": self.agent_user,
                                    "ok": getattr(self, "_status", 200) < 400, "sec": round(sec), "t": int(time.time())})
                     del EVENTS[:-30]
 
@@ -207,7 +328,8 @@ class H(BaseHTTPRequestHandler):
             self.send_response(302); self.send_header("Location", f"/t/{t['dir']}/"); self.send_header("Content-Length", "0"); self.end_headers(); return
         n = int(self.headers.get("Content-Length") or 0)
         req = urllib.request.Request(f"http://127.0.0.1:{t['port']}/{parts[3]}", data=self.rfile.read(n) if n else None,
-                                     headers={k: v for k, v in self.headers.items() if k.lower() not in HOP}, method=self.command)
+                                     headers={k: v for k, v in self.headers.items() if k.lower() not in HOP and k.lower() != "x-agent-user"} | {"X-Agent-User": self.agent_user},
+                                     method=self.command)  # 클라이언트가 보낸 X-Agent-User 는 버리고 포털이 정한 값만
         try:
             r = urllib.request.urlopen(req, timeout=3600)
         except urllib.error.HTTPError as e:
@@ -245,8 +367,11 @@ class H(BaseHTTPRequestHandler):
             return self.proxy()
         if p == "/api/events":   # 오래 걸린 작업 끝남 (since=마지막 id)
             since = int((self.path.split("since=") + ["0"])[1].split("&")[0] or 0)
+            me = self.agent_user  # 내 작업만(서버 주인은 전부)
             with EV_LOCK:
-                return self._send({"events": [e for e in EVENTS if e["id"] > since], "last": EVENTS[-1]["id"] if EVENTS else since})
+                return self._send({"events": [e for e in EVENTS if e["id"] > since and me in ("owner", e["user"])], "last": EVENTS[-1]["id"] if EVENTS else since})
+        if p == "/api/gpu":
+            return self._send(gpu_status())
         if p == "/api/tools":
             with db() as c:
                 u = usage(c)
@@ -304,5 +429,7 @@ if __name__ == "__main__":
             if os.path.isdir(os.path.join(BASE, t["dir"])):
                 print(sys.argv[1], t["dir"], t["port"]); (start if sys.argv[1] == "start-all" else stop)(t)
         sys.exit(0)
-    print(f"portal → http://localhost:{PORT}  data={DATA}  {_SIG}")
+    if os.environ.get("BACKUP", "1" if PORT == 8700 else "0") == "1":
+        threading.Thread(target=backup_loop, daemon=True).start()
+    print(f"portal → http://localhost:{PORT}  data={DATA}  admins={sorted(ADMINS)}  {_SIG}")
     ThreadingHTTPServer((HOST, PORT), H).serve_forever()
