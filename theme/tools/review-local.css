@@ -1,1 +1,21 @@
 /* review-local — 이 도구만의 테마 손질 (THEME_GUIDE.md). CSS 만, html[data-ag-theme...] 로 시작하는 선택자만. 비어 있으면 공통(base-trendy·base-dark·dark.js)만 적용 */
+
+/* 지적 카드·필터 칩·판정 배지 — 트렌디 모양 (심각도 색은 그대로) */
+html[data-ag-theme^="trendy"] .issue{border-radius:var(--ag-r-lg);border-color:var(--ag-line);box-shadow:var(--ag-shadow-1);padding:12px 16px}
+html[data-ag-theme^="trendy"] .issue.major{border-left-color:var(--maj)}
+html[data-ag-theme^="trendy"] .vbadge{border-radius:var(--ag-r-md)}
+html[data-ag-theme^="trendy"] :is(.sev,.tag){border-radius:var(--ag-r-xs)}
+html[data-ag-theme^="trendy"] blockquote{border-radius:0 var(--ag-r-sm) var(--ag-r-sm) 0}
+html[data-ag-theme^="trendy"] .drop{border-radius:var(--ag-r-lg);border-color:var(--ag-line-2);background:var(--ag-surface-2)}
+html[data-ag-theme^="trendy"] .drop.over{border-color:var(--ag-accent);background:var(--ag-accent-soft)}
+html[data-ag-theme^="trendy"] .seg button.on{background:var(--ag-accent-soft);border-color:var(--ag-accent);color:var(--ag-accent-ink)}
+html[data-ag-theme^="trendy"] .tabs button.on{border-bottom-color:var(--ag-accent)}
+html[data-ag-theme^="trendy"] .filters{background:var(--ag-bg)}
+html[data-ag-theme^="trendy"] pre.stream{border-radius:var(--ag-r-md)}
+html[data-ag-theme^="trendy"] #viewer{box-shadow:var(--ag-shadow-3);border-left-color:var(--ag-line)}
+html[data-ag-theme^="trendy"] .hist li{border-bottom-color:var(--ag-line)}
+html[data-ag-theme^="trendy"] .toast{border-radius:var(--ag-r-md)}
+/* 어둡게: 원문 강조(mark)는 노랑 계열 의미 유지 */
+html[data-ag-theme$="dark"] #vtext mark{background:color-mix(in srgb,#e0a800 34%,transparent);color:var(--ag-ink)}
+html[data-ag-theme$="dark"] #vtext mark.cur{outline-color:#e0a800}
+html[data-ag-theme$="dark"] .v-Reject{background:var(--ag-ink);color:var(--ag-bg)}

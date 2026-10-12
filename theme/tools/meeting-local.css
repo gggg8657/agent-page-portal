@@ -1,1 +1,12 @@
 /* meeting-local — 이 도구만의 테마 손질 (THEME_GUIDE.md). CSS 만, html[data-ag-theme...] 로 시작하는 선택자만. 비어 있으면 공통(base-trendy·base-dark·dark.js)만 적용 */
+
+/* 결과 탭·회의록 편집창·인사이트 카드 — 트렌디 */
+html[data-ag-theme^="trendy"] :is(pre,textarea){background:var(--ag-surface-2);border-radius:var(--ag-r-md)}
+html[data-ag-theme^="trendy"] .tabs button.on{border-bottom-color:var(--ag-accent)}
+html[data-ag-theme^="trendy"] .ins{border-left-color:var(--ag-accent);border-radius:0 var(--ag-r-md) var(--ag-r-md) 0;box-shadow:var(--ag-shadow-1);background:var(--ag-surface)}
+html[data-ag-theme^="trendy"] .spk{border-bottom-color:var(--ag-line)}
+html[data-ag-theme^="trendy"] :is(.utt b,.dl a){color:var(--ag-accent-ink)}
+html[data-ag-theme^="trendy"] .snip button{border-radius:var(--ag-r-xs)}
+html[data-ag-theme^="trendy"] .ins pre{background:none;padding:0;border-radius:0}
+html[data-ag-theme^="trendy"] #runs li{border-radius:var(--ag-r-xs);padding:3px 6px}
+html[data-ag-theme^="trendy"] #runs li:hover{background:var(--ag-hover);color:var(--ag-accent-ink)}

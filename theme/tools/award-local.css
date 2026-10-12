@@ -1,1 +1,14 @@
 /* award-local — 이 도구만의 테마 손질 (THEME_GUIDE.md). CSS 만, html[data-ag-theme...] 로 시작하는 선택자만. 비어 있으면 공통(base-trendy·base-dark·dark.js)만 적용 */
+
+/* 왼쪽 입력 판·미리보기 틀 — 트렌디 카드 */
+html[data-ag-theme^="trendy"] .pane{border-radius:var(--ag-r-lg);border-color:var(--ag-line);box-shadow:var(--ag-shadow-2);padding:14px 16px}
+html[data-ag-theme^="trendy"] #view{border-radius:var(--ag-r-lg);border-color:var(--ag-line);background:var(--ag-surface-2)}
+html[data-ag-theme^="trendy"] legend{color:var(--ag-accent-ink);letter-spacing:-.01em}
+html[data-ag-theme^="trendy"] .tabs button.on{background:var(--ag-accent);border-color:var(--ag-accent);color:var(--ag-on-accent)}
+html[data-ag-theme^="trendy"] .designs button{border-radius:var(--ag-r-md)}
+html[data-ag-theme^="trendy"] .designs button.on{outline-color:var(--ag-accent);border-color:var(--ag-accent)}
+html[data-ag-theme^="trendy"] table th{font-size:12px}
+/* 클래식 어둡게: 밝아진 금색 바탕 위 흰 글씨(2.3:1) → 짙은 글씨 */
+html[data-ag-theme="classic-dark"] :is(.tabs button.on,button.primary){color:#17171a}
+/* 증명서 미리보기·디자인 견본·직인/로고 썸네일은 원래 흰 종이 그대로 */
+html[data-ag-theme$="dark"] :is(.designs img,#view img,.thumb){background:#fff}

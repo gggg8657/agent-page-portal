@@ -1,1 +1,20 @@
 /* sql-local — 이 도구만의 테마 손질 (THEME_GUIDE.md). CSS 만, html[data-ag-theme...] 로 시작하는 선택자만. 비어 있으면 공통(base-trendy·base-dark·dark.js)만 적용 */
+
+/* 차트(서버가 그린 SVG, 글자·축 색이 속성으로 고정) — 어둡게에서도 흰 카드 그대로 둬야 축 글씨가 보임 */
+html[data-ag-theme$="dark"] #chart svg{background:#fff;color-scheme:light;border-color:var(--ag-line-2)}
+/* 스키마 FK 줄(인라인 #999) — 흐린 글자 단계로 */
+html[data-ag-theme^="trendy"] aside .t>div[style*="#999"]{color:var(--ag-ink-3)!important}
+
+/* 트렌디: 질문창·결과 표·SQL 상자·사이드 목록 */
+html[data-ag-theme^="trendy"] #q{border-radius:var(--ag-r-lg);border-color:var(--ag-line-2);padding:12px 14px;box-shadow:var(--ag-shadow-1)}
+html[data-ag-theme^="trendy"] .tbl{border-radius:var(--ag-r-lg);border-color:var(--ag-line);box-shadow:var(--ag-shadow-1)}
+html[data-ag-theme^="trendy"] .tbl :is(th,td){border-color:var(--ag-line)}
+html[data-ag-theme^="trendy"] .tbl th{background:var(--ag-surface-2)}
+html[data-ag-theme^="trendy"] #chart svg{border-radius:var(--ag-r-lg);box-shadow:var(--ag-shadow-1)}
+html[data-ag-theme^="trendy"] :is(pre,.sql){background:var(--ag-surface-2);border-radius:var(--ag-r-md)}
+html[data-ag-theme^="trendy"] aside{background:var(--ag-surface);border-right-color:var(--ag-line)}
+html[data-ag-theme^="trendy"] aside input{border-radius:var(--ag-r-xs);border-color:var(--ag-line)}
+html[data-ag-theme^="trendy"] #runs li{border-radius:var(--ag-r-xs);padding:2px 6px}
+html[data-ag-theme^="trendy"] #runs li:hover{background:var(--ag-hover);color:var(--ag-accent-ink)}
+html[data-ag-theme^="trendy"] .badge{border-radius:var(--ag-r-full)}
+html[data-ag-theme^="trendy"] #csv{color:var(--ag-accent-ink)}

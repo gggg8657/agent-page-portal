@@ -1,1 +1,9 @@
 /* tts-local — 이 도구만의 테마 손질 (THEME_GUIDE.md). CSS 만, html[data-ag-theme...] 로 시작하는 선택자만. 비어 있으면 공통(base-trendy·base-dark·dark.js)만 적용 */
+
+/* 입력창·API 예시·기록 — 트렌디 */
+html[data-ag-theme^="trendy"] textarea{border-radius:var(--ag-r-lg);border-color:var(--ag-line-2);padding:12px 14px;box-shadow:var(--ag-shadow-1)}
+html[data-ag-theme^="trendy"] pre{background:var(--ag-surface-2);border-radius:var(--ag-r-md);border:1px solid var(--ag-line)}
+html[data-ag-theme^="trendy"] #runs li{border-radius:var(--ag-r-xs);padding:3px 6px}
+html[data-ag-theme^="trendy"] #runs li:hover{background:var(--ag-hover);color:var(--ag-accent-ink)}
+html[data-ag-theme^="trendy"] #dl{color:var(--ag-accent-ink)}
+html[data-ag-theme^="trendy"] audio{border-radius:var(--ag-r-full)}

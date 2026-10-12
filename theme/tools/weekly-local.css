@@ -1,1 +1,23 @@
 /* weekly-local — 이 도구만의 테마 손질 (THEME_GUIDE.md). CSS 만, html[data-ag-theme...] 로 시작하는 선택자만. 비어 있으면 공통(base-trendy·base-dark·dark.js)만 적용 */
+
+/* 항목·가져오기·점검 상자 — 트렌디 둥글기 (배치 그대로) */
+html[data-ag-theme^="trendy"] :is(.it,.rp,.dept,.impf,.pbar,.mtop){border-radius:var(--ag-r-md)}
+html[data-ag-theme^="trendy"] .it{border-color:var(--ag-line);box-shadow:var(--ag-shadow-1)}
+html[data-ag-theme^="trendy"] .it.over{border-color:var(--ag-accent);box-shadow:0 0 0 3px var(--ag-ring)}
+html[data-ag-theme^="trendy"] .checks div.c{border-radius:var(--ag-r-sm)}
+html[data-ag-theme^="trendy"] .preview{border-radius:var(--ag-r-lg);border-color:var(--ag-line)}
+html[data-ag-theme^="trendy"] .tabs button.on{border-bottom-color:var(--ag-accent)}
+html[data-ag-theme^="trendy"] .imp .btn{border-radius:var(--ag-r-sm)}
+html[data-ag-theme^="trendy"] .toast{border-radius:var(--ag-r-md)}
+/* 흐린 글자(꺼진 칩·끌기 손잡이)도 읽히게 */
+html[data-ag-theme^="trendy"] .chip2.off{color:var(--ag-ink-3)}
+html[data-ag-theme^="trendy"] .it .h{color:var(--ag-ink-3)}
+/* 미리보기 = 양식 모양: 표 머리 글자는 문서색 그대로(공통 th 회색 글씨 끔) */
+html[data-ag-theme^="trendy"] .preview th{color:inherit}
+
+/* 표시 색(주황=핵심, 파랑=과기정통부) — 편집 화면에서 바탕 위 4.5:1 되게 같은 색상 계열로 명도만 조정.
+   미리보기(.preview)는 양식 색 그대로 */
+html[data-ag-theme="trendy-light"]{--orange:#c24e00;--blue:#1d1df0}
+html[data-ag-theme="trendy-light"] .preview{--orange:#FF6600;--blue:#0000FF}
+html[data-ag-theme$="dark"]{--orange:#ff8f47!important;--blue:#8f9bff!important}
+html[data-ag-theme$="dark"] mark.wk-unk{background:var(--ag-warn-soft);color:var(--ag-bad)}
