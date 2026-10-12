@@ -4,29 +4,29 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>계정 · AI Agent Portal</title>
 <style>
-  :root{--bg:#f3f5f8;--fg:#1f2937;--muted:#6b7280;--line:#e5e7eb;--navy:#1f3a5f;--blue:#2563eb;--chip:#eef2f7;--ok:#16a34a;--bad:#dc2626;--warn:#b45309}
+  :root{--bg:#f3f5f8;--fg:#1f2937;--muted:#6b7280;--line:#e5e7eb;--navy:#1f3a5f;--blue:#2563eb;--chip:#eef2f7;--ok:#16a34a;--bad:#dc2626;--warn:#b45309;--card:#fff;--ring:#bfd3f6;--hair:#f1f3f6;--faint:#9ca3af;--bad-line:#f3c4c4;--warn-line:#fcd9a8;--warn-soft:#fff7ed;--ok-line:#bbe5c8;--navy-line:#c7d2e3}
   *{box-sizing:border-box}body{font:14px/1.5 -apple-system,"Pretendard","Apple SD Gothic Neo",system-ui,sans-serif;background:var(--bg);color:var(--fg);margin:0}
-  .top{background:#fff;border-bottom:1px solid var(--line);padding:10px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;row-gap:4px}
+  .top{background:var(--card);border-bottom:1px solid var(--line);padding:10px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;row-gap:4px}
   .logo{font-weight:800;color:var(--navy);font-size:16px;text-decoration:none}.logo small{font-weight:500;color:var(--muted);font-size:11px;margin-left:6px}
   .sp{flex:1}.nav{font-size:12.5px;color:var(--muted);margin-right:44px;display:flex;gap:4px;flex-wrap:wrap}.nav a{color:inherit;padding:3px 8px;border-radius:6px;text-decoration:none}.nav a.on{background:var(--chip);color:var(--navy);font-weight:600}
   .badge{background:var(--bad);color:#fff;border-radius:999px;padding:0 7px;font-size:11px;font-weight:700;margin-left:3px}
   .wrap{max-width:1100px;margin:0 auto;padding:16px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;align-items:start}
   .wrap>*{min-width:0}.wide{grid-column:1/-1}
-  .box{background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow-wrap:anywhere}
+  .box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow-wrap:anywhere}
   .box h3{margin:0 0 10px;font-size:14px;display:flex;align-items:center;gap:8px}.box h3 small{font-weight:400;color:var(--muted);font-size:12px}
   .note{font-size:12px;color:var(--muted);margin:6px 0 0}.msg{font-size:12.5px;min-height:1.2em;margin:6px 0 0}.msg.err{color:var(--bad)}.msg.ok{color:var(--ok)}
   dl{display:grid;grid-template-columns:72px 1fr;gap:6px 10px;margin:0;font-size:13px}dt{color:var(--muted)}dd{margin:0}
   .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.row>input,.row>select{flex:1;min-width:120px}
-  input,select{font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:6px;color:var(--fg);background:#fff}input:focus,select:focus{outline:2px solid #bfd3f6;border-color:var(--blue)}
+  input,select{font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:6px;color:var(--fg);background:var(--card)}input:focus,select:focus{outline:2px solid var(--ring);border-color:var(--blue)}
   .btn{background:var(--navy);color:#fff;border:none;border-radius:6px;padding:7px 14px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
-  .btn.ghost{background:#fff;color:var(--fg);border:1px solid var(--line);font-weight:500}.btn.red{background:#fff;color:var(--bad);border:1px solid #f3c4c4;font-weight:500}.btn.sm{padding:3px 9px;font-size:12px}
+  .btn.ghost{background:var(--card);color:var(--fg);border:1px solid var(--line);font-weight:500}.btn.red{background:var(--card);color:var(--bad);border:1px solid var(--bad-line);font-weight:500}.btn.sm{padding:3px 9px;font-size:12px}
   .btn:disabled{opacity:.45;cursor:default}
   .tag{display:inline-block;font-size:11px;border-radius:4px;padding:0 6px;line-height:18px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
-  .tag.관리자{border-color:#c7d2e3;color:var(--navy);background:var(--chip)}.tag.부서장{border-color:#fcd9a8;color:var(--warn);background:#fff7ed}
-  .tag.pending{border-color:#fcd9a8;color:var(--warn)}.tag.approved{border-color:#bbe5c8;color:var(--ok)}.tag.rejected{border-color:#f3c4c4;color:var(--bad)}.tag.off{color:var(--bad)}
+  .tag.관리자{border-color:var(--navy-line);color:var(--navy);background:var(--chip)}.tag.부서장{border-color:var(--warn-line);color:var(--warn);background:var(--card)7ed}
+  .tag.pending{border-color:var(--warn-line);color:var(--warn)}.tag.approved{border-color:var(--ok-line);color:var(--ok)}.tag.rejected{border-color:var(--bad-line);color:var(--bad)}.tag.off{color:var(--bad)}
   .tbl{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:12.5px}th{text-align:left;color:var(--muted);font-weight:500;border-bottom:1px solid var(--line);padding:6px 6px;white-space:nowrap}
-  td{border-bottom:1px solid #f1f3f6;padding:7px 6px;vertical-align:middle}td .row{gap:4px;flex-wrap:nowrap}td input{padding:4px 7px;font-size:12px;min-width:90px}
-  .empty{color:#9ca3af;font-size:12.5px;padding:6px 0}
+  td{border-bottom:1px solid var(--hair);padding:7px 6px;vertical-align:middle}td .row{gap:4px;flex-wrap:nowrap}td input{padding:4px 7px;font-size:12px;min-width:90px}
+  .empty{color:var(--faint);font-size:12.5px;padding:6px 0}
   .pin{font:700 22px/1.3 ui-monospace,Menlo,monospace;letter-spacing:4px;color:var(--navy)}
   @media(max-width:600px){.wrap{padding:12px 16px}.nav{margin-right:0}}
 </style></head><body>
@@ -72,7 +72,8 @@ async function cancelReq(id) { if (!confirm('이 요청을 취소할까요?')) r
 async function viewAccount() {
   const j = await api('/api/account'); if (j.error) return `<div class="box">${E(j.error)}</div>`;
   const me = j.me; nav(me);
-  if (!me.account) return `<div class="box wide"><h3>로컬 접속</h3>이 서버 안(127.0.0.1)에서 계정 없이 들어와 관리자로 보입니다. 계정 설정은 <a href="/login">계정으로 로그인</a>한 뒤에 할 수 있습니다.${me.owner ? ' 관리 화면은 <a href="/admin">관리</a>.' : ''}</div>`;
+  const theme = `<div class="box"><h3>화면 테마 <small>포털과 모든 도구 화면에 같이 적용</small></h3><div data-ag-theme-picker></div></div>`;
+  if (!me.account) return theme + `<div class="box"><h3>로컬 접속</h3>이 서버 안(127.0.0.1)에서 계정 없이 들어와 관리자로 보입니다. 계정 설정은 <a href="/login">계정으로 로그인</a>한 뒤에 할 수 있습니다.${me.owner ? ' 관리 화면은 <a href="/admin">관리</a>.' : ''}</div>`;
   const pend = kind => j.requests.find(r => r.kind === kind && r.status === 'pending');
   const pj = pend('dept_join'), ph = pend('dept_head');
   return `<div class="box"><h3>내 계정</h3><dl><dt>아이디</dt><dd>${E(me.id)}</dd><dt>역할</dt><dd>${tag(me.role)}${me.heads.length ? ' <span class="note">' + me.heads.map(E).join(', ') + ' 부서장</span>' : ''}</dd>
@@ -88,7 +89,7 @@ async function viewAccount() {
       <div class="row" style="flex-direction:column;align-items:stretch"><input name="pin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="지금 PIN" required>
       <input name="new" type="password" inputmode="numeric" autocomplete="new-password" placeholder="새 PIN (숫자 4~8자리)" pattern="[0-9]{4,8}" required><button class="btn">PIN 바꾸기</button></div>
       <p class="note">PIN 은 서버에 해시로만 저장됩니다. 바꾸면 다른 기기의 로그인은 풀립니다. 잊으면 관리자에게 초기화를 부탁하세요.</p><p class="msg"></p></form></div>
-    <div class="box wide"><h3>내 요청</h3>${reqTable(j.requests, true)}</div>`;
+    ${theme}<div class="box wide"><h3>내 요청</h3>${reqTable(j.requests, true)}</div>`;
 }
 async function saveName(e) { e.preventDefault(); const f = e.target; if (msg(f.querySelector('.msg'), await api('/api/account/name', { name: f.name.value }), '저장했습니다')) setTimeout(render, 600); return false; }
 async function reqDept(e) { e.preventDefault(); const f = e.target; if (msg(f.querySelector('.msg'), await api('/api/account/dept', { dept: f.dept.value }), '요청했습니다')) setTimeout(render, 600); return false; }
@@ -113,7 +114,7 @@ async function viewAdmin() {
   return `<div class="box wide"><h3>대기 중인 요청 <small>전체</small></h3>${decideTable(j.pending)}</div>
     <div class="box wide"><h3>계정 <small>${j.users.length}개 · 관리자: ${j.owners.map(E).join(', ')} (AGENT_OWNERS)</small></h3><div class="tbl"><table>
       <tr><th>아이디</th><th>이름</th><th>부서</th><th>역할</th><th>가입</th><th>마지막 접속</th><th></th></tr>` + j.users.map(u => `<tr>
-      <td>${E(u.id)}</td><td>${E(u.name)}</td><td>${E(u.dept) || '<span style="color:#9ca3af">-</span>'}</td><td>${tag(u.role)}${u.disabled ? ' ' + tag('정지', 'off') : ''}</td><td>${T(u.ts)}</td><td>${T(u.seen)}</td>
+      <td>${E(u.id)}</td><td>${E(u.name)}</td><td>${E(u.dept) || '<span style="color:var(--faint)">-</span>'}</td><td>${tag(u.role)}${u.disabled ? ' ' + tag('정지', 'off') : ''}</td><td>${T(u.ts)}</td><td>${T(u.seen)}</td>
       <td><div class="row">${u.dept && !u.heads.includes(u.dept) ? `<button class="btn ghost sm" onclick="head('grant','${E(u.dept)}','${E(u.id)}')">부서장 지정</button>` : ''}
         <button class="btn ghost sm" onclick="resetPin('${E(u.id)}')">PIN 초기화</button>${u.role === '관리자' ? '' : `<button class="btn red sm" onclick="disable('${E(u.id)}',${!u.disabled})">${u.disabled ? '정지 해제' : '정지'}</button>`}</div></td></tr>`).join('') + `</table></div><p class="msg" id="userMsg"></p></div>
     <div class="box"><h3>부서 <small>가입·변경 목록</small></h3><div class="tbl"><table><tr><th>부서</th><th>인원</th><th>부서장</th><th></th></tr>` + j.depts.map(d => `<tr>
@@ -136,6 +137,7 @@ async function render() {
   document.title = { account: '계정 설정', approvals: '승인', admin: '관리' }[V] + ' · AI Agent Portal';
   document.getElementById('main').innerHTML = await ({ account: viewAccount, approvals: viewApprovals, admin: viewAdmin }[V] || viewAccount)();
   if (location.hash === '#pin') document.querySelector('#pin input')?.focus();
+  window.agThemePicker?.scan();
 }
 render();
 </script>

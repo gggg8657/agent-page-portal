@@ -1,0 +1,34 @@
+/* 포털이 모든 화면에 붙이는 것(help.html: ? 사용법 버튼·사용법 창·작업 끝 알림) — classic-dark · trendy-light · trendy-dark */
+html[data-ag-theme$="dark"] #agHelpBtn{background:var(--ag-surface);color:var(--ag-brand-ink);border-color:var(--ag-line-2);box-shadow:var(--ag-shadow-2)}
+html[data-ag-theme$="dark"] #agHelpBtn:hover{background:var(--ag-surface-3)}
+html[data-ag-theme$="dark"] #agHelp{background:var(--ag-surface);color:var(--ag-ink);border-color:var(--ag-line-2)}
+html[data-ag-theme$="dark"] #agHelp :is(.agh-h,.agh-f){border-color:var(--ag-line)}
+html[data-ag-theme$="dark"] #agHelp :is(.agh-h button,.agh-b h3,.agh-f){color:var(--ag-ink-3)}
+html[data-ag-theme$="dark"] #agHelp .agh-b code{background:var(--ag-surface-3);color:var(--ag-ink)}
+html[data-ag-theme$="dark"] #agHelp .agh-f a{color:var(--ag-accent-ink)}
+html[data-ag-theme$="dark"] #agHelp .agh-f button{background:var(--ag-brand);color:#fff}
+html[data-ag-theme$="dark"] #agNote>div{background:var(--ag-surface-2);color:var(--ag-ink);border-color:var(--ag-line-2);border-left-color:var(--ag-accent-ink);box-shadow:var(--ag-shadow-3)}
+html[data-ag-theme$="dark"] #agNote>div.bad{border-left-color:var(--ag-bad)}
+html[data-ag-theme$="dark"] #agNote a{color:var(--ag-accent-ink)!important}
+html[data-ag-theme$="dark"] #agNote button{color:var(--ag-ink-3)}
+html[data-ag-theme$="dark"] #agNote button.y{background:var(--ag-brand);color:#fff}
+
+/* 트렌디: 유리 같은 둥근 버튼, 큰 둥글기 창, 알림은 떠 있는 카드 */
+html[data-ag-theme^="trendy"] #agHelpBtn{font-family:var(--ag-sans);font-weight:700;background:color-mix(in srgb,var(--ag-surface) 82%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:var(--ag-ink-2);border-color:var(--ag-line-2);box-shadow:var(--ag-shadow-2);transition:transform .15s,color .15s}
+html[data-ag-theme^="trendy"] #agHelpBtn:hover{color:var(--ag-accent-ink);transform:translateY(-1px);background:var(--ag-surface)}
+html[data-ag-theme^="trendy"] #agHelp{font-family:var(--ag-sans);border-radius:var(--ag-r-xl);border-color:var(--ag-line);background:var(--ag-surface);color:var(--ag-ink);box-shadow:var(--ag-shadow-3)}
+html[data-ag-theme^="trendy"] #agHelp::backdrop{background:var(--ag-backdrop);backdrop-filter:blur(4px)}
+html[data-ag-theme^="trendy"] #agHelp .agh-h{padding:16px 22px;font-size:16px;letter-spacing:-.02em;border-color:var(--ag-line)}
+html[data-ag-theme^="trendy"] #agHelp .agh-b{padding:8px 24px 14px}
+html[data-ag-theme^="trendy"] #agHelp .agh-b h3{font-size:11.5px;letter-spacing:.04em;font-weight:650;color:var(--ag-ink-3)}
+html[data-ag-theme^="trendy"] #agHelp .agh-b code{border-radius:5px;background:var(--ag-surface-2);font-family:var(--ag-mono)}
+html[data-ag-theme^="trendy"] #agHelp .agh-f{padding:12px 22px;border-color:var(--ag-line);color:var(--ag-ink-3)}
+html[data-ag-theme^="trendy"] #agHelp .agh-f a{color:var(--ag-accent-ink)}
+html[data-ag-theme^="trendy"] #agHelp .agh-f button{background:var(--ag-grad);color:#fff;border-radius:var(--ag-r-md);padding:8px 20px;box-shadow:0 6px 16px -8px color-mix(in srgb,var(--ag-accent) 80%,transparent)}
+html[data-ag-theme^="trendy"] #agHelp .agh-f input{accent-color:var(--ag-accent)}
+html[data-ag-theme^="trendy"] #agNote{font-family:var(--ag-sans)}
+html[data-ag-theme^="trendy"] #agNote>div{border-radius:var(--ag-r-lg);border:1px solid var(--ag-line);border-left:1px solid var(--ag-line);background:color-mix(in srgb,var(--ag-surface) 90%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);color:var(--ag-ink);box-shadow:var(--ag-shadow-3);padding:11px 14px}
+html[data-ag-theme^="trendy"] #agNote>div::before{content:"";width:8px;height:8px;border-radius:50%;flex:none;background:var(--ag-accent);box-shadow:0 0 0 3px var(--ag-ring)}
+html[data-ag-theme^="trendy"] #agNote>div.bad::before{background:var(--ag-bad);box-shadow:0 0 0 3px color-mix(in srgb,var(--ag-bad) 30%,transparent)}
+html[data-ag-theme^="trendy"] #agNote a{color:var(--ag-accent-ink)!important}
+html[data-ag-theme^="trendy"] #agNote button.y{background:var(--ag-grad);color:#fff;border-radius:8px}

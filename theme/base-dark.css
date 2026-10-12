@@ -1,0 +1,23 @@
+/* 어둡게(classic-dark·trendy-dark) — 자체 어둡게 모드가 없는 도구 화면용. 함께 붙는 dark.js 가 도구 CSS 의 고정 색(#fff 등)을 명도만 뒤집어 바꾼다.
+   그림·영상·캔버스는 절대 반전하지 않는다(색이 곧 내용). 자체 어둡게 모드(:root[data-theme=dark])가 있는 도구는 dark.js 가 알아보고 html[data-ag-native] 를 붙임 → 도구 것을 씀 */
+
+/* 색을 다 바꿀 때까지 잠깐 숨김(boot.js 가 data-ag-dk=wait, dark.js 가 지움, 2.5초 안전장치) */
+html[data-ag-dk="wait"] body{visibility:hidden}
+html[data-ag-theme$="dark"]{background-color:var(--ag-bg);color:var(--ag-ink);color-scheme:dark}
+
+/* 클래식 어둡게: 공통 변수 → 토큰 (트렌디는 base-trendy.css 가 함). 강조색(--acc)은 도구 색 유지, dark.js 가 밝기만 맞춤 */
+html:root[data-ag-theme="classic-dark"]:not([data-ag-native]){
+  --bg:var(--ag-bg);--fg:var(--ag-ink);--ink:var(--ag-ink);--muted:var(--ag-ink-3);--mut:var(--ag-ink-3);--sub:var(--ag-ink-3);
+  --line:var(--ag-line-2);--card:var(--ag-surface);--panel:var(--ag-surface);--surface:var(--ag-surface);--chip:var(--ag-surface-2);--soft:var(--ag-surface-2)
+}
+html[data-ag-theme$="dark"] ::selection{background:color-mix(in srgb,var(--ag-accent) 45%,transparent)}
+html[data-ag-theme$="dark"] :is(input,select,textarea)::placeholder{color:var(--ag-ink-3);opacity:1}
+html[data-ag-theme$="dark"] :is(input[type=checkbox],input[type=radio],input[type=range],progress){accent-color:var(--ag-accent)}
+html[data-ag-theme$="dark"] a:not([class]){color:var(--ag-accent-ink)}
+html[data-ag-theme$="dark"] hr{border-color:var(--ag-line)}
+html[data-ag-theme$="dark"] mark{background:var(--ag-warn-soft);color:var(--ag-ink)}
+html[data-ag-theme$="dark"],html[data-ag-theme$="dark"] *{scrollbar-color:var(--ag-scroll) transparent}
+/* 저작권 줄 */
+html[data-ag-theme$="dark"] [data-sig]{color:var(--ag-ink-3)!important}
+/* 흰 바탕이 필요한 내용(그림 미리보기·차트 캔버스·SVG 도면)은 그대로 — 둥근 틀만 */
+html[data-ag-theme$="dark"] :is(canvas,video){color-scheme:light}

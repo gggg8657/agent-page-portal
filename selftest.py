@@ -59,4 +59,13 @@ with portal.db() as c:
 _src = open(__import__("os").path.join(__import__("os").path.dirname(__import__("os").path.abspath(__file__)), "portal.py"), encoding="utf-8").read()
 assert "wqkgMjAyNiBnZ2dnODY1NyDCtyBkb25nanVraW0uZGV2QGdtYWlsLmNvbQ==" in _src and "signed(" in _src and "X-Author" in _src, "저작권 표기 누락"
 
+# 화면 테마: classic-light 는 CSS 를 안 붙임, 머리는 <meta charset> 뒤, 도구별 CSS 는 있을 때만
+assert portal.theme_files("classic-light", "tool", "mail-local") == []
+assert portal.theme_files("trendy-dark", "tool", "no-such-tool") == ["tokens.css", "base-trendy.css", "base-dark.css", "dark.js", "chrome.css"]
+assert portal.theme_files("classic-dark", "portal") == ["tokens.css", "portal.css", "chrome.css"]
+_h = portal.themed('<!doctype html><meta charset="utf-8"><title>x</title>', "<!--T-->")
+assert _h.startswith('<!doctype html><meta charset="utf-8"><!--T-->'), _h
+assert portal.themed("<p>x</p>", "<!--T-->") == "<!--T--><p>x</p>"
+assert "pref = \"trendy-auto\"" in portal.theme_head("trendy-auto", "tool", "mail-local")
+
 print("selftest OK")

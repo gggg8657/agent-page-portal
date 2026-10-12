@@ -17,6 +17,8 @@ DATA = os.environ.get("AGENT_DATA") or os.path.join(BASE, "_data")  # 포털 DB 
 os.makedirs(DATA, exist_ok=True)
 TOOLS_FILE = os.path.join(ROOT, "tools.json")
 GUIDE_DIR = os.path.join(ROOT, "guide")  # 사용 설명서 (/guide)
+THEME_DIR = os.path.join(ROOT, "theme")  # 화면 테마 (/theme) — theme/THEME_GUIDE.md
+THEMES = {f"{a}-{b}" for a in ("classic", "trendy") for b in ("light", "dark", "auto")}  # classic-light = 예전 그대로(CSS 안 붙임)
 
 
 # 서버 주인 → 도구에 X-Agent-User: owner (예전 기록 전부 보임). 나머지는 계정 id 별 폴더.
@@ -32,6 +34,7 @@ HTML = open(os.path.join(ROOT, "portal.html"), encoding="utf-8").read()
 HELP = open(os.path.join(ROOT, "help.html"), encoding="utf-8").read()  # 도구 첫 화면에 끼워 넣는 ? 버튼 + 사용법
 LOGIN = open(os.path.join(ROOT, "login.html"), encoding="utf-8").read()
 ACCOUNT = open(os.path.join(ROOT, "account.html"), encoding="utf-8").read()  # /account · /approvals · /admin 한 파일
+BOOT = open(os.path.join(THEME_DIR, "boot.js"), encoding="utf-8").read()  # 모든 화면 <head> 맨 앞: 테마를 첫 그림 전에 정함
 TLS = bool(os.environ.get("TLS_CERT") and os.environ.get("TLS_KEY"))  # https 면 세션 쿠키에 Secure
 HOP = {"connection", "keep-alive", "transfer-encoding", "te", "trailer", "upgrade", "proxy-connection", "host", "content-length", "accept-encoding"}
 
@@ -57,7 +60,7 @@ with db() as _c:  # 스키마는 시작 시 1회
                                         ts TEXT, decided_ts TEXT, notified INTEGER DEFAULT 0);  -- kind dept_join|dept_head, status pending|approved|rejected|cancelled
     CREATE TABLE IF NOT EXISTS audit(ts TEXT, actor TEXT, action TEXT, target TEXT, detail TEXT);""")
     cols = {r[1] for r in _c.execute("PRAGMA table_info(users)")}
-    for col, ddl in (("iters", "INTEGER DEFAULT 200000"), ("disabled", "INTEGER DEFAULT 0"), ("seen", "TEXT")):  # 예전 DB 이어 쓰기
+    for col, ddl in (("iters", "INTEGER DEFAULT 200000"), ("disabled", "INTEGER DEFAULT 0"), ("seen", "TEXT"), ("theme", "TEXT")):  # 예전 DB 이어 쓰기
         if col not in cols:
             _c.execute(f"ALTER TABLE users ADD COLUMN {col} {ddl}")
     if not _c.execute("SELECT 1 FROM depts").fetchone():  # 처음 한 번: 기존 계정·tools.json 의 부서로 목록 시작 ('개인' 은 부서가 아님)
@@ -425,6 +428,37 @@ def signed(html):
     return html
 
 
+# ── 화면 테마 ───────────────────────────────────────────────────────────
+def theme_files(pref, kind, d=""):
+    """그 테마로 화면에 붙일 /theme 파일 — boot.js 의 files() 와 같은 목록"""
+    if pref == "classic-light":
+        return []
+    f, light = ["tokens.css"], pref.endswith("-light")
+    if kind == "tool":
+        f += (["base-trendy.css"] if pref.startswith("trendy") else []) + ([] if light else ["base-dark.css", "dark.js"]) + ["chrome.css"]
+        f += [f"tools/{d}.css"] if os.path.isfile(os.path.join(THEME_DIR, "tools", f"{d}.css")) else []
+    else:
+        f += ["guide.css"] if kind == "guide" else ["portal.css", "chrome.css"]
+    return f
+
+
+def theme_head(pref, kind, d=""):
+    v = str(int(max(os.path.getmtime(os.path.join(r, x)) for r, _, fs in os.walk(THEME_DIR) for x in fs)))  # 고치면 바로 새 파일(캐시 무시)
+    tags = "".join(f'<script src="/theme/{f}?v={v}" id="ag-th-{re.sub(r"[^A-Za-z0-9_]", "-", f)}"></script>' if f.endswith(".js") else
+                   f'<link rel="stylesheet" href="/theme/{f}?v={v}" id="ag-th-{re.sub(r"[^A-Za-z0-9_]", "-", f)}">' for f in theme_files(pref, kind, d))
+    js = BOOT.replace("%KIND%", kind).replace("%DIR%", d).replace("%V%", v).replace("%PREF%", pref).replace("%TOOLCSS%", "true" if f"tools/{d}.css" in theme_files("trendy-dark", kind, d) else "false")
+    if kind == "portal":  # 테마 고르기(위쪽 막대·계정 설정) — 모든 테마에서
+        tags += f'<script src="/theme/picker.js?v={v}" defer></script>'
+    return f"<script>{js}</script>{tags}"
+
+
+def themed(html, head):
+    """테마 머리를 <meta charset> 뒤(없으면 <head> 뒤, 문서 맨 앞)에 — 도구 스타일보다 먼저, 본문 그리기 전에"""
+    m = re.search(r"<meta\s+charset[^>]*>", html[:2048], re.I) or re.search(r"<head(\s[^>]*)?>", html[:4096], re.I) or re.search(r"<!doctype[^>]*>", html[:512], re.I)
+    i = m.end() if m else 0
+    return html[:i] + head + html[i:]
+
+
 class H(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -449,6 +483,21 @@ class H(BaseHTTPRequestHandler):
         if not self.uid and not m and self.client_address[0] in LOCAL:  # 쿠키가 있는데 무효(로그아웃·정지·만료)면 로컬이어도 다시 로그인
             self.uid, self.uname = "owner", "서버 주인(로컬)"
         return self.uid
+
+    def theme(self):
+        """고른 테마: 계정 DB → 쿠키 agtheme(로그인 전·로컬 접속) → classic-light"""
+        t = None
+        if getattr(self, "uid", None) and self.uid != "owner":
+            with db() as c:
+                r = c.execute("SELECT theme FROM users WHERE id=?", (self.uid,)).fetchone()
+                t = r and r[0]
+        if not t:
+            m = re.search(r"(?:^|;\s*)agtheme=([a-z-]+)", self.headers.get("Cookie") or "")
+            t = m and m[1]
+        return t if t in THEMES else "classic-light"
+
+    def html_page(self, html, kind, d=""):
+        return signed(themed(html, theme_head(self.theme(), kind, d))).encode()
 
     @property
     def user(self):  # 계정 id (통계·좋아요·피드 키)
@@ -496,12 +545,14 @@ class H(BaseHTTPRequestHandler):
             ok = p == "/account" or self.is_owner or (p == "/approvals" and my_heads(c, self.uid))
         if not ok:
             self.send_response(302); self.send_header("Location", "/account"); self.send_header("Content-Length", "0"); self.end_headers(); return
-        self._send(signed(ACCOUNT + self.help_html("portal")).encode(), "text/html; charset=utf-8")
+        self._send(self.html_page(ACCOUNT + self.help_html("portal"), "portal"), "text/html; charset=utf-8")
 
     def manage_get(self, p):
         with db() as c:
             if p == "/api/account":
                 return self._send({"me": self.me(c), "depts": visible_depts(c), "requests": req_rows(c, "uid=?", (self.uid,))[:20]})
+            if p == "/api/account/theme":
+                return self._send({"theme": self.theme(), "themes": sorted(THEMES)})
             if p == "/api/account/notices":  # 내 요청 결과(한 번만) — help.html 이 화면 알림으로
                 rows = req_rows(c, "uid=? AND status IN ('approved','rejected') AND notified=0", (self.uid,))
                 c.execute("UPDATE requests SET notified=1 WHERE uid=? AND status IN ('approved','rejected')", (self.uid,))
@@ -536,6 +587,13 @@ class H(BaseHTTPRequestHandler):
     def manage_post(self, c, p, req):
         """계정 설정·승인·관리 — 모든 호출에서 서버가 권한 확인(403), 승인·부여·회수·초기화·정지는 audit 에 남김"""
         acct = c.execute("SELECT 1 FROM users WHERE id=?", (self.uid,)).fetchone()
+        if p == "/api/account/theme":  # 계정에 저장 + 쿠키(로그인 화면·로컬 접속용)
+            t = str(req.get("theme", ""))
+            if t not in THEMES:
+                raise ValueError("없는 테마")
+            if acct:
+                c.execute("UPDATE users SET theme=? WHERE id=?", (t, self.uid))
+            return self._send({"ok": True, "theme": t}, headers=[("Set-Cookie", f"agtheme={t}; Path=/; Max-Age=31536000; SameSite=Lax" + ("; Secure" if TLS else ""))])
         if p.startswith("/api/account/"):
             if not acct:
                 raise ValueError("로컬 접속은 계정이 없습니다 — 계정으로 로그인하세요")
@@ -659,7 +717,22 @@ class H(BaseHTTPRequestHandler):
         if ext == "pdf":
             hd.append(("Content-Disposition", "attachment; filename=agent-portal.pdf; filename*=UTF-8''" + urllib.parse.quote("에이전트-포털-사용-설명서.pdf")))
         body = open(f, "rb").read()
-        self._send(signed(body.decode("utf-8")).encode() if ext == "html" else body, ctype, headers=hd)
+        self._send(self.html_page(body.decode("utf-8"), "guide") if ext == "html" else body, ctype, headers=hd)
+
+    def theme_file(self, p):
+        """/theme/<css|js> · /theme/tools/<도구>.css · /theme/fonts/<글꼴> (글꼴은 guide/fonts 와 같은 파일). 이름 규칙에 맞는 파일만"""
+        rel = urllib.parse.unquote(p[len("/theme/"):])
+        m = re.fullmatch(r"[a-z][a-z0-9-]*\.(css|js)|tools/[a-z0-9][a-z0-9_-]*\.(css)|fonts/([A-Za-z0-9][\w.-]*\.(woff2|txt))", rel)
+        top = os.path.join(GUIDE_DIR, "fonts") if m and m[3] else THEME_DIR
+        f = os.path.join(top, m[3] if m and m[3] else rel)
+        if not m or rel == "boot.js" or not os.path.isfile(f) or not os.path.realpath(f).startswith(os.path.realpath(top) + os.sep):
+            return self._send({"error": "not found"}, code=404)
+        st = os.stat(f); etag = f'"{int(st.st_mtime)}-{st.st_size}"'
+        cc = ("Cache-Control", "public, max-age=86400")  # 화면에는 ?v=수정시각 으로 붙여서 고치면 바로 바뀜
+        if self.headers.get("If-None-Match") == etag:
+            self.send_response(304); self.send_header("ETag", etag); self.send_header(*cc); self.send_header("Content-Length", "0"); self.end_headers(); return
+        ctype = {"css": "text/css; charset=utf-8", "js": "text/javascript; charset=utf-8", "woff2": "font/woff2", "txt": "text/plain; charset=utf-8"}[f.rsplit(".", 1)[1]]
+        self._send(open(f, "rb").read(), ctype, headers=[cc, ("ETag", etag), ("X-Content-Type-Options", "nosniff")])
 
     def proxy(self):
         t0 = time.time()
@@ -684,7 +757,7 @@ class H(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length") or 0)
         req = urllib.request.Request(f"http://127.0.0.1:{t['port']}/{parts[3]}", data=self.rfile.read(n) if n else None,
                                      headers={k: v for k, v in self.headers.items() if k.lower() not in HOP | {"x-agent-user", "x-forwarded-user", "x-user", "cookie"}}
-                                     | {"X-Agent-User": self.agent_user} | ({"Cookie": ck} if (ck := re.sub(r"(?:^|;\s*)agsid=[^;]*", "", self.headers.get("Cookie") or "").strip("; ")) else {}),
+                                     | {"X-Agent-User": self.agent_user} | ({"Cookie": ck} if (ck := re.sub(r"(?:^|;\s*)ag(?:sid|theme)=[^;]*", "", self.headers.get("Cookie") or "").strip("; ")) else {}),
                                      method=self.command)  # 클라이언트가 보낸 사용자 헤더는 버리고 포털이 정한 값만, 포털 세션 쿠키는 도구로 안 넘김
         try:
             r = urllib.request.urlopen(req, timeout=3600)
@@ -693,7 +766,7 @@ class H(BaseHTTPRequestHandler):
         except Exception as e:
             return self._send({"error": f"{t['dir']} 응답 없음 ({type(e).__name__}) — 포털에서 '시작'을 누르세요"}, code=502)
         inject = self.command == "GET" and parts[3] in ("", "index.html") and "text/html" in (r.headers.get("Content-Type") or "")
-        body = signed(r.read().decode("utf-8", "replace") + self.help_html(t["dir"])).encode() if inject else None  # 도구 화면에도 저작자 표기
+        body = self.html_page(r.read().decode("utf-8", "replace") + self.help_html(t["dir"]), "tool", t["dir"]) if inject else None  # 도구 화면에도 저작자 표기 + 테마
         self._status = r.status
         self.send_response(r.status)
         if self._setcookie:
@@ -752,11 +825,13 @@ class H(BaseHTTPRequestHandler):
             self._send({"error": str(e)}, code=400)
 
     def do_GET(self):
-        self._setcookie = None  # keep-alive 로 같은 연결에서 앞 요청 값이 남지 않게
+        self._setcookie, self.uid = None, None  # keep-alive 로 같은 연결에서 앞 요청 값이 남지 않게
         p = self.path.split("?")[0]
 
         if p == "/login":
-            return self._send(signed(LOGIN).encode(), "text/html; charset=utf-8")
+            return self._send(self.html_page(LOGIN, "portal"), "text/html; charset=utf-8")
+        if p.startswith("/theme/"):  # 테마 CSS·글꼴 — 로그인 화면도 쓰므로 로그인 전에
+            return self.theme_file(p)
         if p == "/api/depts":  # 가입 화면의 부서 목록(로그인 전)
             with db() as c:
                 return self._send({"depts": visible_depts(c)})
@@ -802,7 +877,7 @@ class H(BaseHTTPRequestHandler):
             return self.guide_file(p)
         if p != "/":
             return self._send({"error": "not found"}, code=404)
-        self._send(signed(HTML + self.help_html("portal")).encode(), "text/html; charset=utf-8")
+        self._send(self.html_page(HTML + self.help_html("portal"), "portal"), "text/html; charset=utf-8")
 
     def do_POST(self):
         self._setcookie = None  # keep-alive 로 같은 연결에서 앞 요청 값이 남지 않게

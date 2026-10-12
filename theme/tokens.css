@@ -1,0 +1,68 @@
+/* 화면 테마 토큰 — html[data-ag-theme] 에 따라 값만 바뀐다. 이름 규칙·쓰는 법: THEME_GUIDE.md
+   classic-light 는 이 파일을 아예 안 붙인다(예전 화면 그대로). 값은 아래 classic-light 블록이 기준(참고용). */
+@font-face{font-family:"AG Pretendard";src:url(/theme/fonts/PretendardVariable.woff2) format("woff2-variations"),url(/theme/fonts/PretendardVariable.woff2) format("woff2");font-weight:45 930;font-style:normal;font-display:swap}
+
+html[data-ag-theme]{
+  --ag-sans:"AG Pretendard","Pretendard Variable","Pretendard",-apple-system,"Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;
+  --ag-mono:ui-monospace,"D2Coding","JetBrains Mono",Menlo,Consolas,monospace;
+  /* 간격 4px 단위 */
+  --ag-1:4px;--ag-2:8px;--ag-3:12px;--ag-4:16px;--ag-5:20px;--ag-6:24px;--ag-8:32px;
+  /* 둥글기 */
+  --ag-r-xs:6px;--ag-r-sm:8px;--ag-r-md:10px;--ag-r-lg:14px;--ag-r-xl:18px;--ag-r-full:999px;
+  /* 글자 크기 */
+  --ag-fs-xs:11.5px;--ag-fs-sm:12.5px;--ag-fs-md:14px;--ag-fs-lg:16px;--ag-fs-xl:20px;--ag-fs-2xl:26px;
+  --ag-ease:cubic-bezier(.2,.7,.2,1);--ag-dur:.16s;
+  --ag-on-accent:#fff;
+}
+
+/* 기준값 = 예전 화면 (classic-light, 참고·auto 용) */
+html[data-ag-theme="classic-light"]{
+  --ag-bg:#f3f5f8;--ag-surface:#fff;--ag-surface-2:#f1f3f6;--ag-surface-3:#eef2f7;
+  --ag-ink:#1f2937;--ag-ink-2:#4b5563;--ag-ink-3:#6b7280;--ag-line:#e5e7eb;--ag-line-2:#d1d5db;
+  --ag-brand:#1f3a5f;--ag-brand-ink:#1f3a5f;--ag-accent:#2563eb;--ag-accent-ink:#2563eb;--ag-accent-soft:#eef2f7;--ag-ring:#bfd3f6;
+  --ag-ok:#16a34a;--ag-ok-soft:#dcfce7;--ag-warn:#b45309;--ag-warn-soft:#fff7ed;--ag-bad:#dc2626;--ag-bad-soft:#fde2e2;
+  --ag-shadow-1:none;--ag-shadow-2:0 1px 4px rgba(0,0,0,.15);--ag-shadow-3:0 3px 12px rgba(0,0,0,.15);
+  --ag-backdrop:rgba(15,23,42,.45);--ag-hover:#f6f7f9;--ag-scroll:#c4c8cf;--ag-glow:transparent;
+}
+
+/* 클래식 · 어둡게 — 예전 배치·모양 그대로, 남색 계열 어두운 색 */
+html[data-ag-theme="classic-dark"]{
+  color-scheme:dark;
+  --ag-bg:#111419;--ag-surface:#1a1e25;--ag-surface-2:#20252d;--ag-surface-3:#272d37;
+  --ag-ink:#e6e8ec;--ag-ink-2:#b4bbc6;--ag-ink-3:#939ba7;--ag-line:#2b313a;--ag-line-2:#3a414c;
+  --ag-brand:#2f5d95;--ag-brand-ink:#a9c4ee;--ag-accent:#3268d6;--ag-accent-ink:#8db2f4;--ag-accent-soft:#1e2b42;--ag-ring:#3c5f9c;
+  --ag-ok:#4ade80;--ag-ok-soft:#14321f;--ag-warn:#f5b84a;--ag-warn-soft:#3a2b12;--ag-bad:#f87171;--ag-bad-soft:#3d1a1c;
+  --ag-shadow-1:none;--ag-shadow-2:0 1px 4px rgba(0,0,0,.5);--ag-shadow-3:0 6px 20px rgba(0,0,0,.55);
+  --ag-backdrop:rgba(0,0,0,.6);--ag-hover:#222831;--ag-scroll:#3d4450;--ag-glow:transparent;
+}
+
+/* 트렌디 · 밝게 — 무채색 바탕 + 인디고 강조 하나, 부드러운 그림자, 큰 둥글기 */
+html[data-ag-theme="trendy-light"]{
+  color-scheme:light;
+  --ag-bg:#f6f6f9;--ag-surface:#fff;--ag-surface-2:#f2f2f6;--ag-surface-3:#eaeaf0;
+  --ag-ink:#15151c;--ag-ink-2:#4f4f5c;--ag-ink-3:#6b6b78;--ag-line:#e7e7ed;--ag-line-2:#d7d7e0;
+  --ag-brand:#15151c;--ag-brand-ink:#15151c;--ag-accent:#5650dc;--ag-accent-ink:#4a44c8;--ag-accent-soft:#efeefd;--ag-ring:rgba(86,80,220,.32);
+  --ag-ok:#14804f;--ag-ok-soft:#e3f6ec;--ag-warn:#9a5b00;--ag-warn-soft:#fdf3e1;--ag-bad:#cf3434;--ag-bad-soft:#fde9e9;
+  --ag-shadow-1:0 1px 2px rgba(20,20,40,.04),0 1px 1px rgba(20,20,40,.03);
+  --ag-shadow-2:0 1px 2px rgba(20,20,40,.05),0 8px 24px -12px rgba(20,20,40,.18);
+  --ag-shadow-3:0 2px 6px rgba(20,20,40,.06),0 24px 48px -20px rgba(20,20,40,.30);
+  --ag-backdrop:rgba(20,20,35,.32);--ag-hover:#f4f4f8;--ag-scroll:#cfcfd9;
+  --ag-glow:radial-gradient(1100px 380px at 50% -160px,rgba(86,80,220,.10),transparent 70%);
+  --ag-grad:linear-gradient(135deg,#6a5ff5 0%,#5650dc 45%,#3a6fe0 100%);
+}
+
+/* 트렌디 · 어둡게 — 거의 검정 바탕, 표면은 명도 단계로만 구분 */
+html[data-ag-theme="trendy-dark"]{
+  color-scheme:dark;
+  --ag-bg:#0c0c10;--ag-surface:#15151b;--ag-surface-2:#1c1c23;--ag-surface-3:#24242d;
+  --ag-ink:#ededf2;--ag-ink-2:#b0b0bc;--ag-ink-3:#8f8f9c;--ag-line:#25252e;--ag-line-2:#34343f;
+  --ag-brand:#ededf2;--ag-brand-ink:#ededf2;--ag-accent:#5f5ae6;--ag-accent-ink:#aeabff;--ag-accent-soft:#221f45;--ag-ring:rgba(140,136,255,.42);
+  --ag-ok:#4fd197;--ag-ok-soft:#10301f;--ag-warn:#f2b54f;--ag-warn-soft:#352812;--ag-bad:#f47a7a;--ag-bad-soft:#3a1719;
+  --ag-shadow-1:0 1px 0 rgba(255,255,255,.03) inset,0 1px 2px rgba(0,0,0,.4);
+  --ag-shadow-2:0 1px 0 rgba(255,255,255,.04) inset,0 10px 30px -12px rgba(0,0,0,.7);
+  --ag-shadow-3:0 1px 0 rgba(255,255,255,.05) inset,0 28px 60px -20px rgba(0,0,0,.85);
+  --ag-backdrop:rgba(0,0,0,.6);--ag-hover:#1d1d25;--ag-scroll:#393944;
+  --ag-glow:radial-gradient(1100px 380px at 50% -160px,rgba(110,104,255,.16),transparent 70%);
+  --ag-grad:linear-gradient(135deg,#6a5ff5 0%,#5f5ae6 45%,#3a6fe0 100%);
+}
+html[data-ag-theme="classic-dark"],html[data-ag-theme="classic-light"]{--ag-grad:var(--ag-accent)}

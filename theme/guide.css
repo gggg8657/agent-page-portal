@@ -1,0 +1,11 @@
+/* 사용 설명서(/guide) — 설명서는 이미 트렌디 디자인(guide/style.css). 여기서는 고른 밝게/어둡게를 컴퓨터 설정보다 우선하게만 한다 */
+html[data-ag-theme$="light"]:root{
+  --bg:#fbfbfc;--surface:#fff;--surface-2:#f3f4f7;--ink:#14161b;--ink-2:#565b66;--ink-3:#8b909a;--line:#e6e8ec;--line-2:#d9dce2;
+  --frame-bar:#f2f3f5;--dot:#d3d6dc;--shadow:0 1px 2px rgba(16,24,40,.05),0 14px 32px -16px rgba(16,24,40,.22);--mesh-base:#f3f2fb;--tile:rgba(255,255,255,.66);color-scheme:light
+}
+html[data-ag-theme$="light"]:root,html[data-ag-theme$="light"] :is([class^="c-"],[class*=" c-"]){--ct:color-mix(in srgb,var(--c) 11%,var(--surface));--ck:color-mix(in srgb,var(--c) 78%,#000)}
+html[data-ag-theme$="dark"]:root{
+  --bg:#0d0e12;--surface:#15171c;--surface-2:#1b1e24;--ink:#eceef2;--ink-2:#a8adb7;--ink-3:#8b909a;--line:#262a32;--line-2:#323741;
+  --frame-bar:#22252c;--dot:#454a55;--shadow:0 1px 2px rgba(0,0,0,.4),0 14px 32px -16px rgba(0,0,0,.7);--mesh-base:#14141c;--tile:rgba(255,255,255,.06);color-scheme:dark
+}
+html[data-ag-theme$="dark"]:root,html[data-ag-theme$="dark"] :is([class^="c-"],[class*=" c-"]){--ct:color-mix(in srgb,var(--c) 18%,var(--surface));--ck:color-mix(in srgb,var(--c) 62%,#fff)}

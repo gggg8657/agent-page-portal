@@ -3,48 +3,48 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AI Agent Portal</title>
 <style>
-  :root{--bg:#f3f5f8;--fg:#1f2937;--muted:#6b7280;--line:#e5e7eb;--navy:#1f3a5f;--blue:#2563eb;--ok:#16a34a;--off:#9ca3af;--chip:#eef2f7}
+  :root{--bg:#f3f5f8;--fg:#1f2937;--muted:#6b7280;--line:#e5e7eb;--navy:#1f3a5f;--blue:#2563eb;--ok:#16a34a;--off:#9ca3af;--chip:#eef2f7;--card:#fff;--hair:#f1f3f6;--sub:#4b5563;--faint:#999;--heart:#e11d48;--amber:#d97706;--red:#dc2626}
   *{box-sizing:border-box}body{font:14px/1.5 -apple-system,"Pretendard","Apple SD Gothic Neo",system-ui,sans-serif;background:var(--bg);color:var(--fg);margin:0}
-  .top{background:#fff;border-bottom:1px solid var(--line);padding:10px 20px;display:flex;align-items:center;gap:16px}
+  .top{background:var(--card);border-bottom:1px solid var(--line);padding:10px 20px;display:flex;align-items:center;gap:16px}
   .logo{font-weight:800;color:var(--navy);font-size:16px}.logo small{font-weight:500;color:var(--muted);font-size:11px;margin-left:6px}
   .top .sp{flex:1}.user{font-size:12px;color:var(--muted);margin-right:44px}
-  .gd{font-size:12px;color:var(--navy);text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:4px 12px;background:#fff;white-space:nowrap}.gd:hover{background:var(--chip)}.gd+.user{margin-left:-4px}
+  .gd{font-size:12px;color:var(--navy);text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:4px 12px;background:var(--card);white-space:nowrap}.gd:hover{background:var(--chip)}button.gd{font:inherit;font-size:12px;cursor:pointer}.gd+.user{margin-left:-4px}
   .wrap{display:grid;grid-template-columns:200px 1fr 300px;gap:16px;padding:16px 20px;max-width:1500px;margin:0 auto}
   @media(max-width:1100px){.wrap{grid-template-columns:180px 1fr}.right{grid-column:1/-1}}
   @media(max-width:760px){.wrap{grid-template-columns:1fr}.side{display:none}}
   .side{display:flex;flex-direction:column;gap:12px}
   .mk{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:10px;font:inherit;font-weight:600;cursor:pointer}
-  .menu{background:#fff;border:1px solid var(--line);border-radius:10px;padding:6px}.menu div{padding:8px 10px;border-radius:6px;cursor:pointer;font-size:13px}.menu div.on{background:var(--chip);color:var(--navy);font-weight:600}
-  .box{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px}.box h4{margin:0 0 8px;font-size:12px;color:var(--muted)}.box table{width:100%;font-size:12px;border-collapse:collapse}.box td{padding:3px 0}.box td:last-child{text-align:right;font-weight:600}
-  .search{display:flex;gap:8px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 12px;align-items:center}.search input{flex:1;border:none;font:inherit;outline:none}.search span{font-size:11px;color:var(--muted)}
-  .chips{display:flex;gap:6px;margin:12px 0;flex-wrap:wrap}.chip{border:1px solid var(--line);border-radius:999px;padding:3px 11px;font-size:12px;background:#fff;cursor:pointer;color:var(--muted)}.chip.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .menu{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px}.menu div{padding:8px 10px;border-radius:6px;cursor:pointer;font-size:13px}.menu div.on{background:var(--chip);color:var(--navy);font-weight:600}
+  .box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}.box h4{margin:0 0 8px;font-size:12px;color:var(--muted)}.box table{width:100%;font-size:12px;border-collapse:collapse}.box td{padding:3px 0}.box td:last-child{text-align:right;font-weight:600}
+  .search{display:flex;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px;align-items:center}.search input{flex:1;border:none;font:inherit;outline:none}.search span{font-size:11px;color:var(--muted)}
+  .chips{display:flex;gap:6px;margin:12px 0;flex-wrap:wrap}.chip{border:1px solid var(--line);border-radius:999px;padding:3px 11px;font-size:12px;background:var(--card);cursor:pointer;color:var(--muted)}.chip.on{background:var(--navy);color:#fff;border-color:var(--navy)}
   h2{font-size:15px;margin:14px 0 8px;display:flex;align-items:center;gap:8px}h2 small{font-weight:400;color:var(--muted);font-size:12px}
   .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
-  .col{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px}.col h3{font-size:12px;color:var(--navy);margin:0 0 6px;display:flex;align-items:center;gap:6px}
-  .mini{display:flex;gap:10px;padding:8px 4px;border-top:1px solid #f1f3f6;cursor:pointer;align-items:flex-start}.mini:first-of-type{border-top:none}.mini .ic{width:34px;height:34px;border-radius:8px;background:var(--chip);display:flex;align-items:center;justify-content:center;font-size:17px;flex:none}
+  .col{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px}.col h3{font-size:12px;color:var(--navy);margin:0 0 6px;display:flex;align-items:center;gap:6px}
+  .mini{display:flex;gap:10px;padding:8px 4px;border-top:1px solid var(--hair);cursor:pointer;align-items:flex-start}.mini:first-of-type{border-top:none}.mini .ic{width:34px;height:34px;border-radius:8px;background:var(--chip);display:flex;align-items:center;justify-content:center;font-size:17px;flex:none}
   .mini b{font-size:13px;display:block}.mini .d{font-size:11px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.mini .s{font-size:10px;color:var(--muted);margin-top:3px}
   .rank{font-size:11px;color:var(--muted);width:14px;padding-top:9px}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(262px,1fr));gap:14px}
-  .card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:16px 16px 14px;display:flex;flex-direction:column;gap:8px}
-  .title{font-weight:700;font-size:15px;line-height:1.35;display:flex;gap:6px;align-items:flex-start}.new{font-size:10px;border:1px solid #d97706;color:#b45309;border-radius:4px;padding:0 5px;line-height:16px;white-space:nowrap;margin-top:3px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 16px 14px;display:flex;flex-direction:column;gap:8px}
+  .title{font-weight:700;font-size:15px;line-height:1.35;display:flex;gap:6px;align-items:flex-start}.new{font-size:10px;border:1px solid var(--amber);color:#b45309;border-radius:4px;padding:0 5px;line-height:16px;white-space:nowrap;margin-top:3px}
   .status{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px}.status i{width:7px;height:7px;border-radius:50%;background:var(--off);display:inline-block}.up .status i{background:var(--ok)}
-  .desc{font-size:12.5px;color:#4b5563;min-height:3em}.who{font-size:12px;color:var(--muted)}.who b{color:var(--fg);font-weight:500}
+  .desc{font-size:12.5px;color:var(--sub);min-height:3em}.who{font-size:12px;color:var(--muted)}.who b{color:var(--fg);font-weight:500}
   .tags{display:flex;gap:6px;flex-wrap:wrap}.tags span{font-size:11px;color:var(--blue)}
-  .stat{font-size:11px;color:var(--muted);border-top:1px solid var(--line);padding-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}.stat .h{margin-left:auto;cursor:pointer;color:#e11d48}
-  .btn{display:block;width:100%;text-align:center;background:var(--navy);color:#fff;border:none;border-radius:6px;padding:7px 0;font:inherit;font-size:13px;font-weight:600;cursor:pointer;text-decoration:none}.btn.ghost{background:#fff;color:var(--fg);border:1px solid var(--line);font-weight:500}.btns{display:flex;gap:6px}.btns .btn{flex:1}
+  .stat{font-size:11px;color:var(--muted);border-top:1px solid var(--line);padding-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}.stat .h{margin-left:auto;cursor:pointer;color:var(--heart)}
+  .btn{display:block;width:100%;text-align:center;background:var(--navy);color:#fff;border:none;border-radius:6px;padding:7px 0;font:inherit;font-size:13px;font-weight:600;cursor:pointer;text-decoration:none}.btn.ghost{background:var(--card);color:var(--fg);border:1px solid var(--line);font-weight:500}.btns{display:flex;gap:6px}.btns .btn{flex:1}
   .missing{opacity:.55}
-  .hd{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}.sort{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:#fff}.sort button{border:none;background:#fff;padding:5px 12px;font:inherit;font-size:12px;cursor:pointer;color:var(--muted)}.sort button.on{background:var(--navy);color:#fff}
-  .feed{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px}.feed h3{margin:0 0 10px;font-size:14px}.post{border-top:1px solid #f1f3f6;padding:10px 0}.post b{font-size:13px}.post p{margin:4px 0;font-size:12px;color:#4b5563}.post .m{font-size:11px;color:var(--muted);display:flex;gap:8px}.post .m .l{color:#e11d48;margin-left:auto}
-  dialog{border:1px solid var(--line);border-radius:10px;max-width:760px;width:90%;padding:0}dialog pre{white-space:pre-wrap;font-size:12.5px;padding:18px;margin:0;max-height:70vh;overflow:auto}dialog .x{position:sticky;top:0;background:#fff;border-bottom:1px solid var(--line);padding:10px 16px;display:flex;justify-content:space-between;align-items:center;font-weight:600}
+  .hd{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}.sort{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--card)}.sort button{border:none;background:var(--card);padding:5px 12px;font:inherit;font-size:12px;cursor:pointer;color:var(--muted)}.sort button.on{background:var(--navy);color:#fff}
+  .feed{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}.feed h3{margin:0 0 10px;font-size:14px}.post{border-top:1px solid var(--hair);padding:10px 0}.post b{font-size:13px}.post p{margin:4px 0;font-size:12px;color:var(--sub)}.post .m{font-size:11px;color:var(--muted);display:flex;gap:8px}.post .m .l{color:var(--heart);margin-left:auto}
+  dialog{border:1px solid var(--line);border-radius:10px;max-width:760px;width:90%;padding:0}dialog pre{white-space:pre-wrap;font-size:12.5px;padding:18px;margin:0;max-height:70vh;overflow:auto}dialog .x{position:sticky;top:0;background:var(--card);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;justify-content:space-between;align-items:center;font-weight:600}
   dialog.form{border:1px solid var(--line);border-radius:10px;width:420px;max-width:92%;padding:0}dialog.form .fb{display:flex;flex-direction:column;gap:8px;padding:14px 16px}
   dialog.form input,dialog.form textarea,dialog.form select{font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:6px}
-  .gbar{height:6px;background:var(--chip);border-radius:3px;overflow:hidden;margin:4px 0 6px}.gbar i{display:block;height:100%;background:var(--blue)}.gbar i.hot{background:#d97706}
-  .gpu .s{font-size:11px;color:var(--muted)}.gpu .p{display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:3px 0;border-top:1px solid #f1f3f6}.gpu .p span:last-child{color:var(--muted);white-space:nowrap}
+  .gbar{height:6px;background:var(--chip);border-radius:3px;overflow:hidden;margin:4px 0 6px}.gbar i{display:block;height:100%;background:var(--blue)}.gbar i.hot{background:var(--amber)}
+  .gpu .s{font-size:11px;color:var(--muted)}.gpu .p{display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:3px 0;border-top:1px solid var(--hair)}.gpu .p span:last-child{color:var(--muted);white-space:nowrap}
   /* 넘침 방지: grid/flex 자식 min-width:0, 긴 단어(URL·파일명) 줄바꿈 */
   .wrap>*,.cols>*,.grid>*,.mini>div:last-child,.title>span,.post .m>span{min-width:0}.mini>div:last-child{flex:1}
   .wrap,dialog{overflow-wrap:anywhere}.post .m{flex-wrap:wrap}.box td:last-child{white-space:nowrap;padding-left:8px}.search span{white-space:nowrap}.search input{min-width:0}.top{flex-wrap:wrap;row-gap:4px}.top .logo{min-width:0}
 </style>
-<div class="top"><span class="logo">KAERI AI Agent Portal<small>내부망 로컬 LLM 에이전트</small></span><span class="sp"></span><a class="gd" href="/guide/" target="_blank">📘 사용 설명서</a><span class="user" id="user"></span></div>
+<div class="top"><span class="logo">KAERI AI Agent Portal<small>내부망 로컬 LLM 에이전트</small></span><span class="sp"></span><button class="gd" type="button" data-ag-theme-btn title="화면 테마 고르기">🎨 테마</button><a class="gd" href="/guide/" target="_blank">📘 사용 설명서</a><span class="user" id="user"></span></div>
 <div class="wrap">
   <aside class="side">
     <button class="mk" onclick="addTool.showModal()">+ 내 에이전트 만들기</button>
@@ -61,7 +61,7 @@
       <h2>최근 추가 <small>30일 이내</small></h2>
       <div class="cols" id="newcols"></div>
       <h2>GPU 사용 현황 <small>10초마다 · 도구 이름은 프로세스로 추정</small></h2>
-      <div class="cols" id="gpus" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))"><div class="col" style="font-size:12px;color:#999">불러오는 중…</div></div>
+      <div class="cols" id="gpus" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))"><div class="col" style="font-size:12px;color:var(--faint)">불러오는 중…</div></div>
     </div>
     <div id="all" hidden>
       <div class="hd"><div><h2 style="margin:0">전체 에이전트</h2><div style="font-size:12px;color:var(--muted)" id="count"></div></div>
@@ -90,9 +90,9 @@ function render(){
   chips.innerHTML=['전체',...new Set(TOOLS.map(t=>t.group))].map(c=>`<span class="chip ${c===cat?'on':''}" onclick="cat='${c}';render()">${c}</span>`).join('');
   home.hidden=view!=='home';all.hidden=view==='home';
   if(view==='home'){const r=[...ts].sort((a,b)=>score(b)-score(a));
-    cols.innerHTML=[[0,3],[3,6],[6,9]].map(([a,b])=>`<div class="col"><h3>🏆 인기 에이전트 TOP ${a+1}-${b}</h3>${r.slice(a,b).map((t,i)=>mini(t,a+i+1)).join('')||'<div class="d" style="font-size:12px;color:#999">없음</div>'}</div>`).join('');
+    cols.innerHTML=[[0,3],[3,6],[6,9]].map(([a,b])=>`<div class="col"><h3>🏆 인기 에이전트 TOP ${a+1}-${b}</h3>${r.slice(a,b).map((t,i)=>mini(t,a+i+1)).join('')||'<div class="d" style="font-size:12px;color:var(--faint)">없음</div>'}</div>`).join('');
     const n=ts.filter(isNew).sort((a,b)=>b.added.localeCompare(a.added));
-    newcols.innerHTML=`<div class="col"><h3>✨ 신규 에이전트</h3>${n.slice(0,6).map((t,i)=>mini(t,i+1)).join('')}</div><div class="col"><h3>🕒 최근 사용</h3>${LS('recent').map(d=>TOOLS.find(t=>t.dir===d)).filter(Boolean).slice(0,6).map((t,i)=>mini(t,i+1)).join('')||'<div style="font-size:12px;color:#999">아직 없음</div>'}</div>`;
+    newcols.innerHTML=`<div class="col"><h3>✨ 신규 에이전트</h3>${n.slice(0,6).map((t,i)=>mini(t,i+1)).join('')}</div><div class="col"><h3>🕒 최근 사용</h3>${LS('recent').map(d=>TOOLS.find(t=>t.dir===d)).filter(Boolean).slice(0,6).map((t,i)=>mini(t,i+1)).join('')||'<div style="font-size:12px;color:var(--faint)">아직 없음</div>'}</div>`;
   } else {
     ts.sort((a,b)=>sort==='name'?a.title.localeCompare(b.title,'ko'):sort==='new'?b.added.localeCompare(a.added):score(b)-score(a));
     count.textContent=`전체 ${TOOLS.length}개 중 ${ts.length}개 표시`;const fav=LS('fav');
@@ -105,8 +105,8 @@ function render(){
     </div>`).join('');
   }
   counts.innerHTML=[['전체',TOOLS.length],['실행 중',TOOLS.filter(t=>t.up).length],['신규(30일)',TOOLS.filter(isNew).length],['미설치',TOOLS.filter(t=>!t.installed).length]].map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join('');
-  rank.innerHTML=RANK.map((r,i)=>`<tr><td>${i+1}. ${esc(r.user)}</td><td>${r.n}</td></tr>`).join('')||'<tr><td colspan=2 style="color:#999">아직 없음</td></tr>';
-  feed.innerHTML=FEED.map(p=>`<div class="post"><b>${esc(p.title)}</b><p>${esc(p.body)}</p><div class="m"><span>${esc(p.dept)}</span><span>${esc(p.author)}</span><span>${p.ts.slice(0,10)}</span><span class="l" style="cursor:pointer" onclick="postLike(${p.id})">${p.liked?'❤':'♡'} ${p.likes}</span></div></div>`).join('')||'<div style="font-size:12px;color:#999">첫 글을 올려 보세요</div>';
+  rank.innerHTML=RANK.map((r,i)=>`<tr><td>${i+1}. ${esc(r.user)}</td><td>${r.n}</td></tr>`).join('')||'<tr><td colspan=2 style="color:var(--faint)">아직 없음</td></tr>';
+  feed.innerHTML=FEED.map(p=>`<div class="post"><b>${esc(p.title)}</b><p>${esc(p.body)}</p><div class="m"><span>${esc(p.dept)}</span><span>${esc(p.author)}</span><span>${p.ts.slice(0,10)}</span><span class="l" style="cursor:pointer" onclick="postLike(${p.id})">${p.liked?'❤':'♡'} ${p.likes}</span></div></div>`).join('')||'<div style="font-size:12px;color:var(--faint)">첫 글을 올려 보세요</div>';
 }
 function go(d){const t=TOOLS.find(x=>x.dir===d);if(t.up){hit(d);window.open(t.url)}else howto(d,t.title)}
 function hit(d){save('recent',[d,...LS('recent').filter(x=>x!==d)].slice(0,10));fetch('/api/open',{method:'POST',body:JSON.stringify({dir:d})}).then(()=>setTimeout(load,500))}
@@ -114,7 +114,7 @@ function like(d){fetch('/api/like',{method:'POST',body:JSON.stringify({dir:d})})
 function fav(d){const f=LS('fav');save('fav',f.includes(d)?f.filter(x=>x!==d):[...f,d]);render()}
 async function act(a,d){await fetch('/api/'+a,{method:'POST',body:JSON.stringify({dir:d})});setTimeout(load,4000);setTimeout(load,15000)}
 async function howto(d,title){dlgT.textContent=title;dlgB.textContent=d?await fetch('/api/readme/'+d).then(r=>r.text()):'새 에이전트 추가 방법\n\n1. agent_page/ 아래 <이름>-local/ 폴더를 만든다 (app.py · ui.html · setup.sh · selftest.py · README.md)\n2. LLM 연결은 환경변수 LLM_API / LLM_BASE_URL / LLM_MODEL 규약을 따른다\n3. portal/tools.json 에 한 줄 추가 (dir, port, title, desc, group, tags, dept, author, added)\n4. 포털 새로고침';dlg.showModal()}
-async function load(){const j=await fetch('/api/tools').then(r=>r.json());TOOLS=j.tools;FEED=j.posts;RANK=j.rank;document.getElementById('user').innerHTML=`<b style="color:var(--fg);font-weight:600">${esc(j.me.name)}</b>${j.me.role!=='일반'?' · '+j.me.role:''}${j.me.approvals?` · <a href="/approvals" style="background:#dc2626;color:#fff;border-radius:999px;padding:1px 8px;text-decoration:none;font-weight:600">요청 ${j.me.approvals}</a>`:''} · <a href="/account" style="color:inherit">계정 설정</a>${j.me.owner?' · <a href="/admin" style="color:inherit">관리</a>':''} · <a href="/logout" style="color:inherit">로그아웃</a>`;render()}
+async function load(){const j=await fetch('/api/tools').then(r=>r.json());TOOLS=j.tools;FEED=j.posts;RANK=j.rank;document.getElementById('user').innerHTML=`<b style="color:var(--fg);font-weight:600">${esc(j.me.name)}</b>${j.me.role!=='일반'?' · '+j.me.role:''}${j.me.approvals?` · <a href="/approvals" style="background:var(--red);color:#fff;border-radius:999px;padding:1px 8px;text-decoration:none;font-weight:600">요청 ${j.me.approvals}</a>`:''} · <a href="/account" style="color:inherit">계정 설정</a>${j.me.owner?' · <a href="/admin" style="color:inherit">관리</a>':''} · <a href="/logout" style="color:inherit">로그아웃</a>`;render()}
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function postJSON(u,b){const r=await fetch(u,{method:'POST',body:JSON.stringify(b)}).then(r=>r.json());if(r.error)alert(r.error);return r}
 function postLike(id){postJSON('/api/post_like',{id}).then(load)}
@@ -128,6 +128,6 @@ async function gpu(){if(view!=='home'||document.hidden)return;let j;try{j=await 
   const G=m=>(m/1024).toFixed(1);
   gpus.innerHTML=j.gpus.length?j.gpus.map(g=>{const pc=Math.round(g.used/g.total*100);return `<div class="col gpu"><h3>🖥️ GPU ${g.index} <small style="font-weight:400;color:var(--muted)">${esc(g.name.replace('NVIDIA ',''))}</small></h3>
     <div class="gbar"><i class="${pc>85?'hot':''}" style="width:${pc}%"></i></div><div class="s">메모리 ${G(g.used)} / ${G(g.total)} GB · 사용률 ${g.util??'-'}%</div>
-    ${g.procs.map(p=>`<div class="p"><span>${esc(p.tool)}</span><span>${G(p.mem)} GB</span></div>`).join('')||'<div class="p"><span style="color:#999">쉬는 중</span><span></span></div>'}</div>`}).join(''):`<div class="col" style="font-size:12px;color:#999">${esc(j.error||'GPU 없음')}</div>`}
+    ${g.procs.map(p=>`<div class="p"><span>${esc(p.tool)}</span><span>${G(p.mem)} GB</span></div>`).join('')||'<div class="p"><span style="color:var(--faint)">쉬는 중</span><span></span></div>'}</div>`}).join(''):`<div class="col" style="font-size:12px;color:var(--faint)">${esc(j.error||'GPU 없음')}</div>`}
 load();setInterval(load,10000);gpu();setInterval(gpu,10000);
 </script>
