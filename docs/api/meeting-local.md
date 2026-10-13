@@ -65,6 +65,7 @@
   - 진행: `{"stage":"convert","msg":"ffmpeg 16kHz 변환"}` → `{"stage":"asr","msg":"전사 (large-v3)"}` → `{"stage":"diar","msg":"화자 분리"}`
   - 끝: `{"done": {...}}`
   - 실패: `{"error":"ValueError: 지원하지 않는 형식: ..."}` (스트림 안에서 옴, HTTP 상태는 200)
+- 스트림 전 오류(`400 {"error":...}`): 본문이 JSON 객체가 아님, `file_b64` 가 없거나 비었거나 base64 가 아님(`file_b64 없음` / `파일(base64)이 올바르지 않습니다`), `speakers` 가 숫자가 아님.
 - `done` 내용:
 ```json
 {"run_id": "2026-10-06-c359", "file": "00_meeting.mp3", "duration": 140.0, "ts": "2026-10-06T03:16:21",
@@ -92,6 +93,7 @@
   - 끝: `{"done": {...}}` = 1단계 `done` + `"status":"done"`, `names`, `meta`, `hwpx`(파일명 또는 null), `minutes`(Markdown 문자열), `insights`
   - 실패: `{"error":"..."}`
 - `insights` 항목: `{"title":"구간 제목","start":0.5,"end":310.2,"speakers":["김부장","이과장"],"insight":"텍스트"}`
+- 스트림 전 오류: 본문이 JSON 객체가 아니거나 `names`·`meta` 가 객체가 아니면 `400`, 그 run 의 전사 결과가 없으면 `404 {"error":"없는 실행입니다(먼저 전사하세요)"}`.
 - 메모: 같은 run 에 다시 부르면 덮어씁니다(이름 바꿔 재생성 가능). `hwpx` 는 서버에 kordoc-local 이 있을 때만 생성. 수 분 걸림.
 
 ### POST api/polish
@@ -109,7 +111,7 @@
 ### POST v1/audio/transcriptions
 - 요청: `multipart/form-data` 의 `file` 필드, 또는 JSON `{"file":"<base64>"}`. 다른 필드(model, language 등)는 무시.
 - 응답: `{"text":"전사된 텍스트"}`. 화자 분리·저장 없음(임시 파일은 지움).
-- 오류: `500 {"error":"ValueError: file 없음"}` 등(모두 500).
+- 오류: 파일이 없거나 비었음 `400 {"error":"file 없음"}`, 깨진 JSON·객체 아님·base64 아님 `400`, 변환·전사 실패 `500 {"error":"..."}`.
 
 ## 흐름 예
 ```js
@@ -150,4 +152,4 @@ const fin = await sse(`api/finalize/${run.run_id}`, { names: { '화자1': '김�
 - 실행 삭제 API 는 없습니다. 정적 파일 경로(`/static/`)도 없습니다.
 - 오류는 두 가지로 옵니다: 일반 응답은 `{"error":"..."}` + 상태 코드, SSE 는 200 스트림 안의 `{"error":"..."}` 이벤트.
 - GET 경로는 쿼리를 떼지 않고 그대로 비교합니다. `api/runs?x=1` 처럼 쿼리를 붙이면 화면 HTML 이 돌아옵니다.
-- POST 본문이 JSON 이 아니면(`api/run`, `api/finalize`) 서버가 응답 없이 연결을 끊습니다(코드에서 예외 처리 밖). 반드시 올바른 JSON 을 보내세요.
+- POST 본문(`api/run`, `api/finalize`, `api/polish`, JSON 으로 보내는 `v1/audio/transcriptions`)이 깨진 JSON 이면 `400 {"error":"요청 본문이 올바른 JSON 이 아닙니다"}`, JSON 객체가 아니면(배열·문자열 등) `400 {"error":"요청 본문은 JSON 객체여야 합니다"}`. 빈 본문은 `{}` 로 봅니다.
