@@ -16,9 +16,48 @@ LANDING_IMG = ("/landing/home.png", os.path.join(ROOT, "docs", "img", "landing-h
 V2_DIR = os.path.join(ROOT, "v2")
 OWNERS = {x.strip() for x in os.environ.get("AGENT_OWNERS", "dongju,gggg8657").split(",") if x.strip()}
 LOCAL = ("127.0.0.1", "::1")
-# 서버 안(127.0.0.1)에서 쿠키 없이 온 요청 = 서버 주인 — portal.py 와 같은 기본값. 같은 서버의 리버스 프록시(nginx·Caddy·React 개발 서버) 뒤에
-# 두면 바깥 사람 요청도 모두 127.0.0.1 로 보여 관리자 권한이 되므로, 그때는 PORTAL_LOCAL_OWNER=0 (로컬 관리 작업은 관리자 계정으로 로그인)
-LOCAL_OWNER = os.environ.get("PORTAL_LOCAL_OWNER", "1") != "0"
+# 로컬 주인(로그인 없이 관리자) 판정 — PORTAL_LOCAL_OWNER:
+#   token(기본) 이 서버 안(127.0.0.1/::1)에서 쿠키 없이 + 헤더 X-Local-Owner 가 _data/.local_owner_token 과 같을 때만 주인.
+#               브라우저(SSH 포트포워딩 localhost:8700 포함)는 이 헤더를 못 붙이므로 늘 로그인 필요 — 로그아웃이 제대로 됨.
+#               스크립트: curl -H "X-Local-Owner: $(cat ~/agent-page/_data/.local_owner_token)" …   (토큰 파일은 처음 기동 때 만듦, 권한 600)
+#   1           예전 방식(portal.py 와 같음): 127.0.0.1 쿠키 없음 = 주인 — 포트포워딩으로 붙은 브라우저도 로그아웃 뒤 주인이 되는 문제가 있음
+#   0           끔(로컬 관리 작업도 관리자 계정으로 로그인)
+_LO = (os.environ.get("PORTAL_LOCAL_OWNER") or "token").strip().lower()
+LOCAL_OWNER_MODE = "0" if _LO in ("0", "off", "no", "false") else "1" if _LO in ("1", "on", "yes", "true") else "token"
+LOCAL_OWNER = LOCAL_OWNER_MODE != "0"
+LOCAL_TOKEN_FILE = os.path.join(DATA, ".local_owner_token")
+
+
+def _local_token():
+    """토큰 파일을 읽음(없으면 무작위 32바이트로 만듦, 권한 600). 값은 어디에도 출력하지 않음"""
+    if LOCAL_OWNER_MODE != "token":
+        return ""
+    try:
+        fd = os.open(LOCAL_TOKEN_FILE, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(secrets.token_urlsafe(32) + "\n")
+    except FileExistsError:
+        pass
+    os.chmod(LOCAL_TOKEN_FILE, 0o600)
+    with open(LOCAL_TOKEN_FILE, encoding="utf-8") as f:
+        tok = f.read().strip()
+    if len(tok) < 16:
+        raise RuntimeError(f"{LOCAL_TOKEN_FILE} 가 비었거나 너무 짧음 — 지우고 다시 띄우면 새로 만듦")
+    return tok
+
+
+LOCAL_TOKEN = _local_token()
+
+
+def local_owner(client, header):
+    """접속지가 이 서버 안이고(그리고 token 모드면 비밀 헤더가 맞으면) True — 쿠키 확인은 부르는 쪽에서"""
+    if LOCAL_OWNER_MODE == "0" or client not in LOCAL:
+        return False
+    if LOCAL_OWNER_MODE == "1":
+        return True
+    return bool(header) and hmac.compare_digest(header.strip().encode(), LOCAL_TOKEN.encode())
+
+
 # 믿을 프록시 주소(쉼표). 바로 앞 접속이 이 목록일 때만 X-Forwarded-For 를 읽어 실제 클라이언트 주소로 판정(오른쪽부터 믿을 프록시가 아닌 첫 주소).
 # 목록의 프록시를 거쳤는데 X-Forwarded-For 가 없으면 '알 수 없음'(로컬 아님). 목록이 비면 X-Forwarded-For 는 무시(portal.py 와 같음)
 TRUSTED_PROXIES = {x.strip() for x in os.environ.get("TRUSTED_PROXIES", "").split(",") if x.strip()}

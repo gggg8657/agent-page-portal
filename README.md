@@ -40,7 +40,7 @@ ORDER BY "예산합계" DESC LIMIT 500
 - **시작/중지** — 각 도구 폴더의 `setup.sh` 를 `PORT`·`WORKSPACE` 를 넘겨 실행. `python3 portal.py start-all` / `stop-all`.
 - **단일 진입점(프록시)** — 모든 도구를 `http://<포털>:8700/t/<도구폴더>/` 로 리버스 프록시(SSE·파일 다운로드 포함). 포트 하나만 열면 되고, 도구 UI 는 상대경로만 씀. 도구는 `127.0.0.1` 에만 열려 있어 직접 포트로는 접속할 수 없음.
 - **사용법 팝업** — 프록시하는 도구 첫 화면에 `guides/<도구폴더>.md` 를 오른쪽 위 **?** 팝업으로 붙임(포털 자체는 `guides/portal.md`).
-- **로그인** — 계정은 `portal.db` 의 `users`(아이디·이름·부서·PIN 의 pbkdf2-sha256 해시 + 사용자별 salt, 60만 회 — 예전 20만 회 계정은 다음 로그인 때 자동으로 다시 해시). 세션은 무작위 32바이트 토큰(DB 에는 sha256 만), 쿠키 `agsid`(HttpOnly·SameSite=Lax, 30일, 쓰면 연장 — 로그인 화면의 '이 PC에서 로그인 유지'를 끄면 Max-Age 없는 쿠키 + 서버 만료 12시간·연장 없음, `sess_short` 표). 로그인 실패는 아이디당 10분에 5번까지. 로그인 안 한 화면 요청은 `/login?next=…` 로, API 는 401. 접속 IP 는 NAT 뒤라 모두 서버 주소로 보이므로 사람 구분에 쓰지 않습니다 — 단, 이 서버 안(127.0.0.1)에서 쿠키 없이 온 요청(SSH 터널 테스트 포털·내부 호출)은 서버 주인으로 봅니다(무효 쿠키가 있으면 다시 로그인). 계정 만들기·PIN 초기화: `python3 portal.py --add-user <id> --name <이름> [--dept 부서] [--pin 숫자]`(PIN 을 안 주면 무작위 6자리를 화면에만 출력).
+- **로그인** — 계정은 `portal.db` 의 `users`(아이디·이름·부서·PIN 의 pbkdf2-sha256 해시 + 사용자별 salt, 60만 회 — 예전 20만 회 계정은 다음 로그인 때 자동으로 다시 해시). 세션은 무작위 32바이트 토큰(DB 에는 sha256 만), 쿠키 `agsid`(HttpOnly·SameSite=Lax, 30일, 쓰면 연장 — 로그인 화면의 '이 PC에서 로그인 유지'를 끄면 Max-Age 없는 쿠키 + 서버 만료 12시간·연장 없음, `sess_short` 표). 로그인 실패는 아이디당 10분에 5번까지. 로그인 안 한 화면 요청은 `/login?next=…` 로, API 는 401. 접속 IP 는 NAT 뒤라 모두 서버 주소로 보이므로 사람 구분에 쓰지 않습니다 — 단, 이 서버 안(127.0.0.1)에서 쿠키 없이 + 비밀 헤더 `X-Local-Owner`(값 = `_data/.local_owner_token`)를 붙인 요청(스크립트·내부 호출)만 서버 주인으로 봅니다 — 헤더 없는 브라우저(SSH 포트포워딩 포함)는 늘 로그인 필요(무효 쿠키가 있으면 다시 로그인). 아래 'FastAPI 포털' 의 `PORTAL_LOCAL_OWNER`. 계정 만들기·PIN 초기화: `python3 portal.py --add-user <id> --name <이름> [--dept 부서] [--pin 숫자]`(PIN 을 안 주면 무작위 6자리를 화면에만 출력).
 - **통계·피드** — `AGENT_DATA/portal.db` sqlite 하나(WAL)에 열기·좋아요·피드 글·사용자 랭킹(계정 id 기준, 랭킹은 이름으로 표시). 즐겨찾기·최근 사용·펫 상태는 브라우저 localStorage(펫·사용법 팝업은 계정별 키).
 - **계정·부서·권한** — 역할은 관리자(`AGENT_OWNERS` 계정) · 부서장(부서마다, 여럿 가능) · 일반. 오른쪽 위 **계정 설정**(`/account`)에서 이름 바꾸기, 부서 소속 요청, 부서장 권한 요청, PIN 바꾸기, 내 요청 보기·취소.
   - 부서는 관리자가 만든 목록에서만 고름(`depts` — 처음엔 기존 계정·`tools.json` 의 부서로 채움). 목록에 없으면 관리자에게 요청.
@@ -124,11 +124,12 @@ bash agent-page-portal/scripts/clone-all.sh     # tools.json 의 도구 전부 c
 ## 실행
 
 ```bash
-bash agent-page-portal/scripts/start-portal.sh        # 운영 포털 :8700 (모든 주소에서 열림) — vLLM 확인(경고만)·Ollama 확인 → LLM·도구 연결 환경변수 export → portal.py
+bash agent-page-portal/scripts/start-portal.sh        # 운영 포털 :8700 (모든 주소에서 열림) — vLLM 확인(경고만)·Ollama 확인 → scripts/portal-env.sh(LLM·도구 연결 환경변수) → FastAPI 포털(fastportal, uvicorn 1워커, 백업 루프 켬) · 로그 portal.log
+PORTAL_IMPL=classic bash agent-page-portal/scripts/start-portal.sh   # 되돌리기: 예전 portal.py 로 :8700 (먼저 떠 있는 포털을 그 PID 로 kill)
 bash agent-page-portal/scripts/start-test-portal.sh   # 본인 테스트 포털 :8701, HOST=127.0.0.1, SHOW_HIDDEN=1 (숨긴 도구도 보임, SSH 터널로 접속)
 bash agent-page-portal/scripts/autostart.sh           # 재부팅 후 한 번: 포털 + tools.json 의 모든 도구 기동 + 백업 (~/.zshrc 에서 백그라운드 호출용)
 bash agent-page-portal/scripts/backup.sh              # 지금 백업 한 번 (_data → ~/agent-page-backup, 7일치)
-python3 portal.py                 # 포털만 직접 — http://localhost:8700
+python3 portal.py                 # 예전 구현(표준 라이브러리) 직접 — http://localhost:8700 (환경변수는 start-portal.sh 가 넣어 줌)
 python3 portal.py start-all       # tools.json 의 설치된 도구 전부 기동 (각 폴더 setup.sh, PORT 전달)
 python3 portal.py stop-all
 bash audit.sh                     # 전체 점검: CDN 유출·포트 중복·LICENSE/NOTICE·selftest
@@ -137,6 +138,7 @@ bash audit.sh                     # 전체 점검: CDN 유출·포트 중복·LI
 | 환경변수 | 기본 | 설명 |
 |---|---|---|
 | `PORT` | 8700 | 포털 포트 (테스트 포털 8701) |
+| `PORTAL_IMPL` | fast | `start-portal.sh` 가 띄울 구현 — `fast` = FastAPI(fastportal), `classic` = 예전 portal.py(되돌리기용; 로컬 주인 토큰이 없어 포트포워딩 로그아웃 문제가 다시 생김) |
 | `HOST` | (모든 주소) | `127.0.0.1` 이면 서버 안에서만 열림 |
 | `SHOW_HIDDEN` | 없음 | `1` 이면 `hidden: true` 도구도 목록에 |
 | `AGENT_DATA` | `../_data` | 포털 DB + 모든 도구 작업 폴더 루트 |
@@ -148,6 +150,7 @@ bash audit.sh                     # 전체 점검: CDN 유출·포트 중복·LI
 | `AGENT_GPUS` | 0,1,2 | GPU 도구 후보 — vLLM 전용 GPU(3)는 뺌 |
 
 `scripts/` 의 네 스크립트는 원래 상위 폴더(`agent-page/`)에 있던 `start-portal.sh` · `start-test-portal.sh` · `autostart.sh` · `backup.sh` 의 사본입니다(상위 폴더로 `cd` 하도록만 바꾸고, 서버 주소는 `<server-ip>` 로 가림). 상위 폴더 쪽 원본도 그대로 쓸 수 있습니다.
+`scripts/portal-env.sh` 는 포털 공통 환경변수(LLM·임베딩·음성 연결·GPU 후보) 한 곳 — `start-portal.sh`·`start-fastportal.sh` 가 같이 읽고, 포털이 도구를 켤 때 그대로 물려줍니다. `scripts/start-fastportal.sh` 는 FastAPI 포털 기동(기본 :8720 시험용, 운영은 `start-portal.sh` 가 `PORT=8700 BACKUP=1` 로 부름).
 `~/.local/ollama-gpu/start.sh` 는 작성자 서버의 Ollama 기동 스크립트로, 없으면 건너뜁니다 — Ollama 는 각자 띄우세요. vLLM 은 스크립트가 띄우지 않습니다(꺼져 있으면 경고).
 
 ### https (선택, 기본은 꺼짐)
@@ -161,12 +164,12 @@ printf "subjectAltName=IP:<server-ip>\nextendedKeyUsage=serverAuth\n" > san.ext 
 openssl x509 -req -in portal.csr -CA ca.crt -CAkey ca.key -CAcreateserial -days 825 -out portal.crt -extfile san.ext
 ```
 
-- 포털을 `TLS_CERT=$PWD/_data/tls/portal.crt TLS_KEY=$PWD/_data/tls/portal.key` 로 띄웁니다(`start-portal.sh` 의 `python3 portal.py` 앞에 붙이기). 주소는 `https://<server-ip>:8700`.
+- 포털을 `TLS_CERT=$PWD/_data/tls/portal.crt TLS_KEY=$PWD/_data/tls/portal.key` 로 띄웁니다(`TLS_CERT=… TLS_KEY=… ./start-portal.sh` — 환경변수가 그대로 포털로 감). 주소는 `https://<server-ip>:8700`.
 - 각 PC 에 `ca.crt` 하나만 나눠 신뢰시킵니다 — Windows: 더블클릭 → 인증서 설치 → 로컬 컴퓨터 → '신뢰할 수 있는 루트 인증 기관'. macOS: 키체인 접근 → 시스템 → 항상 신뢰.
 - 켜면 `http://` 주소는 더 이상 안 열립니다(같은 포트). 키 파일은 git 에 넣지 말 것(`_data/` 는 저장소 밖).
 
-### FastAPI 포털 (시험 중, :8720)
-`fastportal/` 은 같은 포털을 **FastAPI + uvicorn(비동기)** 로 옮긴 판입니다. 같은 HTML·`theme/`·`guide/`·`tools.json`·`_data/portal.db` 를 그대로 쓰고(운영 포털과 동시에 같은 DB 를 써도 됨), 주소·응답은 `portal.py` 와 같게 맞췄습니다.
+### FastAPI 포털 (운영 :8700, 2026-10-13~)
+`fastportal/` 은 같은 포털을 **FastAPI + uvicorn(비동기)** 로 옮긴 판이고, 2026-10-13 부터 운영 :8700 은 이것으로 돕니다(`start-portal.sh`). 되돌리기: 떠 있는 포털을 그 PID 로 끄고 `PORTAL_IMPL=classic ./start-portal.sh`(같은 DB·쿠키라 로그인 세션 유지). 같은 HTML·`theme/`·`guide/`·`tools.json`·`_data/portal.db` 를 그대로 쓰고(운영 포털과 동시에 같은 DB 를 써도 됨), 주소·응답은 `portal.py` 와 같게 맞췄습니다.
 바뀌는 점은 **스트리밍(SSE) 연결 수백 개를 스레드 없이 중계**하는 것 — `portal.py` 는 연결마다 스레드 하나, 새 포털은 이벤트 루프 하나가 중계하고 브라우저가 끊으면 도구 쪽 연결도 바로 닫습니다.
 
 ```bash
@@ -177,35 +180,37 @@ python3 -m venv ~/.local/fastportal-venv
 pip download -r fastportal/requirements.txt -d fastportal-wheels --only-binary=:all: --python-version 3.13 --platform manylinux2014_x86_64
 ~/.local/fastportal-venv/bin/pip install --no-index --find-links fastportal-wheels -r fastportal/requirements.txt
 
-bash agent-page-portal/scripts/start-fastportal.sh        # :8720 시작(이미 떠 있으면 pid 파일의 그 프로세스만 끄고 다시) · 로그 fastportal-8720.log
+bash agent-page-portal/scripts/start-fastportal.sh        # 시험용 :8720 시작(이미 떠 있으면 pid 파일의 그 프로세스만 끄고 다시) · 로그 fastportal-8720.log
 bash agent-page-portal/scripts/start-fastportal.sh stop
 # 같은 앱을 uvicorn 으로 직접: cd agent-page-portal && ~/.local/fastportal-venv/bin/uvicorn fastportal.app:app --host 0.0.0.0 --port 8720 --no-server-header --no-proxy-headers
 ```
 
 | 환경변수(새 포털만) | 기본 | 설명 |
 |---|---|---|
-| `PORT` | 8720 | 운영 전환 때 8700 |
-| `BACKUP` | 0 | 매일 백업 — 운영 포털이 돌리므로 기본 꺼짐. 전환 때 `1` |
+| `PORT` | 8720 | `start-portal.sh` 는 8700 |
+| `BACKUP` | 0 | 매일 백업(03시대 KST 에 오늘 날짜 백업이 없으면, 또는 30시간 넘으면 `backup.sh`) — `start-portal.sh`(:8700)는 `1`, 시험 인스턴스는 0(둘이 같이 돌지 않게) |
 | `PORTAL_MAX_BODY` | 600MB | 도구로 넘기는 요청 본문 상한 — 넘으면 본문을 읽어 버린 뒤 413 |
 | `PORTAL_MAX_JSON` | 1MB | 포털 API(JSON) 본문 상한 → 413 |
 | `TOOLS_ALIVE_TTL` | 5 | `/api/tools` 의 도구 켜짐 확인 캐시(초) — 탭 수백 개가 폴링해도 포트 확인은 5초에 한 번 |
-| `PORTAL_LOCAL_OWNER` | 1 | `0` 이면 '127.0.0.1 에서 쿠키 없이 = 서버 주인'을 끔. **같은 서버의 리버스 프록시(nginx·Caddy 등) 뒤에 둘 때는 반드시 0** — 아니면 바깥 요청이 모두 127.0.0.1 로 보여 관리자 권한이 됨. 끄면 관리 작업은 관리자 계정으로 로그인 |
+| `PORTAL_LOCAL_OWNER` | token | 로컬 주인(로그인 없이 관리자) 판정. `token`: 127.0.0.1 에서 쿠키 없이 + 헤더 `X-Local-Owner` 가 `_data/.local_owner_token`(처음 기동 때 무작위 32바이트로 만듦, 권한 600, git 밖) 과 같을 때만 — 브라우저(SSH 포트포워딩 `localhost:8700` 포함)는 이 헤더를 못 붙이므로 로그아웃이 제대로 됨. `1`: 예전 방식(127.0.0.1 쿠키 없음 = 주인 — 포트포워딩 브라우저가 로그아웃 뒤에도 주인이 됨). `0`: 끔. 리버스 프록시 뒤에 둘 때는 `token` 또는 `0` |
 | `TRUSTED_PROXIES` | 없음 | 쉼표 목록. 바로 앞 접속이 이 주소일 때만 `X-Forwarded-For` 를 읽어 실제 주소로 판정(목록 밖 주소 중 가장 오른쪽). 없으면 `X-Forwarded-For` 는 무시 |
 | 나머지 | | `AGENT_DATA`·`AGENT_OWNERS`·`HOST`·`SHOW_HIDDEN`·`TLS_CERT`/`TLS_KEY`(TLS 1.2 이상) 는 위 표와 같음 |
 
-`portal.py` 와 일부러 다르게 한 것: 로그인 실패 잠금을 메모리 대신 DB(`login_fails` 표 — 예전 코드는 모르는 표라 무시)에 둠(재시작·여러 프로세스에도 유지) ·
+로컬 주인 토큰 쓰기(스크립트·관리 작업): `curl -H "X-Local-Owner: $(cat ~/agent-page/_data/.local_owner_token)" …` — 예: `curl -X POST -H "X-Local-Owner: $(cat ~/agent-page/_data/.local_owner_token)" localhost:8700/api/start -d '{"dir":"writer-local"}'`(`autostart.sh` 가 이렇게 부름). 토큰 값은 출력·커밋하지 말 것. 바꾸려면 파일을 지우고 포털 재시작(새로 만듦), 그 뒤 쓰는 스크립트는 파일을 다시 읽으면 됨. 포털은 이 헤더를 도구로 넘기지 않고, React 시범 서버(:8710)는 브라우저가 보낸 것도 버림.
+
+`portal.py` 와 일부러 다르게 한 것: 로컬 주인은 토큰 헤더가 있어야 함(위) · 로그인 실패 잠금을 메모리 대신 DB(`login_fails` 표 — 예전 코드는 모르는 표라 무시)에 둠(재시작·여러 프로세스에도 유지) ·
 빈 `agsid=`·형식이 틀린 `agsid`·여러 줄 `Cookie` 도 '쿠키 있음 → 무효 → 401'(예전엔 로컬이면 주인) · 청크 업로드 본문도 전달(예전엔 버림) · 업로드 상한 413 ·
 도구의 리디렉트는 같은 도구 안에서만 따라감(예전엔 아무 주소나) · 도구가 준 쿠키를 포털이 기억하지 않음 · 예상 못 한 오류는 연결을 끊는 대신 500 `{"error": "서버 오류"}` ·
 `/docs`·`/openapi.json` 은 열지 않음 · `Server` 헤더 없음.
 
 워커는 **1개**(비동기)로 씁니다. `/api/events`(오래 걸린 작업 끝남)·도구 켜짐 캐시·GPU 캐시가 프로세스 메모리라, 워커를 늘리면 이 셋을 DB(또는 공유 저장소)로 옮겨야 합니다(세션·잠금·계정은 이미 DB). 막히는 일(DB·PIN 해시·nvidia-smi)은 스레드 풀에서 돌아 이벤트 루프를 막지 않습니다.
 
-계약 시험(`fastportal/tests/`): `contract_live.py --demo <id>:<pin>` 은 같은 요청을 :8700 과 :8720 에 보내 상태·헤더·본문을 비교(읽기와 되돌리는 POST 만), `contract_fake.py` 는 임시 폴더에 두 포털과 가짜 도구를 띄워 프록시 헤더 규칙·본문·SSE·동시 스트림·끊김·잠금·프록시 뒤 판정을 확인, `ui_compare.js` 는 Playwright 로 화면을 캡처해 비교합니다.
+계약 시험(`fastportal/tests/`): `contract_live.py --demo <id>:<pin> [--old <portal.py 포트>] [--new <fastportal 포트>]` 은 같은 요청을 예전 portal.py 와 새 포털에 보내(전환 뒤에는 portal.py 를 시험 포트에 따로 띄워 `--old` 로; 로컬 주인 요청엔 새 포털에만 토큰을 붙이고, 토큰 없는 로컬 = 401 도 확인) 상태·헤더·본문을 비교(읽기와 되돌리는 POST 만), `contract_fake.py` 는 임시 폴더에 두 포털과 가짜 도구를 띄워 프록시 헤더 규칙·본문·SSE·동시 스트림·끊김·잠금·프록시 뒤 판정을 확인, `ui_compare.js` 는 Playwright 로 화면을 캡처해 비교합니다.
 의존성 라이선스는 모두 MIT·BSD·Apache-2.0 계열(certifi 만 MPL-2.0)로 상업 이용 가능 — 정확한 목록은 `fastportal/requirements.txt` 의 각 패키지.
 
 ## 출처·감사 (Credits)
 
-- 포털 서버는 파이썬 표준 라이브러리만 씁니다. 제3자 구성요소 전체 목록·라이선스·상업 이용 여부는 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) 에 있습니다. 연결된 각 도구의 출처는 각 저장소의 `THIRD_PARTY_NOTICES.md`·README 'Credits' 를 보세요.
+- 예전 포털 서버(`portal.py`)는 파이썬 표준 라이브러리만, 운영 중인 FastAPI 판(`fastportal/`)은 `fastportal/requirements.txt` 의 패키지(FastAPI·uvicorn·httpx 등, MIT·BSD·Apache-2.0 계열, certifi 만 MPL-2.0)를 씁니다. 제3자 구성요소 전체 목록·라이선스·상업 이용 여부는 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) 에 있습니다. 연결된 각 도구의 출처는 각 저장소의 `THIRD_PARTY_NOTICES.md`·README 'Credits' 를 보세요.
 - 기본 LLM: [vLLM](https://github.com/vllm-project/vllm) (Apache-2.0) + Google [Gemma](https://ai.google.dev/gemma) `gemma4:31b` (Apache-2.0), 임베딩은 [Ollama](https://github.com/ollama/ollama) (MIT) + bge-m3 — 포털은 환경변수로 넘겨 줄 뿐 동봉하지 않습니다.
 - 사용 설명서(`/guide`): 글꼴 [Noto Sans KR](https://fonts.google.com/noto/specimen/Noto+Sans+KR) (SIL OFL 1.1, Google Fonts), 캡처·PDF 생성에 [Playwright](https://github.com/microsoft/playwright) (Apache-2.0)·[Pillow](https://github.com/python-pillow/Pillow) (MIT-CMU).
 - 상업 이용 확인이 필요한 항목(캐릭터 파동이 그림, 생성 얼굴, 연결 도구의 비상업 요소)은 [#1](https://github.com/gggg8657/agent-page-portal/issues/1) 에 모았습니다.

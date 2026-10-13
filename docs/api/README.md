@@ -42,7 +42,7 @@
 
 - 로그인 안 된 요청: API 는 **401** `{"error": "로그인이 필요합니다", "login": "/login"}`, 화면 요청(`Accept: text/html` 인 GET)은 `/login?next=…` 로 302.
 - 쿠키가 HttpOnly 라 JS 에서 읽을 수 없습니다. **같은 출처에서 `fetch(…, {credentials: "same-origin"})`(기본값)로 부르면 브라우저가 알아서 붙입니다.**
-- 서버 안(127.0.0.1)에서 쿠키 없이 부르면 "서버 주인(owner)"으로 처리됩니다(관리·시험용).
+- 서버 안(127.0.0.1)에서 쿠키 없이 + 비밀 헤더 `X-Local-Owner: <토큰>` 을 붙여 부르면 "서버 주인(owner)"으로 처리됩니다(관리·스크립트용). 토큰은 서버의 `_data/.local_owner_token`(포털이 처음 뜰 때 만듦, 권한 600) — 예: `curl -H "X-Local-Owner: $(cat ~/agent-page/_data/.local_owner_token)" …`. 헤더가 없으면 127.0.0.1 이어도 일반 비로그인(401)이라, SSH 포트포워딩으로 붙은 브라우저도 로그아웃하면 다시 로그인해야 합니다(포털 = FastAPI `fastportal`, 2026-10-13~. `PORTAL_LOCAL_OWNER=1` 이면 예전처럼 헤더 없이 주인).
 
 ## 3. 새 화면을 연결하는 방법
 

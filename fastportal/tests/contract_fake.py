@@ -132,9 +132,14 @@ def launch(name, port, extra=None):
 
 
 launch("old", OLD); launch("new", NEW)
+TOKF = os.path.join(DATA, ".local_owner_token")   # 새 포털(PORTAL_LOCAL_OWNER=token, 기본)이 처음 기동 때 만듦
+TOKV = open(TOKF).read().strip()
+TOK_PORTS = {NEW}   # 이 포트로 가는 요청엔 X-Local-Owner 를 붙임(예전 '127.0.0.1 쿠키 없음 = 주인' 시험을 그대로 쓰려고). tok=False 로 뺌
 
 
-def req(port, method, path, headers=None, body=None, chunked=False):
+def req(port, method, path, headers=None, body=None, chunked=False, tok=True):
+    if tok and port in TOK_PORTS and not any(k.lower() == "x-local-owner" for k in (headers or {})):
+        headers = {**(headers or {}), "X-Local-Owner": TOKV}
     c = http.client.HTTPConnection("127.0.0.1", port, timeout=120)
     if chunked:
         c.putrequest(method, path)
@@ -174,7 +179,8 @@ check("사용자 헤더 버림·포털 값(X-Agent-User=tester)", dict(rb["heade
 check("agsid·agtheme 쿠키는 도구로 안 감, 도구 쿠키는 감", dict(rb["headers"]).get("cookie") == "toolck=keep")
 check("도구가 받은 헤더·경로 같음(old=new)", ra == rb, "" if ra == rb else f"{ra} ≠ {rb}")
 ra = json.loads(req(OLD, "GET", "/t/fake-local/echo")[2]); rb = json.loads(req(NEW, "GET", "/t/fake-local/echo")[2])
-check("서버 안 쿠키 없음 → X-Agent-User=owner", dict(rb["headers"]).get("x-agent-user") == "owner" and ra == rb)
+check("서버 안 쿠키 없음(+토큰) → X-Agent-User=owner", dict(rb["headers"]).get("x-agent-user") == "owner" and ra == rb)
+check("X-Local-Owner 토큰은 도구로 안 감", "x-local-owner" not in dict(rb["headers"]), str(rb["headers"]))
 
 print("\n## 요청 본문")
 body = os.urandom(3 * 1024 * 1024)
@@ -309,10 +315,27 @@ cases = [("쿠키 없음(127.0.0.1)", [], "owner", "owner"),
          ("무효 agsid", [("Cookie", "agsid=" + "x" * 43)], None, None),
          ("X-Forwarded-For 위조(믿을 프록시 없음 → 무시)", [("X-Forwarded-For", "203.0.113.5")], "owner", "owner")]
 for name, hd_, exp_old, exp_new in cases:
-    (sa, ia), (sb, ib) = who(OLD, hd_), who(NEW, hd_)
+    (sa, ia), (sb, ib) = who(OLD, hd_), who(NEW, hd_ + [("X-Local-Owner", TOKV)])
     same_ = (ia, sa) == (ib, sb)
     check(f"{name}: old={ia or sa} new={ib or sb}", ia == exp_old and ib == exp_new, kind="일치" if same_ else "의도한 차이(보안)")
-NOOWN, PROX = free_port(), free_port()
+print("\n## 로컬 주인 토큰(PORTAL_LOCAL_OWNER=token, 기본) — SSH 포트포워딩 브라우저가 로그아웃 뒤 주인이 되던 문제")
+check("토큰 파일 권한 600", (os.stat(TOKF).st_mode & 0o777) == 0o600, oct(os.stat(TOKF).st_mode & 0o777), kind="설정")
+st, i = who(NEW, [])
+check(f"헤더 없는 127.0.0.1 쿠키 없음 → {st}(로그인 필요)", st == 401, kind="의도한 차이(보안)")
+st, i = who(NEW, [("X-Local-Owner", "x" * 43)])
+check(f"틀린 토큰 → {st}", st == 401, kind="의도한 차이(보안)")
+st, i = who(NEW, [("X-Local-Owner", TOKV)])
+check(f"맞는 토큰 → owner", st == 200 and i == "owner", kind="설정")
+st, i = who(NEW, [("X-Local-Owner", TOKV), ("Cookie", "agsid=")])
+check(f"맞는 토큰 + 빈 agsid(로그아웃한 브라우저 꼴) → {st}", st == 401, kind="설정")
+sb = req(NEW, "POST", "/api/signup", {"Content-Type": "application/json"}, json.dumps({"id": "boss", "name": "x", "pin": "1234"}).encode(), tok=False)[0]
+check(f"헤더 없는 로컬: 관리자 아이디(boss) 가입 거절 {sb}", sb == 400, kind="설정")
+sb, _, b = req(NEW, "GET", "/", {"Accept": "text/html"}, tok=False)
+check(f"헤더 없는 로컬: 홈 → {sb}(로그인 화면으로)", sb == 302, kind="의도한 차이(보안)")
+NOOWN, PROX, OLDMODE = free_port(), free_port(), free_port()
+launch("oldmode", OLDMODE, {"PORTAL_LOCAL_OWNER": "1"})
+st, i = who(OLDMODE, [])
+check(f"PORTAL_LOCAL_OWNER=1(예전 방식): 127.0.0.1 쿠키 없음 → {i or st}", st == 200 and i == "owner", kind="설정")
 launch("noown", NOOWN, {"PORTAL_LOCAL_OWNER": "0"})
 launch("prox", PROX, {"TRUSTED_PROXIES": "127.0.0.1"})
 st, i = who(NOOWN, [])
@@ -325,7 +348,7 @@ for name, hd_, exp in (("믿을 프록시 + XFF 바깥 주소", [("X-Forwarded-F
                        ("믿을 프록시 + XFF 없음(알 수 없음)", [], 401),
                        ("믿을 프록시 + XFF 위조 '127.0.0.1, 바깥'", [("X-Forwarded-For", "127.0.0.1, 203.0.113.5")], 401),
                        ("믿을 프록시 + XFF 에 프록시 주소뿐(구분 불가 → 로컬 아님)", [("X-Forwarded-For", "127.0.0.1")], 401)):
-    st, i = who(PROX, hd_)
+    st, i = who(PROX, hd_ + [("X-Local-Owner", TOKV)])   # 토큰이 맞아도 바깥 손님이면 주인 아님
     check(f"TRUSTED_PROXIES=127.0.0.1: {name} → {st}", st == exp, kind="설정")
 
 if A.slow:

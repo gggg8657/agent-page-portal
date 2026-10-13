@@ -7,7 +7,7 @@
   - DB·PIN 해시(PBKDF2 60만 번)·nvidia-smi 같은 막히는 일은 스레드 풀(run_in_threadpool)에서 — 이벤트 루프를 막지 않게
   - 주소 판정은 portal.py 처럼 원래 요청 경로(raw) 문자열로 한다(라우터의 디코딩·슬래시 규칙 차이로 응답이 달라지지 않게)
 env: portal.py 와 같음(PORT 기본 8720, AGENT_DATA, AGENT_OWNERS, TLS_CERT·TLS_KEY, SHOW_HIDDEN) +
-     PORTAL_LOCAL_OWNER(기본 1 — 0 이면 127.0.0.1 쿠키 없음을 주인으로 보지 않음; 프록시 뒤 운영) TRUSTED_PROXIES(쉼표, 이 주소에서 온 접속만 X-Forwarded-For 를 믿음) +
+     PORTAL_LOCAL_OWNER(기본 token — 127.0.0.1 + 헤더 X-Local-Owner=_data/.local_owner_token 일 때만 주인; 1=예전 방식, 0=끔) TRUSTED_PROXIES(쉼표, 이 주소에서 온 접속만 X-Forwarded-For 를 믿음) +
      BACKUP=1(매일 백업 — 기본 꺼짐: 운영 포털이 돌림) PORTAL_MAX_BODY(도구로 넘기는 본문 상한 바이트, 기본 600MB → 413)
      PORTAL_MAX_JSON(포털 API JSON 본문 상한, 기본 1MB) TOOLS_ALIVE_TTL(도구 켜짐 확인 캐시 초, 기본 5)"""
 import asyncio, hashlib, http.cookiejar, json, os, re, time, urllib.parse
@@ -27,7 +27,7 @@ MAX_JSON = int(os.environ.get("PORTAL_MAX_JSON", str(1024 * 1024)))
 DRAIN_MAX = 4 * 1024 * 1024 * 1024   # 이보다 큰 본문은 다 읽어 버리지 않고 바로 끊음
 ALIVE_TTL = float(os.environ.get("TOOLS_ALIVE_TTL", "5"))
 PROXY_TIMEOUT = 3600
-DROP_REQ = HOP | {"x-agent-user", "x-forwarded-user", "x-user", "cookie"}
+DROP_REQ = HOP | {"x-agent-user", "x-forwarded-user", "x-user", "cookie", "x-local-owner"}   # 로컬 주인 토큰은 도구로 넘기지 않음
 AG_COOKIE = re.compile(r"(?:^|;\s*)ag(?:sid|theme)=[^;]*")
 
 core.init_db()
@@ -104,13 +104,13 @@ class Ctx:
 
     # 계정
     def auth(self):
-        """쿠키 agsid → 계정. 쿠키 없이 이 서버 안(127.0.0.1)에서 온 요청 = 주인. 밖에서 온 X-Agent-User 등은 안 믿음"""
+        """쿠키 agsid → 계정. 쿠키 없이 이 서버 안(127.0.0.1)에서 + X-Local-Owner 토큰이 맞으면 주인(core.local_owner, PORTAL_LOCAL_OWNER). 밖에서 온 X-Agent-User 등은 안 믿음"""
         self.uid = self.uname = self.setcookie = None
         m = core.SID_RE.search(self.cookie)
         if m:
             self.uid, self.uname, self.setcookie = core.session_user(m[1])
         has_cookie = bool(core.SID_ANY.search(self.cookie))   # portal.py 는 빈 'agsid=' 를 '쿠키 없음'으로 봐서 로컬이면 주인이 됨 — 여기서는 무효 쿠키
-        if not self.uid and not has_cookie and core.LOCAL_OWNER and self.client in LOCAL:
+        if not self.uid and not has_cookie and core.local_owner(self.client, self.headers.get("x-local-owner")):
             self.uid, self.uname = "owner", "서버 주인(로컬)"
         return self.uid
 
@@ -478,7 +478,7 @@ def login_sync(ctx, body):
     try:
         with core.db() as c:
             if ctx.p == "/api/signup":
-                core.check_new(c, uid, str(req.get("name", "")), pin, core.LOCAL_OWNER and ctx.client in LOCAL)   # 관리자 아이디 가입은 진짜 로컬에서만
+                core.check_new(c, uid, str(req.get("name", "")), pin, core.local_owner(ctx.client, ctx.headers.get("x-local-owner")))   # 관리자 아이디 가입은 진짜 로컬(토큰)에서만
                 d = str(req.get("dept") or "")
                 if d and d not in core.visible_depts(c):
                     raise ValueError("목록에 있는 부서를 고르세요 (목록에 없으면 관리자에게 요청)")

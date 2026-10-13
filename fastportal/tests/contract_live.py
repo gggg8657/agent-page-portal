@@ -5,7 +5,7 @@
      본문(JSON 은 변하는 값 가림, HTML·글은 그대로). 날짜·Server·Connection·Transfer-Encoding 같은 전송 헤더는 비교 안 함.
 안전: 읽기(GET)와 되돌릴 수 있는 POST 만 — 데모 계정 로그인·로그아웃, 테마 저장 후 원래대로, onboarded 후 원래대로,
      틀린 PIN 은 포털마다 1번(잠금 5번에 안 닿음), 권한 거절(403)은 권한 확인이 먼저인 호출만. 도구 시작·중지·등록·글쓰기 없음.
-사람 구분: 127.0.0.1 쿠키 없음 = 서버 주인, 이 서버의 바깥 주소(hostname -I 첫 값)로 붙으면 '밖에서 온 손님'."""
+사람 구분: 127.0.0.1 쿠키 없음 = 서버 주인(새 포털엔 _data/.local_owner_token 을 X-Local-Owner 로 붙여서 — 값은 출력 안 함), 이 서버의 바깥 주소(hostname -I 첫 값)로 붙으면 '밖에서 온 손님'."""
 import argparse, http.client, json, re, sqlite3, subprocess, sys, time, os
 
 ap = argparse.ArgumentParser()
@@ -13,9 +13,12 @@ ap.add_argument("--old", type=int, default=8700)
 ap.add_argument("--new", type=int, default=8720)
 ap.add_argument("--demo", required=True, help="id:pin (데모 계정)")
 ap.add_argument("--json", help="결과 표를 JSON 으로")
+ap.add_argument("--token-file", help="새 포털의 로컬 주인 토큰 파일(기본 <db 폴더>/.local_owner_token) — 'local' 요청에 X-Local-Owner 로 붙임(새 포털에만)")
 ap.add_argument("--db", default=os.path.join(os.path.dirname(__file__), "..", "..", "..", "_data", "portal.db"))
 A = ap.parse_args()
 DEMO_ID, DEMO_PIN = A.demo.split(":", 1)
+TOKF = A.token_file or os.path.join(os.path.dirname(os.path.abspath(A.db)), ".local_owner_token")
+LOCAL_TOK = open(TOKF).read().strip() if os.path.exists(TOKF) else ""   # 값은 출력하지 않음
 EXT = subprocess.run(["hostname", "-I"], capture_output=True, text=True).stdout.split()[0]   # 밖에서 온 것처럼 보이는 주소(코드에 적지 않음)
 
 VOLATILE = {"seen", "t", "exp", "used", "util", "procs", "recent", "total", "users", "likes", "n", "last"}   # 시각·GPU·사용 횟수(시험 중에도 바뀜)
@@ -80,8 +83,9 @@ def same(name, method, path, who="demo", headers=None, body=None, note="", expec
         hd["Cookie"] = (hd.get("Cookie", "") + "; " if hd.get("Cookie") else "") + "agsid=" + DEMO_TOK
     if body is not None and not isinstance(body, bytes):
         body = json.dumps(body).encode(); hd.setdefault("Content-Type", "application/json")
+    hd_new = dict(hd, **{"X-Local-Owner": LOCAL_TOK}) if who == "local" and LOCAL_TOK else hd   # 새 포털(PORTAL_LOCAL_OWNER=token)은 헤더가 있어야 로컬 주인
     a = view(*req(A.old, method, path, host, hd, body))
-    b = view(*req(A.new, method, path, host, hd, body))
+    b = view(*req(A.new, method, path, host, hd_new, body))
     ok = a == b and (expect is None or a["status"] == expect)
     diff = "" if ok else describe(a, b, expect)
     RESULTS.append({"name": name, "req": f"{method} {path}", "who": who, "status": f"{a['status']}/{b['status']}", "ok": ok, "diff": diff, "note": note})
@@ -246,6 +250,23 @@ for th in ("classic-light", "v2-dark", "v2-light", "trendy-dark"):
 same("주인 테마 저장(계정 없음 → 쿠키만)", "POST", "/api/account/theme", "local", body={"theme": "v2-dark"})
 same("주인 계정 API 거절", "POST", "/api/account/name", "local", body={"name": "x"})
 same("주인 PIN 거절", "POST", "/api/pin", "local", body={"pin": "1", "new": "1234"})
+
+print("\n## 로컬 주인 토큰(새 포털만 — 의도한 차이: 예전 portal.py 는 127.0.0.1 쿠키 없음 = 주인)")
+
+
+def new_only(name, method, path, headers, expect):
+    st, _, _ = req(A.new, method, path, "127.0.0.1", headers)
+    ok = st == expect
+    RESULTS.append({"name": name, "req": f"{method} {path}", "who": "local", "status": f"-/{st}", "ok": ok, "diff": "" if ok else f"기대 {expect}", "note": "의도한 차이"})
+    print(("  OK  " if ok else "  !!  ") + f"{name:38} {method} {path[:60]:60} local -/{st}")
+
+
+new_only("헤더 없는 로컬 /api/me = 401", "GET", "/api/me", {}, 401)
+new_only("헤더 없는 로컬 /api/admin = 401", "GET", "/api/admin", {}, 401)
+new_only("틀린 토큰 로컬 /api/me = 401", "GET", "/api/me", {"X-Local-Owner": "wrong-token-xxxxxxxxxxxxxxxx"}, 401)
+new_only("헤더 없는 로컬 / → 로그인으로", "GET", "/", {"Accept": "text/html"}, 302)
+if LOCAL_TOK:
+    new_only("토큰 맞는 로컬 /api/me = 200", "GET", "/api/me", {"X-Local-Owner": LOCAL_TOK}, 200)
 
 print("\n## 프록시 /t/<도구>/ (GET 만)")
 same("/t/kordoc-local → 302", "GET", "/t/kordoc-local")
