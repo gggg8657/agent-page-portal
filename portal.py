@@ -18,7 +18,8 @@ os.makedirs(DATA, exist_ok=True)
 TOOLS_FILE = os.path.join(ROOT, "tools.json")
 GUIDE_DIR = os.path.join(ROOT, "guide")  # 사용 설명서 (/guide)
 THEME_DIR = os.path.join(ROOT, "theme")  # 화면 테마 (/theme) — theme/THEME_GUIDE.md
-THEMES = {f"{a}-{b}" for a in ("classic", "trendy") for b in ("light", "dark", "auto")}  # classic-light = 예전 그대로(CSS 안 붙임)
+THEMES = {f"{a}-{b}" for a in ("classic", "trendy", "v2") for b in ("light", "dark", "auto")}  # classic-light = 예전 그대로(CSS 안 붙임)
+V2_DIR = os.path.join(ROOT, "v2")  # v2 테마 포털 화면 배치(홈·로그인·계정) — 같은 JS, 다른 마크업. v2_page()
 
 
 # 서버 주인 → 도구에 X-Agent-User: owner (예전 기록 전부 보임). 나머지는 계정 id 별 폴더.
@@ -439,10 +440,10 @@ def theme_files(pref, kind, d=""):
         return []
     f, light = ["tokens.css"], pref.endswith("-light")
     if kind == "tool":
-        f += (["base-trendy.css"] if pref.startswith("trendy") else []) + ([] if light else ["base-dark.css", "dark.js"]) + ["chrome.css"]
+        f += ({"trendy": ["base-trendy.css"], "v2": ["base-v2.css"]}.get(pref.split("-")[0], [])) + ([] if light else ["base-dark.css", "dark.js"]) + ["chrome.css"]
         f += [f"tools/{d}.css"] if os.path.isfile(os.path.join(THEME_DIR, "tools", f"{d}.css")) else []
     else:
-        f += ["guide.css"] if kind == "guide" else ["portal.css", "chrome.css"]
+        f += ["guide.css"] if kind == "guide" else ["portal-v2.css" if pref.startswith("v2") else "portal.css", "chrome.css"]
     return f
 
 
@@ -453,7 +454,19 @@ def theme_head(pref, kind, d=""):
     js = BOOT.replace("%KIND%", kind).replace("%DIR%", d).replace("%V%", v).replace("%PREF%", pref).replace("%TOOLCSS%", "true" if f"tools/{d}.css" in theme_files("trendy-dark", kind, d) else "false")
     if kind == "portal":  # 테마 고르기(위쪽 막대·계정 설정) — 모든 테마에서
         tags += f'<script src="/theme/picker.js?v={v}" defer></script>'
+        if pref.startswith("v2"):  # v2 포털 화면: Ctrl+K 명령 팔레트
+            tags += f'<script src="/theme/palette-v2.js?v={v}" defer></script>'
     return f"<script>{js}</script>{tags}"
+
+
+def v2_page(html, name):
+    """v2 테마일 때 포털 화면 배치를 바꾼다: 원래 파일의 <style>…첫 <script> 사이(스타일+마크업)를 v2/<name>.html 로.
+    스크립트(기능·API·id)는 원래 파일 것을 그대로 쓰므로 v2 마크업은 같은 id·폼 이름을 가져야 한다. 요청마다 읽음(고치면 새로고침만)"""
+    f = os.path.join(V2_DIR, f"{name}.html")
+    a, b = html.find("<style>"), html.find("<script>")
+    if not os.path.isfile(f) or a < 0 or b < a:
+        return html
+    return html[:a] + open(f, encoding="utf-8").read() + html[b:]
 
 
 def first_html(rest):
@@ -503,12 +516,15 @@ class H(BaseHTTPRequestHandler):
                 r = c.execute("SELECT theme FROM users WHERE id=?", (self.uid,)).fetchone()
                 t = r and r[0]
         if not t:
-            m = re.search(r"(?:^|;\s*)agtheme=([a-z-]+)", self.headers.get("Cookie") or "")
+            m = re.search(r"(?:^|;\s*)agtheme=([a-z0-9-]+)", self.headers.get("Cookie") or "")
             t = m and m[1]
         return t if t in THEMES else "classic-light"
 
-    def html_page(self, html, kind, d=""):
-        return signed(themed(html, theme_head(self.theme(), kind, d))).encode()
+    def html_page(self, html, kind, d="", v2=""):
+        t = self.theme()
+        if v2 and t.startswith("v2"):
+            html = v2_page(html, v2)
+        return signed(themed(html, theme_head(t, kind, d))).encode()
 
     @property
     def user(self):  # 계정 id (통계·좋아요·피드 키)
@@ -556,7 +572,7 @@ class H(BaseHTTPRequestHandler):
             ok = p == "/account" or self.is_owner or (p == "/approvals" and my_heads(c, self.uid))
         if not ok:
             self.send_response(302); self.send_header("Location", "/account"); self.send_header("Content-Length", "0"); self.end_headers(); return
-        self._send(self.html_page(ACCOUNT + self.help_html("portal"), "portal"), "text/html; charset=utf-8")
+        self._send(self.html_page(ACCOUNT + self.help_html("portal"), "portal", v2="account"), "text/html; charset=utf-8")
 
     def manage_get(self, p):
         with db() as c:
@@ -840,7 +856,7 @@ class H(BaseHTTPRequestHandler):
         p = self.path.split("?")[0]
 
         if p == "/login":
-            return self._send(self.html_page(LOGIN, "portal"), "text/html; charset=utf-8")
+            return self._send(self.html_page(LOGIN, "portal", v2="login"), "text/html; charset=utf-8")
         if p.startswith("/theme/"):  # 테마 CSS·글꼴 — 로그인 화면도 쓰므로 로그인 전에
             return self.theme_file(p)
         if p == "/api/depts":  # 가입 화면의 부서 목록(로그인 전)
@@ -888,7 +904,7 @@ class H(BaseHTTPRequestHandler):
             return self.guide_file(p)
         if p != "/":
             return self._send({"error": "not found"}, code=404)
-        self._send(self.html_page(HTML + self.help_html("portal"), "portal"), "text/html; charset=utf-8")
+        self._send(self.html_page(HTML + self.help_html("portal"), "portal", v2="home"), "text/html; charset=utf-8")
 
     def do_POST(self):
         self._setcookie = None  # keep-alive 로 같은 연결에서 앞 요청 값이 남지 않게

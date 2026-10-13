@@ -9,3 +9,31 @@ html[data-ag-theme$="dark"]:root{
   --frame-bar:#22252c;--dot:#454a55;--shadow:0 1px 2px rgba(0,0,0,.4),0 14px 32px -16px rgba(0,0,0,.7);--mesh-base:#14141c;--tile:rgba(255,255,255,.06);color-scheme:dark
 }
 html[data-ag-theme$="dark"]:root,html[data-ag-theme$="dark"] :is([class^="c-"],[class*=" c-"]){--ct:color-mix(in srgb,var(--c) 18%,var(--surface));--ck:color-mix(in srgb,var(--c) 62%,#fff)}
+
+/* v2 — 따뜻한 무채색, 작은 둥글기, 그라디언트 바탕 대신 평면 + 1px 선, 고밀도. 분류 색(.c-*)·화면 그림(.frame)은 그대로. 인쇄는 원래 모양 */
+@media screen{
+  html[data-ag-theme="v2-light"]:root{--bg:#f7f6f3;--surface:#fff;--surface-2:#f1f0ec;--ink:#1c1b18;--ink-2:#474540;--ink-3:#67645d;--line:#e6e3dd;--line-2:#d3cfc7;--frame-bar:#efeee9;--dot:#cfcbc3;--shadow:0 1px 2px rgba(28,27,24,.05);--mesh-base:#f1f0ec;--tile:#fff}
+  html[data-ag-theme="v2-dark"]:root{--bg:#141412;--surface:#1b1b19;--surface-2:#22221f;--ink:#ecebe7;--ink-2:#bcb9b2;--ink-3:#9d9991;--line:#2b2a27;--line-2:#3b3a36;--frame-bar:#22221f;--dot:#45443f;--shadow:0 1px 2px rgba(0,0,0,.35);--mesh-base:#1b1b19;--tile:#22221f}
+  html[data-ag-theme^="v2"] body{font-family:var(--ag-sans,inherit);font-size:15px;line-height:1.6;font-feature-settings:"ss06","tnum"}
+  html[data-ag-theme^="v2"] .gbar{background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(8px)}
+  html[data-ag-theme^="v2"] .gbar .in{padding:8px 24px;font-size:13px}
+  html[data-ag-theme^="v2"] :is(.gbar summary,.gbar .pdf){border-radius:6px;padding:4px 10px}
+  html[data-ag-theme^="v2"] .gbar .pdf{background:#0e7268;color:#fff}
+  html[data-ag-theme^="v2"] .gbar .menu{border-radius:10px;box-shadow:var(--ag-shadow-3,0 12px 32px -8px rgba(0,0,0,.2))}
+  html[data-ag-theme^="v2"] .gbar .menu span{border-radius:4px}
+  html[data-ag-theme^="v2"] .cv{min-height:0;padding:40px 40px 28px;border-radius:10px;background:var(--surface);gap:0}
+  html[data-ag-theme^="v2"] .cv-org{border-radius:4px;padding:3px 8px;font-size:12px;background:var(--surface-2);border:none}
+  html[data-ag-theme^="v2"] .cv h1{letter-spacing:-.035em;margin-top:56px}
+  html[data-ag-theme^="v2"] .cv-cats a{border-radius:8px;background:var(--surface-2);border:1px solid var(--line);backdrop-filter:none}
+  html[data-ag-theme^="v2"] :is(.chip,.chip i,.th-n){border-radius:4px}
+  html[data-ag-theme^="v2"] .tg{border-radius:8px}
+  html[data-ag-theme^="v2"] .th{border-radius:10px;padding:24px 28px 26px;background:linear-gradient(90deg,var(--c) 0 3px,transparent 3px),var(--surface)}
+  html[data-ag-theme^="v2"] .strip>div:not(.arr){border-radius:8px}
+  html[data-ag-theme^="v2"] .strip .arr{border-radius:6px;width:32px;height:32px;font-size:15px}
+  html[data-ag-theme^="v2"] .frame{border-radius:6px}
+  html[data-ag-theme^="v2"] pre{border-radius:6px}
+  html[data-ag-theme^="v2"] .step{border-radius:8px;padding:16px 16px 18px}
+  html[data-ag-theme^="v2"] .step .n{width:32px;height:32px;border-radius:6px;font-size:14px}
+  html[data-ag-theme^="v2"] .lic li{border-radius:6px}
+  html[data-ag-theme^="v2"] .colophon{border-radius:10px;background:var(--surface)}
+}

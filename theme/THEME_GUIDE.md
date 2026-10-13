@@ -1,6 +1,6 @@
 # 화면 테마 — 도구별 손질 안내 (tools/<도구>.css)
 
-포털에서 고르는 테마는 4가지(+ 각 계열의 "컴퓨터 설정 따라 자동")입니다.
+포털에서 고르는 테마는 6가지(3계열 × 밝게·어둡게, + 각 계열의 "컴퓨터 설정 따라 자동")입니다.
 
 | 값 | 뜻 | 도구 화면에 붙는 것 |
 |---|---|---|
@@ -8,9 +8,11 @@
 | `classic-dark` | 같은 배치, 어두운 색 | tokens · base-dark · dark.js · chrome · tools/<도구>.css |
 | `trendy-light` | Pretendard, 큰 둥글기, 부드러운 그림자, 인디고 강조 | tokens · base-trendy · chrome · tools/<도구>.css |
 | `trendy-dark` | 위 + 어두운 색 | tokens · base-trendy · base-dark · dark.js · chrome · tools/<도구>.css |
+| `v2-light` | 따뜻한 무채색·청록 강조·1px 선·작은 둥글기·촘촘 (아래 'v2' 절) | tokens · base-v2 · chrome · tools/<도구>.css |
+| `v2-dark` | 위 + 어두운 색 | tokens · base-v2 · base-dark · dark.js · chrome · tools/<도구>.css |
 
-`classic-auto` / `trendy-auto` 는 브라우저의 `prefers-color-scheme` 에 따라 위 light/dark 중 하나로 바뀝니다.
-결과는 늘 `<html data-ag-theme="classic-light|classic-dark|trendy-light|trendy-dark">` 하나로 정해지고
+`classic-auto` / `trendy-auto` / `v2-auto` 는 브라우저의 `prefers-color-scheme` 에 따라 위 light/dark 중 하나로 바뀝니다.
+결과는 늘 `<html data-ag-theme="classic-light|classic-dark|trendy-light|trendy-dark|v2-light|v2-dark">` 하나로 정해지고
 (고른 값 그대로는 `data-ag-pref`), CSS 는 이 속성만 보면 됩니다.
 
 ## 어떻게 붙나
@@ -114,3 +116,60 @@ html[data-ag-theme$="dark"] .diff ins{background:var(--ag-ok-soft);color:var(--a
 - [ ] 다른 탭에서 테마를 바꾸면 이 화면도 바뀜(새로고침 없이)
 
 캡처는 쿠키 `agtheme=<테마>` 만 넣고 127.0.0.1 로 열면 됩니다(로그인 없이 서버 주인).
+
+## v2 (2026-10-13 추가) — 도구 css 에 v2 규칙 쓰기
+
+방향(자세히는 scratchpad `v2/V2_BRIEF.md`): **작업대** — Linear·Vercel(2026 사이드바 개편) 류의 "도구 틀은 물러서고 내용이 앞으로".
+따뜻한 무채색(돌 회색) 바탕 + **청록 강조 하나**, **1px 선**으로 구분(그림자는 떠 있는 창만), **작은 둥글기 4~8px**, 촘촘한 줄(30~32px), 숫자는 고정폭(tnum).
+trendy(큰 둥글기·부드러운 그림자·인디고 그라디언트·알약 칩)와 반대로 간다 — 그라디언트·광택·떠오르는 카드·알약 모양 쓰지 않기.
+
+**선택자**
+- v2 둘 다 `html[data-ag-theme^="v2"] …` · 하나만 `html[data-ag-theme="v2-dark"] …`
+- 어둡게 공통 규칙(`$="dark"`)은 v2-dark 에도 걸린다 — 기존 어둡게 손질은 그대로 v2-dark 에 쓰임(dark.js 가 v2 표면 색조로 바꿈)
+- trendy 규칙(`^="trendy"`)은 v2 에 안 걸린다. trendy 에서 한 모양 손질(둥글기·그림자)을 v2 에도 원하면 **v2 용으로 따로**(값은 작게·선으로)
+
+**토큰** — 이름은 같고 값만 v2 (tokens.css):
+
+| 토큰 | v2-light | v2-dark |
+|---|---|---|
+| bg / surface / surface-2 / surface-3 | #f7f6f3 / #fff / #f1f0ec / #e8e6e1 | #141412 / #1b1b19 / #22221f / #2b2b28 |
+| `--ag-side` (v2 만: 왼쪽 메뉴 바탕) | #f1f0ec | #111110 |
+| ink / ink-2 / ink-3 | #1c1b18 / #474540 / #67645d (5.5:1) | #ecebe7 / #bcb9b2 / #9d9991 (6.5:1) |
+| line / line-2 | #e6e3dd / #d3cfc7 | #2b2a27 / #3b3a36 |
+| accent (흰 글씨) / accent-ink (글자) / accent-soft | #0e7268 (5.8:1) / #0b665d / #e2f1ee | #0d7a70 (5.2:1) / #5ccfbf / #173430 |
+| ok / warn / bad | #146c36 / #94580a / #c42b2b | #5ccf88 / #efb453 / #f27a72 |
+| shadow-1 / -2 / -3 | 없음 / 아주 옅게 / 1px 테두리+떠 있는 그림자(창·팝업만) | 같은 구조 |
+| `--ag-grad` | = accent (단색) | = accent |
+
+모양 토큰도 v2 에서만 값이 바뀐다: `--ag-r-xs 4 / sm 5 / md 6 / lg 8 / xl 10`, 글자 `--ag-fs-xs 11 … --ag-fs-md 13 … --ag-fs-2xl 22`, `--ag-row 32px`.
+그러니 **둥글기·글자 크기는 `var(--ag-r-*)`·`var(--ag-fs-*)` 로 쓰면 trendy·v2 가 알아서 다르게** 나온다. 숫자를 직접 쓰지 말 것.
+
+**base-v2.css 가 이미 하는 것**: 공통 변수(`--bg --fg --ink --muted --line --card --panel --chip --soft --acc --acc2` …)→토큰, 글꼴 Pretendard+tnum,
+버튼·입력 작은 둥글기·초점 링(강조 테두리+3px 링), 주 버튼(`.primary .btn-primary .go .main`) 단색(그라디언트·광택 제거), 파일 선택 버튼,
+`.card .panel .box fieldset` 둥글기 8px·그림자 없음, `.tabs` 선택 탭 굵게, `th` 작은 회색, 줄 마우스 올림, 대화상자 10px+떠 있는 그림자, 얇은 스크롤바.
+
+**도구 css 에서 v2 로 손볼 것(흔한 경우)**
+- 도구 고유 이름의 카드·타일·툴바(`.pane .sec .result .tile` …): `border:1px solid var(--ag-line);border-radius:var(--ag-r-lg);box-shadow:none;background:var(--ag-surface)`
+- 알약 칩·세그먼트: 둥글기 `var(--ag-r-sm)`, 고른 것 `background:var(--ag-accent-soft);color:var(--ag-accent-ink)`
+- 도구가 자체로 넣은 그라디언트·큰 그림자 → 단색·선으로
+- 강조색이 도구 고유 파랑/보라로 하드코딩된 곳 → `var(--ag-accent)` / 글자는 `var(--ag-accent-ink)`
+- 목록·표 줄 높이: 가능하면 `min-height:var(--ag-row)` 정도로 촘촘하게(배치는 바꾸지 않기)
+
+```css
+/* 예: mail-local */
+html[data-ag-theme^="v2"] .out{border:1px solid var(--ag-line);border-radius:var(--ag-r-lg);box-shadow:none}
+html[data-ag-theme^="v2"] .chips button{border-radius:var(--ag-r-sm)}
+html[data-ag-theme^="v2"] .chips button.on{background:var(--ag-accent-soft);color:var(--ag-accent-ink);border-color:color-mix(in srgb,var(--ag-accent) 40%,transparent)}
+```
+
+**v2 체크리스트**
+- [ ] 테스트 포털(:8701)에서 `agtheme=v2-light` · `v2-dark` 쿠키로 첫 화면 + 결과 화면, 1440 · 390
+- [ ] classic·trendy 4가지가 **고치기 전과 픽셀 같음**(공통 파일을 안 건드렸으면 도구 파일 v2 규칙은 다른 테마에 안 걸림 — 선택자가 모두 `^="v2"` 인지 확인)
+- [ ] 그라디언트·광택·큰 그림자·알약 모양이 v2 에 남지 않음(trendy 규칙이 안 걸리니 도구 자체 것만 보면 됨)
+- [ ] 강조는 청록 하나 — 도구 고유 파랑·보라 강조가 남았으면 토큰으로(분류색·차트 계열색은 그대로)
+- [ ] 대비 AA, 그림·캔버스·문서 '종이'(`data-ag-paper`) 색 그대로, 콘솔 오류 0
+
+**포털 화면(참고)**: v2 일 때 포털은 `portal.css` 대신 `portal-v2.css` 를 붙이고, 홈·로그인·계정 화면의 마크업을 `v2/home.html` · `v2/login.html` · `v2/account.html` 로 바꿔 내보낸다
+(portal.py `v2_page`: 원래 파일의 style 부터 첫 script 앞까지를 교체, **스크립트는 원래 것 그대로** — id·폼 이름을 바꾸면 안 됨, selftest 가 확인).
+v2 ↔ 다른 계열로 바꾸면 포털 화면은 저장 뒤 새로고침(boot.js `agTheme.set`, 다른 탭은 storage 이벤트로). 도구·설명서 화면은 새로고침 없이 바로 바뀜.
+v2 포털 화면에는 `palette-v2.js`(Ctrl+K 명령 팔레트)가 붙는다. 설명서(/guide) v2 손질은 `guide.css` 끝 v2 절(화면 전용, 인쇄는 원래 모양).

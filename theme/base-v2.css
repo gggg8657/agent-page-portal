@@ -1,0 +1,69 @@
+/* v2(밝게·어둡게) — 어느 도구 화면이든 공통 요소만 다듬는다. trendy 의 base-trendy.css 자리. 색은 tokens.css, 어둡게는 base-dark.css + dark.js 가 같이 붙음.
+   v2 원칙: 따뜻한 무채색 + 청록 강조 하나, 1px 선, 작은 둥글기(4~8px), 그림자 거의 없음(떠 있는 창만), 촘촘하게(입력·버튼 30~32px), 초점은 2px 테두리+옅은 링.
+   배치·크기는 그대로(둥글기·글꼴·선·초점·색만). 선택자 앞머리 html:root[data-ag-theme^="v2"] — 도구의 :root{…}·:root[data-theme=dark]{…} 보다 우선 */
+
+/* 1) 도구들이 공통으로 쓰는 변수 이름 → 토큰 */
+html:root[data-ag-theme^="v2"]{
+  --bg:var(--ag-bg);--fg:var(--ag-ink);--ink:var(--ag-ink);--muted:var(--ag-ink-3);--mut:var(--ag-ink-3);--sub:var(--ag-ink-3);
+  --line:var(--ag-line-2);--card:var(--ag-surface);--panel:var(--ag-surface);--surface:var(--ag-surface);
+  --chip:var(--ag-surface-2);--soft:var(--ag-surface-2);--acc:var(--ag-accent);--acc2:var(--ag-accent-soft);
+}
+html[data-ag-theme^="v2"] body{font-family:var(--ag-sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;font-feature-settings:"ss06","tnum"}
+:where(html[data-ag-theme^="v2"]) :where(input,select,textarea,button){font-family:var(--ag-sans)}  /* 특이도 0: 도구가 정한 글꼴(고정폭 textarea 등)이 이김 */
+html[data-ag-theme^="v2"] :is(code,kbd,samp,pre.code,.mono){font-family:var(--ag-mono)}
+html[data-ag-theme^="v2"] ::selection{background:color-mix(in srgb,var(--ag-accent) 28%,transparent)}
+
+/* 2) 제목 — 작게 굵게, 좁은 자간 (크기는 도구 것) */
+html[data-ag-theme^="v2"] h1{letter-spacing:-.022em;font-weight:700}
+html[data-ag-theme^="v2"] :is(h2,h3){letter-spacing:-.012em;font-weight:650}
+html[data-ag-theme^="v2"] h1 small{letter-spacing:0;font-weight:450;color:var(--ag-ink-3)}
+
+/* 3) 버튼 — 작은 둥글기, 마우스 올림은 바탕 한 단계, 주 버튼은 청록 단색(그라디언트·광택 없음) */
+html[data-ag-theme^="v2"] :is(button,.btn,input[type=button],input[type=submit],input[type=reset]){
+  border-radius:var(--ag-r-md);transition:background-color var(--ag-dur) var(--ag-ease),border-color var(--ag-dur) var(--ag-ease),box-shadow var(--ag-dur) var(--ag-ease),filter var(--ag-dur)}
+html[data-ag-theme^="v2"] :is(button,.btn):not(:disabled):hover{filter:brightness(.96)}
+html[data-ag-theme="v2-dark"] :is(button,.btn):not(:disabled):hover{filter:brightness(1.15)}
+html[data-ag-theme^="v2"] :is(button.primary,.btn.primary,.btn-primary,button.go,button.main,button[type=submit].primary){
+  background-image:none;border-color:transparent;box-shadow:none;font-weight:600}
+html[data-ag-theme^="v2"] :is(button,.btn):disabled{opacity:.5;cursor:default}
+
+/* 4) 입력칸 — 1px 선, 초점은 강조색 테두리 + 3px 옅은 링 */
+html[data-ag-theme^="v2"] :is(input:not([type=checkbox],[type=radio],[type=range],[type=color],[type=file]),select,textarea){
+  border-radius:var(--ag-r-md);transition:border-color var(--ag-dur) var(--ag-ease),box-shadow var(--ag-dur) var(--ag-ease)}
+html[data-ag-theme^="v2"] :is(input:not([type=checkbox],[type=radio],[type=range],[type=color],[type=file]),select,textarea):focus{
+  outline:none;border-color:var(--ag-accent);box-shadow:0 0 0 3px var(--ag-ring)}
+html[data-ag-theme^="v2"] :is(input,select,textarea)::placeholder{color:var(--ag-ink-3);opacity:1}
+html[data-ag-theme^="v2"] :is(input[type=checkbox],input[type=radio],input[type=range],progress){accent-color:var(--ag-accent)}
+html[data-ag-theme^="v2"] input[type=file]{border-radius:var(--ag-r-md)}
+html[data-ag-theme^="v2"] input[type=file]::file-selector-button{
+  font:inherit;font-weight:500;font-size:.92em;margin-right:10px;padding:4px 10px;border-radius:var(--ag-r-sm);border:1px solid var(--ag-line-2);
+  background:var(--ag-surface);color:var(--ag-ink);cursor:pointer;transition:background-color var(--ag-dur)}
+html[data-ag-theme^="v2"] input[type=file]::file-selector-button:hover{background:var(--ag-hover)}
+html[data-ag-theme^="v2"] :is(button,a,summary,[tabindex]):focus-visible{outline:2px solid var(--ag-accent);outline-offset:1px}
+
+/* 5) 카드·패널 — 작은 둥글기, 그림자 대신 1px 선 (배경·테두리 색은 도구 변수 그대로) */
+html[data-ag-theme^="v2"] :is(.card,.panel,.box,fieldset){border-radius:var(--ag-r-lg);box-shadow:none}
+
+/* 6) 탭 — 선택된 탭은 글자 진하게 + 강조색 밑줄 2px */
+html[data-ag-theme^="v2"] .tabs button{border-radius:var(--ag-r-sm) var(--ag-r-sm) 0 0}
+html[data-ag-theme^="v2"] .tabs button:not(.on):hover{color:var(--ag-ink);background:var(--ag-hover)}
+html[data-ag-theme^="v2"] :is(.tabs .on,[role=tab][aria-selected=true]){font-weight:600;color:var(--ag-ink)}
+
+/* 7) 표 — 머리줄 작은 회색 글씨 + 1px 선, 줄 마우스 올림, 숫자 고정폭 */
+html[data-ag-theme^="v2"] th{color:var(--ag-ink-3);font-weight:600;font-size:.92em}
+html[data-ag-theme^="v2"] :is(td,th){font-variant-numeric:tabular-nums}
+html[data-ag-theme^="v2"] tbody tr:hover>td{background-color:var(--ag-hover)}
+
+/* 8) 코드·미리보기 */
+html[data-ag-theme^="v2"] :is(pre,textarea){border-radius:var(--ag-r-md)}
+html[data-ag-theme^="v2"] :not(pre)>code{border-radius:var(--ag-r-xs)}
+
+/* 9) 대화상자·접기 — 떠 있는 창만 그림자 */
+html[data-ag-theme^="v2"] dialog{border-radius:var(--ag-r-xl);box-shadow:var(--ag-shadow-3)}
+html[data-ag-theme^="v2"] dialog::backdrop{background:var(--ag-backdrop)}
+html[data-ag-theme^="v2"] summary{border-radius:var(--ag-r-sm)}
+html[data-ag-theme^="v2"] summary:hover{color:var(--ag-ink)}
+
+/* 10) 링크·스크롤바 */
+html[data-ag-theme^="v2"] a{text-underline-offset:.18em;text-decoration-thickness:from-font}
+html[data-ag-theme^="v2"],html[data-ag-theme^="v2"] *{scrollbar-width:thin;scrollbar-color:var(--ag-scroll) transparent}

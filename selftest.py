@@ -67,6 +67,17 @@ _h = portal.themed('<!doctype html><meta charset="utf-8"><title>x</title>', "<!-
 assert _h.startswith('<!doctype html><meta charset="utf-8"><!--T-->'), _h
 assert portal.themed("<p>x</p>", "<!--T-->") == "<!--T--><p>x</p>"
 assert "pref = \"trendy-auto\"" in portal.theme_head("trendy-auto", "tool", "mail-local")
+# v2: 도구는 base-v2, 포털은 portal-v2(+명령 팔레트), 포털 화면 배치는 v2/<화면>.html 로 바꾸되 원래 스크립트·id 는 그대로
+assert portal.theme_files("v2-dark", "tool", "no-such-tool") == ["tokens.css", "base-v2.css", "base-dark.css", "dark.js", "chrome.css"]
+assert portal.theme_files("v2-light", "portal") == ["tokens.css", "portal-v2.css", "chrome.css"] and portal.theme_files("v2-auto", "guide") == ["tokens.css", "guide.css"]
+assert "palette-v2.js" in portal.theme_head("v2-auto", "portal") and "palette-v2.js" not in portal.theme_head("trendy-light", "portal")
+assert {"v2-light", "v2-dark", "v2-auto"} <= portal.THEMES
+for _n, _f, _ids in (("home", portal.HTML, ("user", "menu", "counts", "rank", "q", "chips", "home", "cols", "newcols", "gpus", "all", "count", "grid", "feed", "newPost", "addTool", "dlg", "dlgT", "dlgB")),
+                     ("account", portal.ACCOUNT, ("nav", "main")), ("login", portal.LOGIN, ("in", "up", "dept", "foot"))):
+    _v = portal.v2_page(_f, _n)
+    assert _v != _f and _v[_v.find("<script>"):] == _f[_f.find("<script>"):], _n  # 스크립트는 원래 것 그대로
+    for _i in _ids:
+        assert f'id="{_i}"' in _v, (_n, _i)
 
 # 도구 첫 화면 판정: 딥링크(쿼리)도 테마·사용법을 붙이고, 펫 iframe(?pet=1)과 하위 경로는 안 붙임
 assert portal.first_html("") and portal.first_html("index.html") and portal.first_html("?job=abc") and portal.first_html("?id=3&token=x")

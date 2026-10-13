@@ -32,3 +32,25 @@ html[data-ag-theme^="trendy"] #agNote>div::before{content:"";width:8px;height:8p
 html[data-ag-theme^="trendy"] #agNote>div.bad::before{background:var(--ag-bad);box-shadow:0 0 0 3px color-mix(in srgb,var(--ag-bad) 30%,transparent)}
 html[data-ag-theme^="trendy"] #agNote a{color:var(--ag-accent-ink)!important}
 html[data-ag-theme^="trendy"] #agNote button.y{background:var(--ag-grad);color:#fff;border-radius:8px}
+
+/* v2: 작은 둥근 사각 버튼, 1px 선 창, 알림은 얇은 선 카드 + 강조 점 */
+html[data-ag-theme^="v2"] #agHelpBtn{font-family:var(--ag-sans);font-weight:650;font-size:14px;width:30px;height:30px;line-height:28px;border-radius:var(--ag-r-md);background:var(--ag-surface);color:var(--ag-ink-2);border:1px solid var(--ag-line-2);box-shadow:none}
+html[data-ag-theme^="v2"] #agHelpBtn:hover{background:var(--ag-hover);color:var(--ag-ink)}
+html[data-ag-theme^="v2"] #agHelp{font-family:var(--ag-sans);font-size:13.5px;border-radius:var(--ag-r-xl);border:1px solid var(--ag-line);background:var(--ag-surface);color:var(--ag-ink);box-shadow:var(--ag-shadow-3)}
+html[data-ag-theme^="v2"] #agHelp::backdrop{background:var(--ag-backdrop)}
+html[data-ag-theme^="v2"] #agHelp .agh-h{padding:12px 16px;font-size:14px;letter-spacing:-.01em;border-color:var(--ag-line)}
+html[data-ag-theme^="v2"] #agHelp .agh-h button{color:var(--ag-ink-3)}
+html[data-ag-theme^="v2"] #agHelp .agh-b{padding:6px 18px 12px}
+html[data-ag-theme^="v2"] #agHelp .agh-b h3{font-size:11.5px;font-weight:600;color:var(--ag-ink-3)}
+html[data-ag-theme^="v2"] #agHelp .agh-b code{border-radius:4px;background:var(--ag-surface-2);color:var(--ag-ink);font-family:var(--ag-mono)}
+html[data-ag-theme^="v2"] #agHelp .agh-f{padding:10px 16px;border-color:var(--ag-line);color:var(--ag-ink-3)}
+html[data-ag-theme^="v2"] #agHelp .agh-f a{color:var(--ag-accent-ink)}
+html[data-ag-theme^="v2"] #agHelp .agh-f button{background:var(--ag-accent);color:#fff;border-radius:var(--ag-r-md);padding:6px 16px}
+html[data-ag-theme^="v2"] #agHelp .agh-f input{accent-color:var(--ag-accent)}
+html[data-ag-theme^="v2"] #agNote{font-family:var(--ag-sans)}
+html[data-ag-theme^="v2"] #agNote>div{border-radius:var(--ag-r-lg);border:1px solid var(--ag-line-2);border-left:1px solid var(--ag-line-2);background:var(--ag-surface);color:var(--ag-ink);box-shadow:var(--ag-shadow-3);padding:10px 12px}
+html[data-ag-theme^="v2"] #agNote>div::before{content:"";width:7px;height:7px;border-radius:50%;flex:none;background:var(--ag-accent)}
+html[data-ag-theme^="v2"] #agNote>div.bad::before{background:var(--ag-bad)}
+html[data-ag-theme^="v2"] #agNote a{color:var(--ag-accent-ink)!important}
+html[data-ag-theme^="v2"] #agNote button{color:var(--ag-ink-3)}
+html[data-ag-theme^="v2"] #agNote button.y{background:var(--ag-accent);color:#fff;border-radius:var(--ag-r-sm)}

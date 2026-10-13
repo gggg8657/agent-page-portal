@@ -66,3 +66,31 @@ html[data-ag-theme="trendy-dark"]{
   --ag-grad:linear-gradient(135deg,#6a5ff5 0%,#5f5ae6 45%,#3a6fe0 100%);
 }
 html[data-ag-theme="classic-dark"],html[data-ag-theme="classic-light"]{--ag-grad:var(--ag-accent)}
+
+/* v2 · 밝게 — "작업대": 따뜻한 무채색(돌 회색) + 청록 강조 하나, 1px 선, 작은 둥글기, 그림자는 떠 있는 창에만. 원칙: scratchpad/v2/V2_BRIEF.md · THEME_GUIDE.md 'v2' 절 */
+html[data-ag-theme^="v2"]{
+  --ag-r-xs:4px;--ag-r-sm:5px;--ag-r-md:6px;--ag-r-lg:8px;--ag-r-xl:10px;  /* v2 는 둥글기만 작게(다른 테마 값은 위 공통 그대로) */
+  --ag-fs-xs:11px;--ag-fs-sm:12px;--ag-fs-md:13px;--ag-fs-lg:15px;--ag-fs-xl:18px;--ag-fs-2xl:22px;
+  --ag-row:32px;--ag-side-w:232px;--ag-dur:.12s;
+}
+html[data-ag-theme="v2-light"]{
+  color-scheme:light;
+  --ag-bg:#f7f6f3;--ag-surface:#fff;--ag-surface-2:#f1f0ec;--ag-surface-3:#e8e6e1;--ag-side:#f1f0ec;
+  --ag-ink:#1c1b18;--ag-ink-2:#474540;--ag-ink-3:#67645d;--ag-line:#e6e3dd;--ag-line-2:#d3cfc7;
+  --ag-brand:#1c1b18;--ag-brand-ink:#1c1b18;--ag-accent:#0e7268;--ag-accent-ink:#0b665d;--ag-accent-soft:#e2f1ee;--ag-ring:rgba(14,114,104,.30);
+  --ag-ok:#146c36;--ag-ok-soft:#e4f4e8;--ag-warn:#94580a;--ag-warn-soft:#fbf0dc;--ag-bad:#c42b2b;--ag-bad-soft:#fbe7e5;
+  --ag-shadow-1:none;--ag-shadow-2:0 1px 2px rgba(28,27,24,.05);
+  --ag-shadow-3:0 0 0 1px rgba(28,27,24,.07),0 12px 32px -8px rgba(28,27,24,.20);
+  --ag-backdrop:rgba(28,27,24,.36);--ag-hover:#f3f2ee;--ag-scroll:#cdc9c1;--ag-glow:none;--ag-grad:var(--ag-accent);
+}
+/* v2 · 어둡게 — 따뜻한 거의 검정, 표면은 명도 단계만 */
+html[data-ag-theme="v2-dark"]{
+  color-scheme:dark;
+  --ag-bg:#141412;--ag-surface:#1b1b19;--ag-surface-2:#22221f;--ag-surface-3:#2b2b28;--ag-side:#111110;
+  --ag-ink:#ecebe7;--ag-ink-2:#bcb9b2;--ag-ink-3:#9d9991;--ag-line:#2b2a27;--ag-line-2:#3b3a36;
+  --ag-brand:#ecebe7;--ag-brand-ink:#ecebe7;--ag-accent:#0d7a70;--ag-accent-ink:#5ccfbf;--ag-accent-soft:#173430;--ag-ring:rgba(92,207,191,.36);
+  --ag-ok:#5ccf88;--ag-ok-soft:#15301f;--ag-warn:#efb453;--ag-warn-soft:#372a14;--ag-bad:#f27a72;--ag-bad-soft:#3b1b19;
+  --ag-shadow-1:none;--ag-shadow-2:0 1px 2px rgba(0,0,0,.35);
+  --ag-shadow-3:0 0 0 1px rgba(255,255,255,.06),0 16px 40px -10px rgba(0,0,0,.75);
+  --ag-backdrop:rgba(0,0,0,.6);--ag-hover:#232320;--ag-scroll:#3d3c38;--ag-glow:none;--ag-grad:var(--ag-accent);
+}
