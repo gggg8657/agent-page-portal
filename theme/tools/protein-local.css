@@ -57,6 +57,7 @@ html[data-ag-theme$="dark"] #viewer{border-color:var(--ag-line-2)}
 
 /* ── v2(작업대): 남색 머리띠 → 표면색 머리줄 + 1px 선, 종류·결과 탭은 세그먼트, 카드·타일은 선으로 ── */
 html[data-ag-theme^="v2"] header{background:var(--ag-surface);color:var(--ag-ink);border-bottom:1px solid var(--ag-line);padding:10px 20px}
+@media (min-width:601px){html[data-ag-theme^="v2"] header{padding-right:56px}}  /* 오른쪽 위 ? 사용법 버튼 자리(도구 ui.html 과 같은 값) */
 html[data-ag-theme^="v2"] header h1{font-size:16px}
 html[data-ag-theme^="v2"] header :is(.sub,.gpu){color:var(--ag-ink-3);opacity:1}
 html[data-ag-theme^="v2"] .card{border-color:var(--ag-line);border-radius:var(--ag-r-lg);padding:12px 14px;margin-bottom:12px}

@@ -84,4 +84,3 @@ html[data-ag-theme^="v2"]:not(.pet) pre.api{border-radius:var(--ag-r-md);backgro
 html[data-ag-theme^="v2"]:not(.pet) dialog{border:1px solid var(--ag-line);border-radius:var(--ag-r-xl);box-shadow:var(--ag-shadow-3);background:var(--ag-surface);color:var(--ag-ink)}
 html[data-ag-theme^="v2"]:not(.pet) dialog .hd{background:var(--ag-surface);border-bottom-color:var(--ag-line);min-height:44px}
 html[data-ag-theme^="v2"]:not(.pet) dialog img{border-radius:var(--ag-r-md)}
-html[data-ag-theme^="v2"]:not(.pet) :is(.seg,header>.btn){flex:none;white-space:nowrap}  /* 휴대폰 폭: 보기 단추 글자가 한 자씩 세로로 꺾이던 것 → 머리줄 안에서 옆으로 밀기(머리줄 자체 overflow-x:auto) */
