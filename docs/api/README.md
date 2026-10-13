@@ -151,9 +151,52 @@ const g  = await (await fetch('/t/saju-local/api/graph?dept=' + encodeURICompone
 | Avatar | `avatar-local` | 토이 | 캐릭터 그림 → 말하기·움직이기 영상 | [avatar-local.md](avatar-local.md) |
 | 파동이 | `padong-local` | 토이 | 캐릭터 3D·2D, 말로 시키면 움직임 | [padong-local.md](padong-local.md) |
 
-## 6. 새 화면을 만들 때 부탁
+## 6. 화면이 하는 일 — 새 화면이 다시 만들어야 하는 것
 
-- 기능·계산은 API 쪽에 있습니다. 화면에서 결과를 고쳐 보이게 하지 말고(예: 숫자 반올림 바꾸기), 필요한 건 API 변경으로 요청해 주세요.
+AI 추론·시뮬레이션·문서 생성·저장·권한 확인은 **모두 서버(API)** 가 합니다. 그렇다고 지금 화면이 보여 주기만 하는 것은 아닙니다. 아래는 **브라우저에서 실제로 계산하는 것**이라, 새 화면을 만들 때는 같은 라이브러리로 옮기거나 다시 만들어야 합니다. 도구별 자세한 내용은 각 문서의 "화면만의 것" 절에 있습니다.
+
+### 모든 도구 공통
+- 파일 → base64 변환 후 업로드, 진행 상황 스트림(`fetch` + `response.body.getReader()`) 읽기, 경과 시간·진행률 표시
+- 입력값·옵션 기억(브라우저 `localStorage`), 결과 탭·비교 화면·복사·다운로드 파일 이름
+- 포털이 첫 화면 HTML 에 끼워 넣는 것: `?` 사용법, 테마, 파동이 펫, 둘러보기(새 화면을 따로 띄우면 붙지 않음)
+
+### 브라우저에서 돌아가는 연산
+
+| 종류 | 도구 | 화면이 하는 일 | 쓰는 것 |
+|---|---|---|---|
+| 3D 렌더링(WebGL) | padong-local | 캐릭터 3D·2D 동작·표정·옷·카메라·그림자, 초당 30프레임 제한. API 는 동작 **이름**만 줌 | Three.js (`static/`) |
+| | agent-cad-local | GLB 3D 모델 보기, SVG 도면 확대·이동, 보고서 표시 | Three.js + GLTFLoader + OrbitControls (`static/`) |
+| | protein-local | PDB 분자 구조 그리기, pLDDT 색(≥90/70/50), 사슬 색 | 3Dmol.js (`static/`) |
+| 그래프 배치 | diagram-local · sketch-local | Mermaid 코드 → 도형 위치·선 경로 계산·그리기, 그리기 실패 시 `api/repair` 자동 1회(sketch) | Mermaid (`static/mermaid.min.js`) |
+| 캔버스 | diagram · sketch | SVG → 2배 PNG 변환, SVG 파일 생성 | Canvas 2D |
+| | sketch-local | 올리기 전 사진을 1600px 로 줄이기 | Canvas 2D |
+| | protein-local | PAE 히트맵 그리기·PNG 저장, pLDDT 그래프 | Canvas 2D |
+| 수치 계산 | digitizer-local | 축 보정 행렬, 픽셀↔데이터 좌표 변환, 표시 자릿수, 점 찍기·편집·제외 영역·스포이트·돋보기 (서버도 같은 규칙으로 따로 계산 — 내보내기는 서버 값) | 자체 JS |
+| | shield-local | 단위 환산(Sv/h→μSv/h, cm→mm 등)·서식, 두께·거리 그래프, PDF 저장(브라우저 인쇄) | 자체 JS |
+| | battery-local | 그래프 축·눈금·SVG 그래프와 SVG 저장, 비교 시나리오·예시 프로파일 만들기, 작업 상태 폴링(4초·1.5초) | 자체 SVG |
+| 글 비교 | coach-local | 바뀐 문단 찾기, 멈춤 감지(약 1초) 후 검사, 결과 캐시, 밑줄·카드, 적용·무시·되돌리기, 제안 위치 다시 맞추기, .txt·.md 내보내기 | 자체 JS |
+| | mail-local | 문장별 적용·되돌리기(이 선택은 서버에 저장 안 됨), 보내는 사람 정보 | 자체 JS |
+| | meeting-local | 윤문 전후 어절 단위 비교 표시 | 자체 JS |
+| 편집 | chart-local | 열 이름·단위·형식 편집, 표 뒤집기 → `api/suggest` 다시 부름 | 자체 JS |
+| | weekly-local | 질문 카드 진행, 항목 끌어 옮기기·들여쓰기, 압축 뒤 되살리기, 미확인 약어 수 | 자체 JS |
+| 음성 | padong-local | TTS 음량 분석으로 입 모양 맞추기, TTS 서버가 없을 때 브라우저 음성 합성으로 대신 | Web Audio, Web Speech |
+| 파일 생성 | padong-local | .glb 3D 파일·PNG·표정 시트 만들기 | Three.js 내보내기 |
+
+### 거의 보여 주기만 하는 도구
+humanize-kr · kordoc · notebook · writer · meeting · tts · image · review · sql · saju · award · avatar — 서버가 준 결과를 그리기만 합니다. 새 화면으로 바꾸기 가장 쉽습니다.
+
+### 아직 쓰지 않는 것
+Web Worker(무거운 계산 분리), WebGPU, WebAssembly, 브라우저 안 AI 모델(WebLLM 등), Service Worker(오프라인). 지금 화면의 계산은 모두 화면과 같은 흐름에서 돌아갑니다.
+
+### 옮길 때 주의
+- **notebook**: 노트 본문의 `<!-- audio: … -->` 주석을 지우지 말고 그대로 저장해야 팟캐스트 음성 연결이 유지됩니다(지금 화면은 편집 후 저장하면 끊기는 버그가 있음).
+- **digitizer**: `api/export` 에 화면이 만든 표를 보내도 서버는 쓰지 않고 다시 계산합니다.
+- **스트리밍 응답**: 도중 오류도 HTTP 200 으로 오고, 오류는 스트림 안 `error` 이벤트로만 옵니다.
+- **다크 테마 내보내기**: diagram·chart·protein 은 화면이 어두워도 내보내는 파일은 흰 종이로 만듭니다(화면 로직). 새 화면도 같은 원칙을 지켜 주세요.
+
+## 7. 새 화면을 만들 때 부탁
+
+- 서버가 계산한 결과(숫자·문장·판정)를 화면에서 고쳐 보이게 하지 말고(예: 반올림 바꾸기), 필요한 건 API 변경으로 요청해 주세요. 위 6절의 화면 계산은 지금 화면과 같은 규칙으로 옮겨 주세요.
 - 문서와 실제 응답이 다르면 응답이 맞습니다 — 알려 주시면 문서를 고칩니다.
 - 사진·그림·그래프·문서 미리보기의 색은 내용이므로 바꾸지 마세요.
 - 저작자 표기와 "내부 시험용 · 배포용 아님" 표기는 남겨 주세요.
