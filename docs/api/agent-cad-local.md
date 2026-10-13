@@ -17,8 +17,8 @@
 | POST | `api/projects/<pid>/hide` | 목록에서 숨김/해제 | 아니오 | 예 |
 | GET | `api/kb` | 원자력 설비 지식 DB 원형 목록 | 아니오 | **공유** |
 | GET | `api/kb/<id>` | 원형 하나 전체 | 아니오 | 공유 |
-| POST | `api/kb/<id>` | 원형 수정 또는 새 원형 추가 | 아니오 | 공유 |
-| POST | `api/kb/<id>/reset` | 사용자 수정 지우고 원본으로 | 아니오 | 공유 |
+| POST | `api/kb/<id>` | 원형 수정 또는 새 원형 추가 | 아니오 | 공유 (기본 원형은 관리자만, 추가 원형은 만든 사람·관리자만) |
+| POST | `api/kb/<id>/reset` | 사용자 수정 지우고 원본으로 | 아니오 | 공유 (권한은 위와 같음) |
 | GET | `api/gt` | 벤치마크용 GT 목록 | 아니오 | 공유(읽기 전용) |
 | GET | `api/gt/<id>.png\|.jpg\|.json` | GT 이미지 / GT JSON | 아니오 | 공유 |
 | GET | `api/library` | ICT 심볼 라이브러리·규칙 | 아니오 | 공유(읽기 전용) |
@@ -29,13 +29,15 @@
 - **id 형식**: 프로젝트 `YYYYMMDD-xxxxxx`(16진 6자리), 리비전 `R00`·`R01`…, 업로드 `xxxxxxxxxxxx`(16진 12자리).
 - **작업 종류(`task`)**: `part3d`(3D 부품) · `part2d`(2D 판재) · `ict`(ICT 배치도·개황도) · `dxf_edit`(기존 DXF 수정) · `dxf_analyze`(DXF 분석) · `assembly`(원자로·원자력 설비, 지식 DB) · `auto`(키워드/LLM/VLM 이 고름).
 - **리비전 상태(`status`)**: `pass`(위반 없음) · `warnings` · `errors`(규칙 오류 있음) · `failed`(빌드 실패).
-- 오류 응답: 일반 JSON 엔드포인트는 `{"error": "..."}`. GET 은 파일 없음 `404`, 그 밖 `500`. POST 는 예외를 모두 `400` 으로 돌려준다.
+- **사용자**: 포털이 붙이는 `X-Agent-User`(관리자·서버 안 접속 = `owner`) 기준. 프로젝트·업로드는 사용자별 폴더 `WORKSPACE/u/<id>/` 안에서만 찾으므로 남의 프로젝트는 id 를 알아도 열기·파일 받기·숨기기 모두 `404`. 관리자(`owner`)는 예전 `WORKSPACE/projects` 를 쓴다.
+- 오류 응답: 일반 JSON 엔드포인트는 `{"error": "..."}`. 입력 오류(JSON 아님·객체 아님·잘못된 필드·값) `400`, 권한 없음 `403`, 없음 `404`, 그 밖 `500 {"error": "서버 내부 오류"}`(상세는 서버 로그에만).
+- 응답·SSE 이벤트·리비전 `error`·`report.md` 의 오류 문구에서 절대 경로는 `…/<파일명>`, URL·내부 호스트 주소는 `(내부 주소)` 로 가려진다.
 
 ## 엔드포인트
 
 ### GET api/models
 - 응답: `{"models": ["gemma4:31b", "qwen3:8b"], "default": "gemma4:31b", "api": "ollama"}`
-- LLM 서버 연결 실패여도 200: `{"models": [<기본 모델>], "default": "...", "error": "..."}`
+- LLM 서버 연결 실패여도 200: `{"models": [<기본 모델>], "default": "...", "error": "LLM 서버 응답 없음 (URLError)"}` (서버 주소는 넣지 않음)
 
 ### POST api/upload
 - 요청: **본문 = 파일 바이트 그대로**(multipart 아님). 헤더 `X-Filename: <encodeURIComponent(파일명)>` (없으면 `upload.dxf`).
@@ -55,7 +57,7 @@
   | `upload` | 문자열 또는 null | 아니오 | `api/upload` 가 준 id. DXF(`dxf_edit`·`dxf_analyze`·`ict` 기존 도면) 또는 참조 이미지 |
   | `model` | 문자열 | 아니오 | LLM 모델(비우면 서버 기본) |
   | `gt` | 문자열 | 아니오 | GT id — 결과를 그 GT 로 자동 채점(벤치마크용). 첨부 이미지가 GT 원본과 같으면 자동으로 잡힘 |
-  | `owner` | 문자열 | 아니오 | 브라우저별 임의 id. 목록 필터(`api/projects?owner=`)에만 쓰임 |
+  | `owner` | 문자열 | 아니오 | 브라우저별 임의 id. 같은 계정 안 목록 필터(`api/projects?owner=`)에만 쓰임 — 권한 아님 |
 - 응답: `200 text/event-stream; charset=utf-8`, `Connection: close`. 각 이벤트는 `data: <JSON>\n\n` (이벤트 이름 없음).
 
   | 이벤트 모양 | 뜻 |
@@ -81,6 +83,7 @@
 
 ### GET api/projects
 - 쿼리: `owner=<브라우저 id>`(주면 그 owner 것만), `all`(값 무관, 있으면 owner 필터 무시). 둘 다 없으면 숨기지 않은 전부. 최대 80개, id 역순(최신 먼저).
+- 언제나 **요청한 사용자(`X-Agent-User`) 폴더의 프로젝트만** 나온다. `all` 도 같은 계정의 다른 브라우저 것까지일 뿐 남의 것은 안 보인다.
 - 응답:
   ```json
   [{"id": "20261013-1a2b3c", "task": "assembly", "title": "풀형 소듐냉각고속로 (SFR)", "created": "2026-10-13T05:00:56", "revs": 1, "status": "pass", "rev": "R00"}]
@@ -110,7 +113,8 @@
   | `answer` | `dxf_analyze` 의 답변 글 |
   | `error` | 빌드 실패 사유(`status: failed`) |
   | `visual`, `gt`, `vlm_summary`, `ops_log`, `diff`, `ir_diff` | 있을 때만: VLM 시각 비교, GT 채점, 이미지 판독 요약, DXF 수정 연산·변경, 직전 리비전 대비 IR 변경 |
-- 오류: `404 {"error": "없음"}`, id 형식 틀리면 `404`(경로 불일치).
+- 오류: `404 {"error": "없음"}`(남의 프로젝트도 404), id 형식 틀리면 `404`(경로 불일치).
+- 리비전 `error` 문구는 경로·내부 주소를 가린 것.
 
 ### GET api/projects/<pid>/<rev 또는 input>/<파일명>
 - 파일명은 URL 인코딩(한글 파일명 많음). `/` 포함·`.` 으로 시작하는 이름은 404.
@@ -129,8 +133,9 @@
 
 ### GET api/kb/<id>
 - `<id>`: 영소문자·숫자·`_`.
-- 응답: 원형 전체(원본 + 사용자 수정 병합). 주요 필드 `id, name, kind, summary, aliases, principles, checks, design, source, sizing, components, connections, loops, coolant`, 수정된 경우 `history: [{ts, author, note, fields}]`. 세부 구조는 `kb/archetypes/*.json` 참고.
-- 오류: 없는 id 는 `500 {"error": "KeyError: ..."}` (404 아님).
+- 응답: 원형 전체(원본 + 사용자 수정 병합). 주요 필드 `id, name, kind, summary, aliases, principles, checks, design, source, sizing, components, connections, loops, coolant`, 수정된 경우 `history: [{ts, author, note, fields}]`(`author` 는 화면 "수정자" 칸에 적은 글). 세부 구조는 `kb/archetypes/*.json` 참고.
+  - `can_edit`: 요청한 사용자가 이 원형을 고치거나 되돌릴 수 있는지. 관리자(`owner`) 응답에만 `created_by`(추가한 사용자 id)와 이력의 `user` 가 들어간다.
+- 오류: 없는 id 는 `404 {"error": "없음"}`.
 
 ### POST api/kb/<id>
 - 요청: `{"patch": {<필드>: <새 값>}, "author": "수정자", "note": "수정 사유"}`
@@ -138,11 +143,13 @@
   - `principles` 는 비어 있지 않은 문자열 배열이어야 함.
   - 없는 id 로 보내면 **새 원형 추가**(`patch.name` 필수, id 는 영소문자·숫자·`_` 2~40자). 화면의 "복제해 새 원형" 이 이렇게 한다.
   - `design` 은 지금 화면이 바뀐 값만 `{"<키>": {"v": <숫자>}}` 로 보냄(병합 규칙은 `cad/kb.py` `_merge` — 코드 확인 필요).
-- 응답: 병합된 원형 전체(GET 과 같은 모양). 다음 `api/run` 부터 바로 반영.
-- 오류: `400 {"error": "ValueError: 수정할 수 없는 필드: [...]"}` 등.
+- 권한: 기본 원형(코드에 든 `kb/archetypes/*.json`)을 고치는 보정은 **관리자(`owner`)만**. 사용자가 새로 추가한 원형은 **만든 사람(추가할 때의 `X-Agent-User`, `created_by` 로 저장) 또는 관리자만**. 만든 사람 기록이 없는 예전 추가 원형은 관리자만. 새 id 로 추가는 로그인한 누구나.
+- 응답: 병합된 원형 전체(GET 과 같은 모양). 다음 `api/run` 부터 바로 반영. 이력에 `author`(입력 글)와 함께 서버가 `user`(X-Agent-User)를 기록.
+- 오류: `400 {"error": "ValueError: 수정할 수 없는 필드: [...]"}`·`"patch 는 객체여야 함"`·`"principles 는 비어 있지 않은 문자열 목록"`·`"JSON 본문이 아님"` 등, `403 {"error": "이 원형은 기본 지식이라 관리자만 고칠 수 있습니다"}` / `"이 원형은 만든 사람이나 관리자만 고칠 수 있습니다"`, 내부 오류 `500 {"error": "서버 내부 오류"}`.
 
 ### POST api/kb/<id>/reset
 - 요청: 본문 `{}` (`author` 는 받지만 현재 쓰지 않음)
+- 권한: `POST api/kb/<id>` 와 같음(기본 원형은 관리자만, 추가 원형은 만든 사람·관리자만). 거절은 `403 {"error": "…관리자만 되돌릴 수 있습니다"}`, 없는 id 는 `404`.
 - 응답: 원본 원형 전체. 사용자가 새로 추가한 원형이면 `{"ok": true}`(그 원형은 사라짐).
 - 메모: 수정본 파일은 지우지 않고 `.bak` 으로 이름을 바꿔 둔다.
 
@@ -200,9 +207,9 @@ await sse('api/run', { prompt: '하나는 출입구 쪽으로 옮겨', project: 
 
 ## 화면만의 것 / 주의
 - **3D 보기**: 화면이 `static/three.min.js` + `GLTFLoader.js` + `OrbitControls.js` 로 `previews.model3d` GLB 를 띄운다. SVG 미리보기 확대·이동, 보고서(`report.md`) 마크다운 표시, 요약 한 줄(치수·질량·케이블 길이 등 `metrics` 조합)도 화면 몫.
-- **owner(브라우저 id)**: 화면이 `localStorage.cadOwner` 에 임의 UUID 를 만들어 `api/run` 의 `owner` 와 `api/projects?owner=` 에 쓴다. 이것은 목록 필터일 뿐 권한이 아니다. 실제 사용자 분리는 포털의 `X-Agent-User` 헤더 → 작업 폴더 `WORKSPACE/u/<id>/projects`, `uploads` 로 이루어진다.
-- **지식 DB 는 모든 사용자 공유**: 수정본은 사용자 폴더가 아니라 `WORKSPACE/kb_overrides/` 한 곳에 저장되고, 로그인한 누구나 `api/kb/<id>` POST 로 고칠 수 있다(owner 전용 검사 없음). 수정 이력(`history`)에 `author` 를 남긴다.
-- 숨김(`hide`)도 owner 검사가 없다(같은 사용자 폴더 안에서는 누구 프로젝트든 숨길 수 있음).
+- **owner(브라우저 id)**: 화면이 `localStorage.cadOwner` 에 임의 UUID 를 만들어 `api/run` 의 `owner` 와 `api/projects?owner=` 에 쓴다. 같은 계정 안의 목록 필터일 뿐 권한이 아니다. 사용자 분리는 포털의 `X-Agent-User` 헤더 → 작업 폴더 `WORKSPACE/u/<id>/projects`, `uploads` 로 이루어지며, 남의 프로젝트·업로드는 id 로도 열거나 숨길 수 없다(404).
+- **지식 DB 는 모든 사용자 공유**: 수정본은 `WORKSPACE/kb_overrides/` 한 곳에 저장되어 누구나 읽고 쓰기 결과가 다음 요청에 반영된다. 고치기·되돌리기는 위 권한 규칙(기본 원형 = 관리자만, 추가 원형 = 만든 사람·관리자만). 화면은 `can_edit` 이 거짓이면 "저장"·"원본으로" 를 끄고 "복제해 새 원형" 을 권한다.
+- 숨김(`hide`)은 자기 사용자 폴더의 프로젝트에만 된다(같은 계정의 다른 브라우저 것은 숨길 수 있음).
 - GT·라이브러리·규칙 파일은 도구 폴더(읽기 전용) 공유.
 - 산출물은 모두 **DRAFT — 엔지니어 검토 전 제작·시공 불가** 표기(`report.md`).
 - 화면 HTML 의 `%MODEL%` 자리에 기본 모델이 박혀 나간다(별도로는 `api/models` 의 `default`).
