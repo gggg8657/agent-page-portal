@@ -31,3 +31,31 @@ html[data-ag-theme$="dark"] .pchg td{border-bottom-color:var(--ag-line)!importan
 html[data-ag-theme$="dark"] del{background:var(--ag-bad-soft)!important;color:var(--ag-bad)}
 html[data-ag-theme$="dark"] ins{background:var(--ag-ok-soft)!important;color:var(--ag-ok)}
 html[data-ag-theme^="trendy"] #notes>div[style]{color:var(--ag-ink-3)!important}
+
+/* v2 (작업대): 세 칸은 1px 선으로만 나누고 양옆 칸은 한 단계 흐린 바탕(--ag-side), 고른 노트북·인용 번호만 청록, 질문 말풍선·인용 카드·윤문 상자는 옅은 면 + 선, 배지 작은 사각 */
+html[data-ag-theme^="v2"] :is(header,#ask){background:var(--ag-surface);border-color:var(--ag-line)}
+html[data-ag-theme^="v2"] :is(aside,.right){background:var(--ag-side);border-color:var(--ag-line)}
+html[data-ag-theme^="v2"] h2{color:var(--ag-ink-3);font-size:11.5px;font-weight:650;letter-spacing:.04em}
+html[data-ag-theme^="v2"] :is(select,input:not([type=checkbox],[type=file]),textarea,button:not(.primary)){border-color:var(--ag-line-2)}
+html[data-ag-theme^="v2"] :is(select,input:not([type=checkbox],[type=file]),textarea){background:var(--ag-surface);color:var(--ag-ink)}
+html[data-ag-theme^="v2"] button:not(.primary){background:var(--ag-surface);color:var(--ag-ink)}
+html[data-ag-theme^="v2"] .card{border-color:var(--ag-line);border-radius:var(--ag-r-lg);background:var(--ag-surface);padding:8px 10px}
+html[data-ag-theme^="v2"] .note:hover{border-color:var(--ag-line-2);background:var(--ag-hover)}
+html[data-ag-theme^="v2"] .note .d{color:var(--ag-ink-3)}
+html[data-ag-theme^="v2"] .src .sum{color:var(--ag-ink-3)}
+html[data-ag-theme^="v2"] .nb{border-radius:var(--ag-r-md);color:var(--ag-ink-2)}
+html[data-ag-theme^="v2"] .nb:hover{background:var(--ag-hover);color:var(--ag-ink)}
+html[data-ag-theme^="v2"] .nb.on{background:var(--ag-accent-soft);color:var(--ag-accent-ink)}
+html[data-ag-theme^="v2"] .msg.q{background:var(--ag-surface);border:1px solid var(--ag-line);border-radius:var(--ag-r-lg);padding:7px 12px}
+html[data-ag-theme^="v2"] .msg.a .cite{background:var(--ag-accent-soft);color:var(--ag-accent-ink);border-radius:var(--ag-r-xs);font-weight:600}
+html[data-ag-theme^="v2"] .citecard{background:var(--ag-surface-2);border:1px solid var(--ag-line);border-left:2px solid var(--ag-accent);border-radius:var(--ag-r-md);color:var(--ag-ink-2)}
+html[data-ag-theme^="v2"] #stages{color:var(--ag-ink-3)}
+html[data-ag-theme^="v2"] pre{background:var(--ag-surface-2);border:1px solid var(--ag-line);border-radius:var(--ag-r-lg);color:var(--ag-ink)}
+html[data-ag-theme^="v2"] .badge{border-radius:var(--ag-r-xs);background:var(--ag-surface-3);color:var(--ag-ink-2)}
+html[data-ag-theme^="v2"] .badge.on{background:var(--ag-ok-soft);color:var(--ag-ok)}
+html[data-ag-theme^="v2"] div:has(>.pgo){background:var(--ag-surface)!important;border-color:var(--ag-line)!important;border-radius:var(--ag-r-lg)!important;color:var(--ag-ink)!important}
+html[data-ag-theme^="v2"] div:has(>.pgo) .pmsg{color:var(--ag-ink-3)!important}
+html[data-ag-theme^="v2"] .pchg summary{color:var(--ag-ink-2)!important}
+html[data-ag-theme^="v2"] .pchg td{border-bottom-color:var(--ag-line)!important}
+html[data-ag-theme^="v2"] #notes>div[style]{color:var(--ag-ink-3)!important}
+html[data-ag-theme^="v2"] dialog{border-color:var(--ag-line);background:var(--ag-surface);color:var(--ag-ink)}

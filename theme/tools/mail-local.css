@@ -29,3 +29,38 @@ html[data-ag-theme^="trendy"] .hist li:hover{background:var(--ag-hover)}
 html[data-ag-theme^="trendy"] .hist li .t:hover{color:var(--ag-accent-ink)}
 html[data-ag-theme^="trendy"] .tag,html[data-ag-theme^="trendy"] .priv{border-radius:var(--ag-r-full)}
 html[data-ag-theme^="trendy"] .toast{border-radius:var(--ag-r-md);box-shadow:var(--ag-shadow-3)}
+
+/* v2 (작업대): 패널·결과·비교 상자는 표면 + 1px 선, 목적 칩·판 전환은 작은 사각(알약 대신) — 고른 것만 청록 옅은 면, 제목 후보는 선 두른 줄, 이력은 선으로 나눈 촘촘한 목록 */
+html[data-ag-theme^="v2"] .tabs{border-bottom-color:var(--ag-line)}
+html[data-ag-theme^="v2"] .tabs button{color:var(--ag-ink-3)}
+html[data-ag-theme^="v2"] .tabs button.on{color:var(--ag-ink);border-bottom-color:var(--ag-accent)}
+html[data-ag-theme^="v2"] .panel{background:var(--ag-surface);border-color:var(--ag-line);border-radius:var(--ag-r-lg)}
+html[data-ag-theme^="v2"] .panel h3{font-size:13.5px}
+html[data-ag-theme^="v2"] label{color:var(--ag-ink-2)}
+html[data-ag-theme^="v2"] :is(input:not([type=radio],[type=checkbox]),select,textarea){background:var(--ag-surface);border-color:var(--ag-line-2);color:var(--ag-ink)}
+html[data-ag-theme^="v2"] button:not(.primary,.tabs button){background:var(--ag-surface);border-color:var(--ag-line-2);color:var(--ag-ink)}
+html[data-ag-theme^="v2"] button:not(.primary,.tabs button):hover{border-color:var(--ag-ink-3)}
+html[data-ag-theme^="v2"] .priv{background:var(--ag-ok-soft);border-color:transparent;color:var(--ag-ok);border-radius:var(--ag-r-xs);padding:1px 8px}
+html[data-ag-theme^="v2"] .seg button{border-radius:var(--ag-r-sm);padding:3px 10px}
+html[data-ag-theme^="v2"] .seg button.on{background:var(--ag-accent-soft);border-color:var(--ag-accent);color:var(--ag-accent-ink)}
+html[data-ag-theme^="v2"] .subj label{border-color:var(--ag-line);border-radius:var(--ag-r-md);color:var(--ag-ink)}
+html[data-ag-theme^="v2"] .subj label:hover{background:var(--ag-hover)}
+html[data-ag-theme^="v2"] .subj label.on{background:var(--ag-accent-soft);border-color:var(--ag-accent)}
+html[data-ag-theme^="v2"] .notes div{background:var(--ag-warn-soft);color:var(--ag-warn);border-radius:var(--ag-r-md)}
+html[data-ag-theme^="v2"] .check{border-color:var(--ag-line);border-radius:var(--ag-r-lg);background:var(--ag-surface-2)}
+html[data-ag-theme^="v2"] .check li b{border-radius:var(--ag-r-xs)}
+html[data-ag-theme^="v2"] .na b,html[data-ag-theme^="v2"] .tag{background:var(--ag-surface-3);color:var(--ag-ink-2);border-radius:var(--ag-r-xs)}
+html[data-ag-theme^="v2"] .vtabs button{border-radius:var(--ag-r-sm)}
+html[data-ag-theme^="v2"] .vtabs button.on{background:var(--ag-accent-soft);border-color:var(--ag-accent);color:var(--ag-accent-ink);font-weight:600}
+html[data-ag-theme^="v2"] .refine{border-top-color:var(--ag-line)}
+html[data-ag-theme^="v2"] .diffview{background:var(--ag-surface);border-color:var(--ag-line);border-radius:var(--ag-r-lg)}
+html[data-ag-theme^="v2"] pre.stream{background:var(--ag-surface-2);border:1px solid var(--ag-line);border-radius:var(--ag-r-lg);color:var(--ag-ink-2)}
+html[data-ag-theme^="v2"] .u:hover{outline-color:var(--ag-line-2)}
+html[data-ag-theme^="v2"] .u.rev{background:var(--ag-surface-3)}
+html[data-ag-theme^="v2"] :is(.hint,.legend,#status,.empty){color:var(--ag-ink-3)}
+html[data-ag-theme^="v2"] .hist li{border-bottom-color:var(--ag-line);padding:6px 8px}
+html[data-ag-theme^="v2"] .hist li:hover{background:var(--ag-hover)}
+html[data-ag-theme^="v2"] .hist li .t:hover{color:var(--ag-accent-ink)}
+html[data-ag-theme^="v2"] .toast{background:var(--ag-ink);color:var(--ag-surface);border-radius:var(--ag-r-md);box-shadow:var(--ag-shadow-3)}
+html[data-ag-theme="v2-dark"] :is(.seg button.on,.vtabs button.on,.subj label.on){border-color:var(--ag-accent-ink)}
+html[data-ag-theme="v2-dark"] .toast{background:var(--ag-surface-3);color:var(--ag-ink)}
