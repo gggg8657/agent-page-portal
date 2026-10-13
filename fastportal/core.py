@@ -1,7 +1,7 @@
 """포털 도메인 로직 — portal.py 와 같은 DB·규칙(계정·세션·부서·역할·요청·도구·테마·랜딩·서명).
 웹 서버와 무관한 함수만 둔다(app.py 가 FastAPI 로 감쌈). portal.py 와 같은 _data/portal.db 를 동시에 써도 되게
 같은 표·열·마이그레이션 규칙을 따르고, 더한 것은 login_fails 표 하나(예전 코드는 모르는 표 — 무시됨)."""
-import base64, contextlib, datetime, hashlib, hmac, json, os, re, secrets, sqlite3, subprocess, sys, threading, time, urllib.parse
+import base64, contextlib, datetime, hashlib, hmac, json, os, re, secrets, sqlite3, subprocess, sys, threading, time, urllib.parse, urllib.request
 
 ROOT = os.environ.get("PORTAL_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # agent-page-portal (시험: 임시 사본)
 BASE = os.path.dirname(ROOT)                                          # 도구들을 나란히 clone 한 곳
@@ -485,6 +485,8 @@ def _owner_of(pid):
             return None
         if "ollama" in cwd:
             return "LLM (Ollama)"
+        if "vllm" in cwd:   # ~/.local/vllm/start.sh 가 cd 해서 띄움
+            return "LLM (vLLM)"
         if cwd.startswith(BASE + os.sep):
             d = cwd[len(BASE) + 1:].split(os.sep)[0]
             if d in nm:
@@ -509,6 +511,33 @@ def _local_gpu_procs():
         except (OSError, ValueError, IndexError):
             pass
     return sorted(out)
+
+
+def llm_queue():
+    """vLLM /metrics(Prometheus 글자)에서 LLM 대기열: 처리 중·대기 요청 수, KV 캐시 사용률(0~1). LLM_API=openai 일 때만, 못 읽으면 ok=False."""
+    if os.environ.get("LLM_API", "ollama") != "openai":
+        return None
+    base = (os.environ.get("LLM_BASE_URL") or "").rstrip("/")
+    base = base[:-3] if base.endswith("/v1") else base
+    out = {"ok": False, "model": os.environ.get("LLM_MODEL") or None, "running": None, "waiting": None, "kv_cache": None}
+    try:
+        with urllib.request.urlopen(base + "/metrics", timeout=2) as r:
+            text = r.read().decode(errors="replace")
+    except (OSError, ValueError):
+        return out
+    m = {}
+    for line in text.splitlines():
+        if line.startswith("vllm:") and "{" in line:
+            k, _, v = line.partition("{")
+            try:
+                m[k] = m.get(k, 0.0) + float(v.rsplit("}", 1)[1])   # 엔진(데이터 병렬)이 여럿이면 더함
+            except (ValueError, IndexError):
+                pass
+    kv = m.get("vllm:kv_cache_usage_perc", m.get("vllm:gpu_cache_usage_perc"))   # 이름은 perc 지만 값은 0~1
+    if "vllm:num_requests_running" in m:
+        out.update(ok=True, running=int(m["vllm:num_requests_running"]), waiting=int(m.get("vllm:num_requests_waiting", 0)),
+                   kv_cache=round(kv, 4) if kv is not None else None)
+    return out
 
 
 def gpu_status():
@@ -543,7 +572,7 @@ def gpu_status():
                     g["procs"].append({"tool": name, "mem": mem})
         for g in gpus:
             g.pop("uuid"); g["procs"].sort(key=lambda p: -p["mem"])
-        _GPU.update(t=time.time(), v={"gpus": gpus, "t": int(time.time())})
+        _GPU.update(t=time.time(), v={"gpus": gpus, "t": int(time.time()), "llm": llm_queue()})
         return _GPU["v"]
 
 

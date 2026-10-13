@@ -626,7 +626,7 @@
   "/api/gpu": {
    "get": {
     "operationId": "portalGpu",
-    "summary": "GPU 사용 현황(5초 캐시)",
+    "summary": "GPU 사용 현황 + LLM 대기열(5초 캐시)",
     "responses": {
      "200": {
       "description": "GPU",
@@ -19394,6 +19394,52 @@
      },
      "t": {
       "type": "number"
+     },
+     "llm": {
+      "type": [
+       "object",
+       "null"
+      ],
+      "description": "LLM 대기열(vLLM `/metrics` 에서, GPU 와 같이 5초 캐시). 포털이 LLM_API=openai(vLLM)일 때만 객체, 아니면(Ollama) null. vLLM 이 응답하지 않으면 ok=false 이고 나머지는 null.",
+      "required": [
+       "ok"
+      ],
+      "properties": {
+       "ok": {
+        "type": "boolean",
+        "description": "vLLM 지표를 읽었는지"
+       },
+       "model": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "모델 이름(예: gemma4:31b)"
+       },
+       "running": {
+        "type": [
+         "integer",
+         "null"
+        ],
+        "description": "지금 생성 중인 요청 수"
+       },
+       "waiting": {
+        "type": [
+         "integer",
+         "null"
+        ],
+        "description": "대기열에서 기다리는 요청 수(0 보다 크면 붐빔)"
+       },
+       "kv_cache": {
+        "type": [
+         "number",
+         "null"
+        ],
+        "minimum": 0,
+        "maximum": 1,
+        "description": "KV 캐시 사용률 0~1(1 에 가까우면 새 요청이 대기)"
+       }
+      }
      }
     }
    },

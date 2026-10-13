@@ -100,7 +100,7 @@ const g  = await (await fetch('/t/saju-local/api/graph?dept=' + encodeURICompone
 - **오래 걸리는 작업**: 포털은 요청 하나를 최대 1시간 기다립니다. 영상·구조 예측처럼 긴 작업은 도구마다 ① 스트리밍(SSE·줄 단위 JSON)으로 진행 상황을 흘리거나 ② 작업 id 를 받고 상태를 폴링합니다 — 도구별 문서의 "오래 걸림" 표시를 보세요.
   1분 넘게 걸린 POST 는 포털이 기록해서 `GET /api/events` 로 알려 줍니다(파동이 펫의 "작업 끝났어요!" 알림).
 - **스트리밍**: 포털은 응답을 버퍼링하지 않고 그대로 흘립니다. `fetch` 의 `response.body.getReader()` 나 `EventSource` 로 읽으면 됩니다.
-- **GPU·LLM**: 이 표시가 있는 호출은 서버 GPU 를 씁니다. 여러 사람이 동시에 부르면 줄을 서니, 버튼 연타를 막아 주세요. `GET /api/gpu` 로 GPU 여유를 볼 수 있습니다.
+- **GPU·LLM**: 이 표시가 있는 호출은 서버 GPU 를 씁니다. 여러 사람이 동시에 부르면 줄을 서니, 버튼 연타를 막아 주세요. `GET /api/gpu` 로 GPU 여유와 LLM 대기열(`llm.waiting`)을 볼 수 있습니다.
 
 ## 5. 포털 자체 API
 
@@ -108,7 +108,7 @@ const g  = await (await fetch('/t/saju-local/api/graph?dept=' + encodeURICompone
 |---|---|---|
 | `GET /api/tools` | 도구 목록 `{"tools": [{dir, name, title, desc, group, tags, port, up(켜짐), url, usage}], "rank", "posts", "me"}` | 로그인 |
 | `GET /api/me` | 지금 사용자 | 로그인 |
-| `GET /api/gpu` | GPU 사용 현황 | 로그인 |
+| `GET /api/gpu` | GPU 사용 현황 `{"gpus": [{index, name, used, total, util, procs: [{tool, mem}]}], "t", "llm"}` — `llm` = LLM 대기열 `{ok, model, running(생성 중), waiting(대기), kv_cache(0~1)}`(vLLM 일 때만, 아니면 null · 5초 캐시) | 로그인 |
 | `GET /api/events?since=<id>` | 1분 넘게 걸려 끝난 내 작업 `{"events": [{id, dir, name, ok, sec, t}], "last"}` | 로그인 |
 | `GET /api/guide/<도구>` | 도구 사용법(마크다운 텍스트) | 로그인 |
 | `GET /api/readme/<도구>` | 도구 README(마크다운 텍스트) | 로그인 |
