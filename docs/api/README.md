@@ -74,9 +74,10 @@ const g  = await (await fetch('/t/saju-local/api/graph?dept=' + encodeURICompone
 ### 배포할 때
 다 만든 화면은 포털과 같은 출처에서 나가야 합니다. 방법은 관리자(gggg8657)와 정합니다.
 - 도구의 `ui.html` 을 새 화면으로 바꾸기(도구 저장소에 PR), 또는
-- 포털에 새 화면용 정적 경로를 추가하기.
+- 포털에 새 화면용 정적 경로를 추가하기 — React 화면(agent-page-web)은 이 방식: 포털(fastportal)에 `WEB_DIST=<빌드 폴더>`(·`WEB_PREFIX`, 기본 `/app`)를 주면 `/app/…` 에서 같은 출처로 내보냄(SPA 폴백, `assets/` 긴 캐시, `index.html` no-cache). 화면은 로그인 없이 열리고 API 는 401 → 화면이 `/app/login` 으로. 빌드는 `vite build --base /app/`(라우터 `basename` 도 같게). 자세한 규칙은 포털 README 'FastAPI 포털'.
 
 다른 서버에 따로 올려야 한다면 포털에 CORS·토큰 방식을 따로 열어야 하니 먼저 말해 주세요.
+도구 자체가 다른 컨테이너·서버에서 돌 때(혼합형)는 `tools.json` 항목에 `"host"` 를 넣으면 포털이 `http://<host>:<port>` 로 프록시합니다(시작·중지는 409, 그쪽이 늘 켜 둠 — 도구는 `BIND=0.0.0.0`). 화면에서 보는 주소(`/t/<도구>/…`)·헤더 규칙은 그대로입니다.
 
 ### 포털이 도구 화면에 자동으로 넣는 것
 도구의 **첫 화면 HTML**(`/t/<도구>/`)에는 포털이 사용법 `?` 버튼, 화면 테마(boot.js·CSS), 저작자 표기, 파동이 펫을 끼워 넣습니다. API 응답(JSON·파일)은 손대지 않습니다.

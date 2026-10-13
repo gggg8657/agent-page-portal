@@ -9,7 +9,9 @@
 env: portal.py 와 같음(PORT 기본 8720, AGENT_DATA, AGENT_OWNERS, TLS_CERT·TLS_KEY, SHOW_HIDDEN) +
      PORTAL_LOCAL_OWNER(기본 token — 127.0.0.1 + 헤더 X-Local-Owner=_data/.local_owner_token 일 때만 주인; 1=예전 방식, 0=끔) TRUSTED_PROXIES(쉼표, 이 주소에서 온 접속만 X-Forwarded-For 를 믿음) +
      BACKUP=1(매일 백업 — 기본 꺼짐: 운영 포털이 돌림) PORTAL_MAX_BODY(도구로 넘기는 본문 상한 바이트, 기본 600MB → 413)
-     PORTAL_MAX_JSON(포털 API JSON 본문 상한, 기본 1MB) TOOLS_ALIVE_TTL(도구 켜짐 확인 캐시 초, 기본 5)"""
+     PORTAL_MAX_JSON(포털 API JSON 본문 상한, 기본 1MB) TOOLS_ALIVE_TTL(도구 켜짐 확인 캐시 초, 기본 5)
+     TOOL_BIND(포털이 띄우는 도구의 BIND, 기본 127.0.0.1 — 컨테이너에선 0.0.0.0) WEB_DIST·WEB_PREFIX(React 빌드를 같은 출처로, 기본 꺼짐·/app)
+tools.json 의 "host": 그 도구는 다른 컨테이너·서버(http://<host>:<port>) — 상태 확인·프록시만, 시작·중지는 409"""
 import asyncio, hashlib, http.cookiejar, json, os, re, time, urllib.parse
 from contextlib import asynccontextmanager
 
@@ -382,10 +384,75 @@ def manage_post(ctx, c, p, req):
     return ctx.send({"ok": True})
 
 
+# ── React 화면(agent-page-web 빌드) 같은 출처로 내보내기 ─────────────────────────
+# WEB_DIST(빌드 폴더)가 있으면 WEB_PREFIX(기본 /app) 아래에서 dist 를 내보냄. 파일이 없는 경로는 index.html(SPA 폴백),
+# 없는 자산(assets/·확장자 있는 파일)은 404. assets/ 는 해시 붙은 이름이라 1년 캐시, 그 밖(index.html 등)은 no-cache.
+# 로그인 없이도 화면 파일은 내보냄(로그인 화면도 React) — API 는 지금처럼 401. 규칙은 agent-page-web/server.py static() 과 같음
+WEB_DIST = os.path.realpath(os.environ["WEB_DIST"]) if os.environ.get("WEB_DIST") else ""
+WEB_PREFIX = "/" + os.environ.get("WEB_PREFIX", "/app").strip("/")
+if WEB_DIST and (WEB_PREFIX == "/" or not re.fullmatch(r"(/[A-Za-z0-9_-]+)+", WEB_PREFIX)):
+    raise SystemExit(f"WEB_PREFIX 는 /app 처럼 하위 경로여야 합니다(지금 {WEB_PREFIX!r}) — '/' 로 옮기는 것은 아직 안 됨")
+WEB_SPA = re.compile(r"/($|[?#]|(all|fav|recent|account)([/?#]|$)|tool/)")   # React 라우터 경로(agent-page-web Landing.tsx SPA 와 같음)
+WEB_CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; "
+           "connect-src 'self'; frame-src 'self'; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'")
+WEB_TYPES = {".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".html": "text/html; charset=utf-8",
+             ".json": "application/json", ".map": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp",
+             ".ico": "image/x-icon", ".woff2": "font/woff2", ".txt": "text/plain; charset=utf-8", ".webmanifest": "application/manifest+json", ".wasm": "application/wasm"}
+
+
+def web_path(p):
+    return bool(WEB_DIST) and (p == WEB_PREFIX or p.startswith(WEB_PREFIX + "/") or p == "/web/landing.json")
+
+
+def web_landing(ctx):
+    """로그인 전 랜딩의 분류·도구 수(포털 /login 화면과 같은 값, 숨긴 도구 빼고) — React Landing 이 읽음(server.py /web/landing.json 과 같은 모양)"""
+    gs = [{"name": k, "n": len(v), "names": " · ".join(v[:5]) + (" …" if len(v) > 5 else "")} for k, v in core.landing_groups()]
+    return ctx.send({"groups": gs, "tools": sum(g["n"] for g in gs)}, "application/json; charset=utf-8", headers=[("Cache-Control", "no-cache")])
+
+
+def web_file(ctx, p):
+    if p == "/web/landing.json" or p == WEB_PREFIX + "/web/landing.json":
+        return web_landing(ctx)
+    if p == WEB_PREFIX:
+        return ctx.bare(302, [("Location", WEB_PREFIX + "/" + ("?" + ctx.raw.split("?", 1)[1] if "?" in ctx.raw else ""))])
+    rel = urllib.parse.unquote(p[len(WEB_PREFIX) + 1:])
+    if rel == "login" and core.SID_RE.search(ctx.cookie) and ctx.auth() and ctx.uid != "owner":   # 이미 로그인 → 랜딩 대신 바로(포털 /login·server.py 와 같음)
+        nxt = core.safe_next(urllib.parse.parse_qs(urllib.parse.urlsplit(ctx.raw).query).get("next", ["/"])[0])
+        m = re.fullmatch(r"/t/([a-z0-9-]+)/?", nxt)
+        if m:
+            nxt = f"/tool/{m[1]}"
+        if WEB_SPA.match(nxt):   # React 의 next 는 라우터 기준(/all, /tool/x) — 화면 주소로
+            nxt = WEB_PREFIX + nxt
+        return ctx.redirect(nxt)
+    f = os.path.realpath(os.path.join(WEB_DIST, rel)) if rel and "\x00" not in rel else ""
+    if not (f and f.startswith(WEB_DIST + os.sep) and os.path.isfile(f)):
+        if rel.startswith("assets/") or re.search(r"\.[A-Za-z0-9]{1,12}$", rel.rsplit("/", 1)[-1]):
+            return ctx.send({"error": "not found"}, code=404)   # 없는 자산은 index.html 이 아니라 404(옛 해시 파일 요청 등)
+        f = os.path.join(WEB_DIST, "index.html")               # SPA 라우팅(/app/login, /app/tool/…, /app/account 등)
+        if not os.path.isfile(f):
+            return ctx.send({"error": "WEB_DIST 에 index.html 이 없습니다"}, code=503)
+    ext = os.path.splitext(f)[1].lower()
+    st = os.stat(f)
+    etag = f'"{int(st.st_mtime)}-{st.st_size}"'
+    immutable = f.startswith(os.path.join(WEB_DIST, "assets") + os.sep)
+    hd = [("ETag", etag), ("Cache-Control", "public, max-age=31536000, immutable" if immutable else "no-cache"), ("X-Content-Type-Options", "nosniff"),
+          ("Referrer-Policy", "same-origin")]
+    if ext == ".html":
+        hd += [("Content-Security-Policy", WEB_CSP), ("X-Frame-Options", "SAMEORIGIN")]
+    if ctx.headers.get("if-none-match") == etag:
+        return Raw(b"", 304, hd)
+    with open(f, "rb") as fh:
+        body = fh.read()
+    ctx.setcookie = None   # 정적 파일 응답엔 세션 연장 쿠키를 싣지 않음(캐시되는 응답)
+    return ctx.send(body, WEB_TYPES.get(ext, "application/octet-stream"), headers=hd)
+
+
 # ── GET ─────────────────────────────────────────────────────────────────
 def get_sync(ctx):
     """막히는 일(DB·파일)을 하는 GET 전부 — 스레드 풀에서. 비동기로 할 일은 문자열 표시로 돌려줌('proxy'·'events'·'tools')"""
     p = ctx.p
+    if web_path(p):
+        return web_file(ctx, p)
     if p == "/login":
         if ctx.auth() and ctx.uid != "owner":
             return ctx.redirect(core.safe_next(urllib.parse.parse_qs(urllib.parse.urlsplit(ctx.raw).query).get("next", ["/"])[0]))
@@ -440,29 +507,33 @@ _ALIVE = {"t": 0.0, "v": {}}
 _ALIVE_LOCK = asyncio.Lock()
 
 
-async def _alive(port):
+async def _alive(addr):
+    host, port = addr
+    if not host:   # tools.json 의 host 형식이 틀림 — 접속하지 않음
+        return False
     try:
-        _, w = await asyncio.wait_for(asyncio.open_connection("127.0.0.1", port), 0.5)
+        _, w = await asyncio.wait_for(asyncio.open_connection(host, port), 0.5)
         w.close()
         return True
     except (OSError, asyncio.TimeoutError):
         return False
 
 
-async def alive_map(ports):
+async def alive_map(addrs):
+    """(host, port) → 켜짐. host 는 core.tool_addr(없으면 127.0.0.1, 형식 틀리면 None)"""
     async with _ALIVE_LOCK:
-        if time.monotonic() - _ALIVE["t"] < ALIVE_TTL and set(ports) <= set(_ALIVE["v"]):
+        if time.monotonic() - _ALIVE["t"] < ALIVE_TTL and set(addrs) <= set(_ALIVE["v"]):
             return _ALIVE["v"]
-        ports = sorted(set(ports))
-        res = await asyncio.gather(*(_alive(p) for p in ports))
-        _ALIVE.update(t=time.monotonic(), v=dict(zip(ports, res)))
+        addrs = sorted(set(addrs), key=lambda a: (a[0] or "", a[1]))
+        res = await asyncio.gather(*(_alive(a) for a in addrs))
+        _ALIVE.update(t=time.monotonic(), v=dict(zip(addrs, res)))
         return _ALIVE["v"]
 
 
 def tools_sync(ctx, up):
     with core.db() as c:
         u = core.usage(c)
-        return ctx.send({"tools": [{**t, "up": up.get(t["port"], False), "installed": os.path.isdir(os.path.join(core.BASE, t["dir"])),
+        return ctx.send({"tools": [{**t, "up": up.get(core.tool_addr(t), False), "installed": core.is_remote(t) or os.path.isdir(os.path.join(core.BASE, t["dir"])),
                                     "url": f"/t/{t['dir']}/", "usage": u.get(t["dir"], {"recent": 0, "total": 0, "users": 0, "likes": 0})}
                                    for t in core.tools() if core.SHOW_HIDDEN or not t.get("hidden")],
                          "rank": core.user_rank(c), "posts": core.posts(c, ctx.uid), "me": core.me(c, ctx.uid, ctx.uname)})
@@ -542,8 +613,10 @@ def post_sync(ctx, body):
                 return ctx.send({"error": "unknown tool"}, code=404)
             if path in ("/api/open", "/api/like"):
                 c.execute("INSERT INTO events VALUES(?,?,?,?)", (path[5:], t["dir"], core.now(), ctx.uid))
+            elif path in ("/api/start", "/api/stop") and core.is_remote(t):
+                return ctx.send({"error": "다른 컨테이너에서 항상 켜져 있는 도구입니다"}, code=409)
             elif path == "/api/start":
-                if _alive_sync(t["port"]) and not ctx.is_owner:
+                if _alive_sync(core.tool_addr(t)) and not ctx.is_owner:
                     return ctx.send({"error": "이미 실행 중입니다"}, code=409)
                 core.start(t); _ALIVE["t"] = 0.0   # 켜짐 캐시 비움 — 다음 /api/tools 가 바로 다시 확인
             elif path == "/api/stop":
@@ -559,10 +632,12 @@ def post_sync(ctx, body):
         return ctx.send({"error": str(e) if not isinstance(e, TypeError) else "요청 값 형식이 틀립니다"}, code=400)
 
 
-def _alive_sync(port):
+def _alive_sync(addr):
     import socket
+    if not addr[0]:
+        return False
     try:
-        with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+        with socket.create_connection(addr, timeout=0.5):
             return True
     except OSError:
         return False
@@ -621,7 +696,7 @@ REDIRECTS = (301, 302, 303, 307, 308)
 
 async def _send(method, url, hd, content):
     """도구로 보내고 응답 머리까지 받음. 도구의 리디렉트는 portal.py(urllib)처럼 포털이 따라감(최대 10번, 헤더 그대로) —
-    GET 은 모든 3xx, POST 는 301·302·303 만(본문 없이 GET 으로). 단 같은 도구(127.0.0.1:포트) 안에서만 — 바깥 주소로는 안 따라감(포털이 남의 주소를 대신 부르지 않게)"""
+    GET 은 모든 3xx, POST 는 301·302·303 만(본문 없이 GET 으로). 단 같은 도구(127.0.0.1 또는 tools.json host:포트) 안에서만 — 바깥 주소로는 안 따라감(포털이 남의 주소를 대신 부르지 않게)"""
     cl = CLIENT["c"]
     origin = urllib.parse.urlsplit(url)[:2]
     for hop in range(11):
@@ -690,8 +765,14 @@ async def proxy(ctx):
         hd.append(("Content-Length", str(length)))
         if not any(k.lower() == "content-type" for k, _ in hd):
             hd.append(("Content-Type", "application/x-www-form-urlencoded"))   # urllib 기본값과 같게
+    host = core.tool_host(t)
+    if not host:   # tools.json 의 host 형식이 틀림 — 엉뚱한 주소로 보내지 않음(값은 응답에 안 넣음)
+        print("proxy: tools.json host 형식 틀림:", t["dir"], flush=True)
+        if n:
+            await _drain(ctx.request, n)
+        rec(); return ctx.send({"error": f"{t['dir']} 주소 설정이 틀립니다 — 관리자에게 알려 주세요"}, code=502)
     try:
-        r = await _send(ctx.method, f"http://127.0.0.1:{t['port']}/{parts[3]}", hd, content)
+        r = await _send(ctx.method, f"http://{host}:{t['port']}/{parts[3]}", hd, content)
     except Exception as e:   # 도구 꺼짐·연결 실패·시간 초과 — 내부 주소·스택은 내보내지 않음
         rec()
         return ctx.send({"error": f"{t['dir']} 응답 없음 ({_errname(e)}) — 포털에서 '시작'을 누르세요"}, code=502)
@@ -739,7 +820,7 @@ async def handle(request: Request):
                 me = ctx.agent_user
                 return ctx.send({"events": [e for e in EVENTS if e["id"] > since and me in ("owner", e["user"])], "last": EVENTS[-1]["id"] if EVENTS else since})
             if r == "tools":
-                up = await alive_map([t["port"] for t in core.tools()])
+                up = await alive_map([core.tool_addr(t) for t in core.tools()])
                 return await run_in_threadpool(tools_sync, ctx, up)
             return r
         if ctx.method == "POST":

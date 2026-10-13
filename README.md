@@ -197,6 +197,9 @@ bash agent-page-portal/scripts/start-fastportal.sh stop
 | `TOOLS_ALIVE_TTL` | 5 | `/api/tools` 의 도구 켜짐 확인 캐시(초) — 탭 수백 개가 폴링해도 포트 확인은 5초에 한 번 |
 | `PORTAL_LOCAL_OWNER` | token | 로컬 주인(로그인 없이 관리자) 판정. `token`: 127.0.0.1 에서 쿠키 없이 + 헤더 `X-Local-Owner` 가 `_data/.local_owner_token`(처음 기동 때 무작위 32바이트로 만듦, 권한 600, git 밖) 과 같을 때만 — 브라우저(SSH 포트포워딩 `localhost:8700` 포함)는 이 헤더를 못 붙이므로 로그아웃이 제대로 됨. `1`: 예전 방식(127.0.0.1 쿠키 없음 = 주인 — 포트포워딩 브라우저가 로그아웃 뒤에도 주인이 됨). `0`: 끔. 리버스 프록시 뒤에 둘 때는 `token` 또는 `0` |
 | `TRUSTED_PROXIES` | 없음 | 쉼표 목록. 바로 앞 접속이 이 주소일 때만 `X-Forwarded-For` 를 읽어 실제 주소로 판정(목록 밖 주소 중 가장 오른쪽). 없으면 `X-Forwarded-For` 는 무시 |
+| `TOOL_BIND` | 127.0.0.1 | 포털이 도구를 띄울 때 넘기는 `BIND`(도구가 열 주소). 컨테이너에서 다른 컨테이너의 포털이 붙어야 하면 `0.0.0.0` |
+| `WEB_DIST` | 없음(꺼짐) | React 화면(agent-page-web) 빌드 폴더. 있으면 포털이 `WEB_PREFIX` 아래에서 같은 출처로 내보냄(아래 'React 화면') — 없으면 예전과 완전히 같음 |
+| `WEB_PREFIX` | /app | React 화면 주소. `/app` 처럼 하위 경로만(‘/’ 는 아직 안 됨) |
 | 나머지 | | `AGENT_DATA`·`AGENT_OWNERS`·`HOST`·`SHOW_HIDDEN`·`TLS_CERT`/`TLS_KEY`(TLS 1.2 이상) 는 위 표와 같음 |
 
 로컬 주인 토큰 쓰기(스크립트·관리 작업): `curl -H "X-Local-Owner: $(cat ~/agent-page/_data/.local_owner_token)" …` — 예: `curl -X POST -H "X-Local-Owner: $(cat ~/agent-page/_data/.local_owner_token)" localhost:8700/api/start -d '{"dir":"writer-local"}'`(`autostart.sh` 가 이렇게 부름). 토큰 값은 출력·커밋하지 말 것. 바꾸려면 파일을 지우고 포털 재시작(새로 만듦), 그 뒤 쓰는 스크립트는 파일을 다시 읽으면 됨. 포털은 이 헤더를 도구로 넘기지 않고, React 시범 서버(:8710)는 브라우저가 보낸 것도 버림.
@@ -206,9 +209,18 @@ bash agent-page-portal/scripts/start-fastportal.sh stop
 도구의 리디렉트는 같은 도구 안에서만 따라감(예전엔 아무 주소나) · 도구가 준 쿠키를 포털이 기억하지 않음 · 예상 못 한 오류는 연결을 끊는 대신 500 `{"error": "서버 오류"}` ·
 `/docs`·`/openapi.json` 은 열지 않음 · `Server` 헤더 없음.
 
+**혼합형 — 도구가 다른 컨테이너·서버에 있을 때**: `tools.json` 항목에 `"host"`(예: `"tools-gpu"`, `"10.0.0.5"`)를 넣으면 그 도구는 켜짐 확인·`/t/<dir>/` 프록시를 `http://<host>:<port>` 로 하고, 포털은 띄우거나 끄지 않습니다(`/api/start`·`/api/stop` → 409 `{"error": "다른 컨테이너에서 항상 켜져 있는 도구입니다"}`; 그 컨테이너가 늘 켜 둠, 도구는 `BIND=0.0.0.0` 로). `host` 가 없으면 예전과 같습니다(127.0.0.1, 포털이 띄움).
+`host` 는 관리자만 고치는 `tools.json` 에서만 옵니다(`/api/tool_add` 는 `host` 를 받지 않음). 호스트명·IPv4 글자만 허용 — 스킴(`http://`)·경로(`/`)·포트(`:`)·`@`·공백·IPv6 는 형식 오류로 보고 접속하지 않습니다(목록에서 꺼짐, `/t/<dir>/` 는 502). 프록시 규칙은 그대로 — `X-Agent-User` 를 포털 값으로 붙이고, 브라우저가 보낸 사용자 헤더·포털 쿠키(`agsid`·`agtheme`)·`X-Local-Owner` 는 빼고 보냅니다. 리디렉트도 같은 `host:port` 안에서만 따라갑니다.
+예: `{"dir": "protein-local", "port": 8781, "host": "tools-gpu", "name": "…"}`. 그 도구의 `README.md`(`/api/readme`)는 포털 쪽 폴더에 있어야 보입니다(사용법 `guides/<dir>.md` 는 포털 저장소).
+
+**React 화면(agent-page-web) — 같은 출처로**: `WEB_DIST=<빌드 폴더>` 를 주면 포털이 `WEB_PREFIX`(기본 `/app`) 아래에서 그 정적 파일을 직접 내보냅니다(따로 프록시 서버 없음 → 로컬 주인 판정이 섞이지 않음).
+`/app` → `/app/` 302 · 파일이 있으면 그 파일 · 없는 경로는 `index.html`(SPA 폴백: `/app/login`, `/app/tool/…`) · 없는 자산(`assets/…`·확장자 있는 이름)은 404 · `assets/`(해시 붙은 이름)는 `Cache-Control: public, max-age=31536000, immutable`, 그 밖(`index.html` 등)은 `no-cache` + ETag · HTML 엔 CSP(`'self'` 만)·`X-Frame-Options: SAMEORIGIN`.
+화면 파일은 로그인 없이도 내보내고(로그인 화면도 React), API 는 예전처럼 401(화면이 `/app/login?next=…` 로 보냄). 이미 로그인한 채 `/app/login` 이면 `next`(라우터 경로 `/all`·`/tool/x` 는 `/app/…` 로, `/t/<dir>/` 는 `/app/tool/<dir>`)로 302.
+React 랜딩이 읽는 `GET /web/landing.json`·`/app/web/landing.json`(분류·도구 수, 로그인 화면과 같은 값)도 이때만 열립니다. React 쪽은 `vite build --base /app/` + 라우터 `basename`·`toLogin` 이 `import.meta.env.BASE_URL` 을 따라야 합니다(agent-page-web 담당). 이미지 빌드는 multi-stage(Node 단계 `npm ci && npm run build` → `dist` 를 포털 이미지의 `WEB_DIST` 로 복사, 빌드 결과는 저장소에 넣지 않음).
+
 워커는 **1개**(비동기)로 씁니다. `/api/events`(오래 걸린 작업 끝남)·도구 켜짐 캐시·GPU 캐시가 프로세스 메모리라, 워커를 늘리면 이 셋을 DB(또는 공유 저장소)로 옮겨야 합니다(세션·잠금·계정은 이미 DB). 막히는 일(DB·PIN 해시·nvidia-smi)은 스레드 풀에서 돌아 이벤트 루프를 막지 않습니다.
 
-계약 시험(`fastportal/tests/`): `contract_live.py --demo <id>:<pin> [--old <portal.py 포트>] [--new <fastportal 포트>]` 은 같은 요청을 예전 portal.py 와 새 포털에 보내(전환 뒤에는 portal.py 를 시험 포트에 따로 띄워 `--old` 로; 로컬 주인 요청엔 새 포털에만 토큰을 붙이고, 토큰 없는 로컬 = 401 도 확인) 상태·헤더·본문을 비교(읽기와 되돌리는 POST 만), `contract_fake.py` 는 임시 폴더에 두 포털과 가짜 도구를 띄워 프록시 헤더 규칙·본문·SSE·동시 스트림·끊김·잠금·프록시 뒤 판정을 확인, `ui_compare.js` 는 Playwright 로 화면을 캡처해 비교합니다.
+계약 시험(`fastportal/tests/`): `contract_live.py --demo <id>:<pin> [--old <portal.py 포트>] [--new <fastportal 포트>]` 은 같은 요청을 예전 portal.py 와 새 포털에 보내(전환 뒤에는 portal.py 를 시험 포트에 따로 띄워 `--old` 로; 로컬 주인 요청엔 새 포털에만 토큰을 붙이고, 토큰 없는 로컬 = 401 도 확인) 상태·헤더·본문을 비교(읽기와 되돌리는 POST 만), `contract_fake.py` 는 임시 폴더에 두 포털과 가짜 도구를 띄워 프록시 헤더 규칙·본문·SSE·동시 스트림·끊김·잠금·프록시 뒤 판정·혼합형 `host`(127.0.0.2 에만 연 가짜 도구, 틀린 형식 7가지, start·stop 409)·`TOOL_BIND`·`WEB_DIST`(SPA 폴백·캐시·경로 넘기기·로그인 리디렉트)를 확인, `ui_compare.js` 는 Playwright 로 화면을 캡처해 비교합니다.
 의존성 라이선스는 모두 MIT·BSD·Apache-2.0 계열(certifi 만 MPL-2.0)로 상업 이용 가능 — 정확한 목록은 `fastportal/requirements.txt` 의 각 패키지.
 
 ## 출처·감사 (Credits)

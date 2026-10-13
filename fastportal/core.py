@@ -98,6 +98,28 @@ def tool(d):
     return next((t for t in tools() if t["dir"] == d), None)
 
 
+# 혼합형(도구가 다른 컨테이너·서버에): tools.json 항목의 "host"(예: "tools-gpu", "10.0.0.5"). 있으면 상태 확인·프록시는 http://<host>:<port>,
+# 시작·중지는 하지 않음(그쪽이 늘 켜 둠). 값은 관리자만 고치는 tools.json 에서만 오고(/api/tool_add 는 host 를 받지 않음),
+# 호스트명/IPv4 글자만 허용 — 스킴·경로·포트·@·공백·IPv6 는 거절(틀리면 꺼진 도구로 보이고 프록시하지 않음)
+HOST_RE = re.compile(r"(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*")
+
+
+def is_remote(t):
+    return bool(t.get("host"))
+
+
+def tool_host(t):
+    """도구에 접속할 주소. host 없으면 127.0.0.1, 형식이 틀리면 None(접속하지 않음)"""
+    h = t.get("host")
+    if not h:
+        return "127.0.0.1"
+    return h if isinstance(h, str) and HOST_RE.fullmatch(h) else None
+
+
+def tool_addr(t):
+    return (tool_host(t), t["port"])
+
+
 # ── DB ───────────────────────────────────────────────────────────────────
 def _connect():
     c = sqlite3.connect(os.path.join(DATA, "portal.db"), timeout=10)
@@ -369,9 +391,14 @@ def me(c, uid, uname):
 TOOL_PY = os.environ.get("TOOL_PYTHON") or getattr(sys, "_base_executable", None) or sys.executable
 
 
+TOOL_BIND = os.environ.get("TOOL_BIND") or "127.0.0.1"   # 도구가 열 주소(BIND). 컨테이너에선 0.0.0.0(다른 컨테이너의 포털이 붙게)
+
+
 def start(t):
+    if is_remote(t):
+        return   # 다른 컨테이너의 도구 — 그쪽이 띄움
     cwd = os.path.join(BASE, t["dir"])
-    env = {**os.environ, "PORT": str(t["port"]), "WORKSPACE": os.path.join(DATA, t["dir"]), "BIND": "127.0.0.1"}
+    env = {**os.environ, "PORT": str(t["port"]), "WORKSPACE": os.path.join(DATA, t["dir"]), "BIND": TOOL_BIND}
     if t.get("gpus"):
         env["CUDA_VISIBLE_DEVICES"] = str(t["gpus"])
     if os.path.exists(os.path.join(cwd, "setup.sh")):
@@ -404,6 +431,8 @@ def port_pids(port):
 
 
 def stop(t):
+    if is_remote(t):
+        return
     cwd = os.path.join(BASE, t["dir"])
     if os.path.exists(os.path.join(cwd, "setup.sh")):
         subprocess.run(["bash", "setup.sh", "stop"], cwd=cwd, capture_output=True)

@@ -97,6 +97,11 @@ class Tool(BaseHTTPRequestHandler):
 TOOL_PORT, DOWN_PORT = free_port(), free_port()
 tool_srv = ThreadingHTTPServer(("127.0.0.1", TOOL_PORT), Tool); tool_srv.daemon_threads = True
 threading.Thread(target=tool_srv.serve_forever, daemon=True).start()
+# 혼합형: '다른 컨테이너'의 도구 대신 127.0.0.2 에만 연 가짜 도구 — 포털이 host 를 안 쓰고 127.0.0.1 로 가면 연결 거부
+REMOTE_PORT, BIND_PORT = free_port(), free_port()
+remote_srv = ThreadingHTTPServer(("127.0.0.2", REMOTE_PORT), Tool); remote_srv.daemon_threads = True
+threading.Thread(target=remote_srv.serve_forever, daemon=True).start()
+BAD_HOSTS = ["127.0.0.1/evil", "http://127.0.0.1", "x@127.0.0.1", "127.0.0.1:80", "a b", "[::1]", "-bad.example"]
 
 # ── 임시 포털 둘(같은 임시 DB) ───────────────────────────────────────────
 T = tempfile.mkdtemp(prefix="fastportal-test-")
@@ -109,7 +114,21 @@ for d in ("theme", "v2", "guides"):
 os.makedirs(os.path.join(ROOT, "guide"))
 shutil.copy(os.path.join(REPO, "docs", "img", "landing-home.png"), os.path.join(ROOT, "docs", "img"))
 json.dump([{"dir": "fake-local", "port": TOOL_PORT, "name": "가짜", "title": "가짜 도구", "group": "시험"},
-           {"dir": "down-local", "port": DOWN_PORT, "name": "꺼짐", "title": "꺼진 도구", "group": "시험"}], open(os.path.join(ROOT, "tools.json"), "w"), ensure_ascii=False)
+           {"dir": "down-local", "port": DOWN_PORT, "name": "꺼짐", "title": "꺼진 도구", "group": "시험"},
+           {"dir": "remote-local", "port": REMOTE_PORT, "host": "127.0.0.2", "name": "원격", "title": "다른 컨테이너 도구", "group": "시험"},
+           {"dir": "bind-local", "port": BIND_PORT, "name": "바인드", "title": "BIND 확인", "group": "시험"}]
+          + [{"dir": f"badhost{i}-local", "port": TOOL_PORT, "host": h, "name": "틀린 host", "group": "시험"} for i, h in enumerate(BAD_HOSTS)],
+          open(os.path.join(ROOT, "tools.json"), "w"), ensure_ascii=False)
+# bind-local: 포털이 띄우면 받은 BIND 를 파일에 적고 끝남(core.start 의 TOOL_BIND 확인용)
+os.makedirs(os.path.join(T, "bind-local"))
+open(os.path.join(T, "bind-local", "app.py"), "w").write("import os\nopen(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bind.txt'), 'w').write(os.environ.get('BIND', ''))\n")
+BIND_TXT = os.path.join(T, "bind-local", "bind.txt")
+# React 빌드 대신 작은 가짜 dist(WEB_DIST 시험)
+WEB = os.path.join(T, "webdist")
+os.makedirs(os.path.join(WEB, "assets"))
+open(os.path.join(WEB, "index.html"), "w").write('<!doctype html><html><head><script type="module" src="/app/assets/index-AbC12345.js"></script></head><body><div id="root"></div></body></html>')
+open(os.path.join(WEB, "assets", "index-AbC12345.js"), "w").write("console.log(1)")
+open(os.path.join(WEB, "theme-boot.js"), "w").write("/*boot*/")
 DATA = os.path.join(T, "_data")
 OLD, NEW, NEW2 = free_port(), free_port(), free_port()
 env = {**os.environ, "AGENT_DATA": DATA, "HOST": "127.0.0.1", "BACKUP": "0", "PORTAL_ROOT": ROOT, "PORTAL_MAX_BODY": str(8 * 1024 * 1024), "AGENT_OWNERS": "boss"}
@@ -205,7 +224,7 @@ check("포털 API JSON 상한(1MB) 초과 → 413", sb == 413, f"{sb}", kind="�
 
 print("\n## 응답")
 for path in ("/t/fake-local/", "/t/fake-local/?pet=1", "/t/fake-local/cookies", "/t/fake-local/err", "/t/fake-local/redir", "/t/fake-local/nope", "/t/down-local/", "/t/down-local/api/x",
-             "/t/fake-local", "/t/none-local/"):
+             "/t/fake-local", "/t/none-local/", "/app/", "/app", "/web/landing.json"):   # /app·/web: WEB_DIST 없으면 예전과 같음
     sa, ha, ba = req(OLD, "GET", path, CK); sb, hb, bb = req(NEW, "GET", path, CK)
     keep = lambda h: [(k, v) for k, v in h if k not in ("date", "server", "connection", "transfer-encoding", "keep-alive")]
     ba_, bb_ = ba, bb
@@ -351,6 +370,80 @@ for name, hd_, exp in (("믿을 프록시 + XFF 바깥 주소", [("X-Forwarded-F
     st, i = who(PROX, hd_ + [("X-Local-Owner", TOKV)])   # 토큰이 맞아도 바깥 손님이면 주인 아님
     check(f"TRUSTED_PROXIES=127.0.0.1: {name} → {st}", st == exp, kind="설정")
 
+print("\n## 혼합형: tools.json host(다른 컨테이너의 도구)")
+rb = json.loads(req(NEW, "GET", "/t/remote-local/echo?q=1", spoof)[2])
+h = dict(rb["headers"])
+check("host 도구로 프록시(127.0.0.2:포트) + 헤더 규칙 그대로", rb["path"] == "/echo?q=1" and h.get("x-agent-user") == "tester" and "x-user" not in h and "x-forwarded-user" not in h
+      and h.get("cookie") == "toolck=keep" and "x-local-owner" not in h, str(rb["headers"]), kind="설정")
+sb, hb, bb = req(NEW, "GET", "/t/remote-local/", CK)
+check("host 도구 첫 화면에도 사용법·테마 붙임", sb == 200 and b"fake tool" in bb and b"data-sig" in bb, f"{sb}", kind="설정")
+tl = {t["dir"]: t for t in json.loads(req(NEW, "GET", "/api/tools", CK)[2])["tools"]}
+check("/api/tools: host 도구 up·installed", tl["remote-local"]["up"] is True and tl["remote-local"]["installed"] is True and tl["fake-local"]["up"] is True and tl["down-local"]["up"] is False,
+      str({k: (v["up"], v["installed"]) for k, v in tl.items()}), kind="설정")
+check("/api/tools: 형식 틀린 host 는 꺼짐(같은 포트의 로컬 도구가 켜져 있어도)", all(tl[f"badhost{i}-local"]["up"] is False for i in range(len(BAD_HOSTS))), kind="보안")
+for i, hv in enumerate(BAD_HOSTS):
+    sb, _, bb = req(NEW, "GET", f"/t/badhost{i}-local/echo", CK)
+    check(f"형식 틀린 host {hv!r} → 502, 프록시 안 함", sb == 502 and b"fake tool" not in bb and b"headers" not in bb, f"{sb} {bb.decode('utf-8', 'replace')[:60]}", kind="보안")
+for ep in ("/api/start", "/api/stop"):
+    for who_, hd_ in (("주인", {}), ("일반", CK)):
+        sb, _, bb = req(NEW, "POST", ep, {**hd_, "Content-Type": "application/json"}, json.dumps({"dir": "remote-local"}).encode())
+        check(f"host 도구 {ep}({who_}) → 409", sb == 409 and json.loads(bb).get("error") == "다른 컨테이너에서 항상 켜져 있는 도구입니다", f"{sb} {bb.decode()}", kind="설정")
+rb = json.loads(req(NEW, "GET", "/t/remote-local/echo")[2])
+check("host 도구는 stop 뒤에도 그대로 켜짐(포털이 안 건드림)", rb.get("path") == "/echo", kind="설정")
+
+
+def bind_of(port):
+    if os.path.exists(BIND_TXT):
+        os.remove(BIND_TXT)
+    sb = req(port, "POST", "/api/start", {"Content-Type": "application/json", "X-Local-Owner": TOKV}, json.dumps({"dir": "bind-local"}).encode())[0]
+    for _ in range(100):
+        if os.path.exists(BIND_TXT) and open(BIND_TXT).read():
+            return sb, open(BIND_TXT).read()
+        time.sleep(0.1)
+    return sb, None
+
+
+sb, b_ = bind_of(NEW)
+check(f"TOOL_BIND 없음 → 도구 BIND={b_}", sb == 200 and b_ == "127.0.0.1", kind="설정")
+BINDP = free_port()
+launch("bind", BINDP, {"TOOL_BIND": "0.0.0.0"})
+sb, b_ = bind_of(BINDP)
+check(f"TOOL_BIND=0.0.0.0 → 도구 BIND={b_}", sb == 200 and b_ == "0.0.0.0", kind="설정")
+
+print("\n## React 빌드 같은 출처(WEB_DIST·WEB_PREFIX)")
+WEBP = free_port()
+launch("web", WEBP, {"WEB_DIST": WEB})
+st, hd, b = req(WEBP, "GET", "/app/", {"Accept": "text/html"}, tok=False)
+check(f"로그인 없이 /app/ → {st} index.html, no-cache·CSP", st == 200 and b'id="root"' in b and hdr(hd, "cache-control") == ["no-cache"] and hdr(hd, "content-security-policy")
+      and not hdr(hd, "set-cookie"), str(hdr(hd, "cache-control")), kind="설정")
+st, hd, b = req(WEBP, "GET", "/app/tool/sql-local?x=1", {"Accept": "text/html"}, tok=False)
+check(f"SPA 경로 /app/tool/sql-local → {st} index.html", st == 200 and b'id="root"' in b, kind="설정")
+st, hd, b = req(WEBP, "GET", "/app/assets/index-AbC12345.js", tok=False)
+check(f"해시 자산 → {st} {hdr(hd, 'content-type')} 긴 캐시", st == 200 and b == b"console.log(1)" and "immutable" in hdr(hd, "cache-control")[0] and hdr(hd, "content-type")[0].startswith("text/javascript"), kind="설정")
+st, hd, b = req(WEBP, "GET", "/app/theme-boot.js", tok=False)
+check(f"dist 위 파일(theme-boot.js) → {st} no-cache", st == 200 and hdr(hd, "cache-control") == ["no-cache"], kind="설정")
+etag = None
+st, hd, _ = req(WEBP, "GET", "/app/assets/index-AbC12345.js", tok=False); etag = hdr(hd, "etag")[0]
+st, _, _ = req(WEBP, "GET", "/app/assets/index-AbC12345.js", {"If-None-Match": etag}, tok=False)
+check(f"ETag 일치 → {st}", st == 304, kind="설정")
+for path, exp in (("/app/assets/old-Zz999999.js", 404), ("/app/nope.png", 404), ("/app/%2e%2e/tools.json", 404), ("/app/..%2f..%2fbind-local%2fapp.py", 404), ("/app", 302)):
+    st, hd, b = req(WEBP, "GET", path, tok=False)
+    check(f"{path} → {st}", st == exp and b"bind.txt" not in b and b"remote-local" not in b, kind="설정")
+st, _, b = req(WEBP, "GET", "/api/me", tok=False)
+check(f"WEB_DIST 켜도 로그인 안 한 API 는 {st}", st == 401, kind="설정")
+st, _, b = req(WEBP, "GET", "/web/landing.json", tok=False)
+lj = json.loads(b) if st == 200 else {}
+check(f"/web/landing.json(로그인 전 랜딩 분류) → {st} 도구 {lj.get('tools')}개", st == 200 and lj.get("tools") == len(BAD_HOSTS) + 4 and lj["groups"][0]["name"] == "시험", kind="설정")
+st, hd, _ = req(WEBP, "GET", "/app/login?next=%2Ft%2Ffake-local%2F", CK, tok=False)
+check(f"로그인한 상태로 /app/login → {st} {hdr(hd, 'location')}", st == 302 and hdr(hd, "location") == ["/app/tool/fake-local"], kind="설정")
+for nx, loc in (("", "/app/"), ("%2Fall", "/app/all"), ("%2Fadmin", "/admin"), ("%2Fapp%2Faccount", "/app/account"), ("%2F%2Fevil.example", "/app/")):
+    st, hd, _ = req(WEBP, "GET", "/app/login" + ("?next=" + nx if nx else ""), CK, tok=False)
+    check(f"로그인한 상태로 /app/login?next={nx} → {st} {hdr(hd, 'location')}", st == 302 and hdr(hd, "location") == [loc], kind="설정")
+st, hd, _ = req(WEBP, "GET", "/app/login", {"Cookie": "agsid=" + "x" * 43}, tok=False)
+check(f"무효 세션으로 /app/login → {st}(랜딩)", st == 200, kind="설정")
+st, _, b = req(WEBP, "GET", "/api/tools", CK, tok=False)
+check(f"같은 출처 API(로그인 쿠키) → {st}", st == 200 and "tools" in json.loads(b), kind="설정")
+
 if A.slow:
     print("\n## 1분 넘는 POST → /api/events (61초)")
     ths = [threading.Thread(target=req, args=(p, "POST", "/t/fake-local/slow", {**CK, "Content-Type": "application/json"}, b"{}")) for p in (OLD, NEW)]
@@ -366,7 +459,7 @@ for p in procs.values():
         p.wait(10)
     except subprocess.TimeoutExpired:
         p.kill()
-tool_srv.shutdown()
+tool_srv.shutdown(); remote_srv.shutdown()
 errs = [l for l in open(os.path.join(T, "new.log")) if "Traceback" in l or "error:" in l]
 check("새 포털 로그에 예외 없음", not errs, "".join(errs[:5]))
 shutil.rmtree(T, ignore_errors=True)
