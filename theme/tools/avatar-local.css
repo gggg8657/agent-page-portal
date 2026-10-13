@@ -15,3 +15,23 @@ html[data-ag-theme$="dark"] .cands img{background:var(--ag-surface-2)}
 html[data-ag-theme^="trendy"] .gal .item{border-radius:var(--ag-r-md)}
 html[data-ag-theme^="trendy"] :is(.gal video,.gal img,.cands img,img.prev,video){border-radius:var(--ag-r-md)}
 html[data-ag-theme^="trendy"] .consent{border-radius:var(--ag-r-lg)}
+
+/* ── v2(작업대): 위 탭은 세그먼트(고른 조각 = 표면 + 1px 선), 상자·입력은 1px 선 + 작은 둥글기, 갤러리 선택은 옅은 청록 (그림·영상은 그대로) ── */
+html[data-ag-theme^="v2"] .tabs{display:inline-flex;gap:2px;padding:2px;background:var(--ag-surface-2);border:1px solid var(--ag-line);border-radius:var(--ag-r-md)}
+html[data-ag-theme^="v2"] .tabs button{border:0;border-radius:var(--ag-r-sm);background:transparent;color:var(--ag-ink-2);padding:4px 14px;font-weight:500}
+html[data-ag-theme^="v2"] .tabs button:not(.on):hover{background:var(--ag-hover);color:var(--ag-ink)}
+html[data-ag-theme^="v2"] .tabs button.on{background:var(--ag-surface);color:var(--ag-ink);border:0;box-shadow:0 0 0 1px var(--ag-line-2);font-weight:650}
+html[data-ag-theme^="v2"] .box{background:var(--ag-surface);border-color:var(--ag-line);border-radius:var(--ag-r-lg)}
+html[data-ag-theme^="v2"] :is(textarea,input[type=text],select){background:var(--ag-surface);border-color:var(--ag-line-2);color:var(--ag-ink);border-radius:var(--ag-r-md)}
+html[data-ag-theme^="v2"] button:not(.tabs button){background:var(--ag-surface);border-color:var(--ag-line-2);color:var(--ag-ink);border-radius:var(--ag-r-md);padding:5px 12px}
+html[data-ag-theme^="v2"] button.primary:not(.tabs button){background:var(--ag-accent);border-color:var(--ag-accent);color:#fff;padding:5px 18px;font-weight:600}
+html[data-ag-theme^="v2"] .consent{border-radius:var(--ag-r-md);background:var(--ag-warn-soft);border-color:color-mix(in srgb,var(--ag-warn) 40%,transparent);color:var(--ag-ink)}
+html[data-ag-theme^="v2"] .gal .item{border-width:1px;border-radius:var(--ag-r-md);padding:7px}
+html[data-ag-theme^="v2"] .gal .item:hover{background:var(--ag-hover)}
+html[data-ag-theme^="v2"] .gal .item.selected{border-color:var(--ag-accent);background:var(--ag-accent-soft)}
+html[data-ag-theme^="v2"] .gal.selecting .item.selected::before{background:var(--ag-accent)}
+html[data-ag-theme^="v2"] .gal .item .del{background:color-mix(in srgb,var(--ag-surface) 92%,transparent);border-color:var(--ag-line-2);padding:0 7px}
+html[data-ag-theme^="v2"] :is(.gal video,.gal img,.cands img,img.prev,video){border-radius:var(--ag-r-md)}
+html[data-ag-theme^="v2"] .cands img.on{border-color:var(--ag-accent)}
+html[data-ag-theme^="v2"] :is(.note,#status,#log,.gal div){color:var(--ag-ink-3)}
+html[data-ag-theme^="v2"] select{max-width:100%}  /* 긴 품질 고르기(#squality)가 휴대폰 폭에서 가로 스크롤을 내던 것 */

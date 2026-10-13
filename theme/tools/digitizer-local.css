@@ -41,3 +41,33 @@ html[data-ag-theme^="trendy"] #loupe{border-radius:var(--ag-r-md);border-color:v
 html[data-ag-theme^="trendy"] .kbd{border-radius:var(--ag-r-xs);border-color:var(--ag-line-2);border-bottom-width:2px;font-family:var(--ag-mono)}
 html[data-ag-theme^="trendy"] pre{border-radius:var(--ag-r-md)}
 html[data-ag-theme^="trendy"] th{background:var(--ag-surface)}
+
+/* ── v2(작업대): 단계 탭은 세그먼트, 패널·그림 틀은 1px 선 + 작은 둥글기, 켠 도구 버튼은 옅은 청록 칩 ── */
+html[data-ag-theme^="v2"] .tabs{gap:2px;padding:2px;background:var(--ag-surface-2);border:1px solid var(--ag-line);border-radius:var(--ag-r-md)}
+html[data-ag-theme^="v2"] .tabs button{border:0;border-radius:var(--ag-r-sm);background:transparent;color:var(--ag-ink-2);font-weight:500;padding:4px 4px}
+html[data-ag-theme^="v2"] .tabs button:not(.on):hover{background:var(--ag-hover);color:var(--ag-ink)}
+html[data-ag-theme^="v2"] .tabs button.on{outline:none;background:var(--ag-surface);color:var(--ag-ink);border:0;box-shadow:0 0 0 1px var(--ag-line-2);font-weight:650}
+html[data-ag-theme^="v2"] .tabs button.done::after,html[data-ag-theme^="v2"] .tabs button.on.done::after{color:var(--ag-ok)}
+html[data-ag-theme^="v2"] :is(.pane,#wrap){border-color:var(--ag-line);border-radius:var(--ag-r-lg)}
+html[data-ag-theme^="v2"] #wrap{background:var(--ag-surface-2)}
+html[data-ag-theme^="v2"] fieldset{border-radius:0;border-top-color:var(--ag-line)}
+html[data-ag-theme^="v2"] legend{color:var(--ag-accent-ink);font-weight:650}
+html[data-ag-theme^="v2"] button:not(.primary,.x){border-color:var(--ag-line-2)}
+html[data-ag-theme^="v2"] button.primary{background:var(--ag-accent);border-color:var(--ag-accent);color:#fff}
+html[data-ag-theme^="v2"] button.on:not(.tabs button){outline:none;border-color:color-mix(in srgb,var(--ag-accent) 55%,transparent);background:var(--ag-accent-soft);color:var(--ag-accent-ink);font-weight:600}
+html[data-ag-theme^="v2"] .bar .sep{background:var(--ag-line-2)}
+html[data-ag-theme^="v2"] .drop{border:1px dashed var(--ag-line-2);border-radius:var(--ag-r-lg);background:var(--ag-surface-2)}
+html[data-ag-theme^="v2"] .drop.over{border-color:var(--ag-accent);background:var(--ag-accent-soft);color:var(--ag-accent-ink)}
+html[data-ag-theme^="v2"] .ser{border-color:var(--ag-line);border-radius:var(--ag-r-md)}
+html[data-ag-theme^="v2"] .ser:hover{background:var(--ag-hover)}
+html[data-ag-theme^="v2"] .ser.on{border-color:color-mix(in srgb,var(--ag-accent) 55%,transparent);box-shadow:inset 2px 0 0 var(--ag-accent);background:var(--ag-accent-soft)}
+html[data-ag-theme^="v2"] .chips button{border-radius:var(--ag-r-sm)}
+html[data-ag-theme^="v2"] :is(.pages div,.panels div){border-radius:var(--ag-r-sm)}
+html[data-ag-theme^="v2"] :is(.pages div.on,.panels div:hover){outline-color:var(--ag-accent)}
+html[data-ag-theme^="v2"] #recon{border-color:var(--ag-line);border-radius:var(--ag-r-md)}
+html[data-ag-theme^="v2"] #loupe{border:1px solid var(--ag-accent);border-radius:var(--ag-r-md);box-shadow:var(--ag-shadow-3)}
+html[data-ag-theme^="v2"] .kbd{border-radius:var(--ag-r-xs);border-color:var(--ag-line-2);background:var(--ag-surface-2);font-family:var(--ag-mono)}
+html[data-ag-theme^="v2"] pre{background:var(--ag-surface-2);border:1px solid var(--ag-line)}
+html[data-ag-theme^="v2"] th{background:var(--ag-surface);border-bottom-color:var(--ag-line-2)}
+html[data-ag-theme^="v2"] td{border-bottom-color:var(--ag-line)}
+html[data-ag-theme^="v2"] .hint{color:var(--ag-ink-3)}

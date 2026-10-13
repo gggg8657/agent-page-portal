@@ -48,3 +48,31 @@ html[data-ag-theme^="trendy"] .warn{border-radius:var(--ag-r-md)}
 html[data-ag-theme^="trendy"] #view{backdrop-filter:blur(6px)}
 html[data-ag-theme^="trendy"] #view .in{border-radius:var(--ag-r-xl);box-shadow:var(--ag-shadow-3);padding:18px}
 html[data-ag-theme$="dark"] #view .in{background:var(--ag-surface)}
+
+/* ── v2(작업대): 그리기/고치기는 세그먼트, 칩은 작은 사각(고른 것 옅은 청록), 상자·입력은 1px 선 + 작은 둥글기 (만든 그림은 그대로) ── */
+html[data-ag-theme^="v2"] .tabs{display:inline-flex;gap:2px;padding:2px;background:var(--ag-surface-2);border:1px solid var(--ag-line);border-radius:var(--ag-r-md)}
+html[data-ag-theme^="v2"] .tabs button{border:0;border-radius:var(--ag-r-sm);background:transparent;color:var(--ag-ink-2);padding:4px 14px;font-weight:500}
+html[data-ag-theme^="v2"] .tabs button:not(.on):hover{background:var(--ag-hover);color:var(--ag-ink)}
+html[data-ag-theme^="v2"] .tabs button.on{background:var(--ag-surface);color:var(--ag-ink);border:0;box-shadow:0 0 0 1px var(--ag-line-2);font-weight:650}
+html[data-ag-theme^="v2"] .box{background:var(--ag-surface);border-color:var(--ag-line);border-radius:var(--ag-r-lg)}
+html[data-ag-theme^="v2"] :is(textarea,input[type=text],input[type=number],select){background:var(--ag-surface);color:var(--ag-ink);border-color:var(--ag-line-2);border-radius:var(--ag-r-md)}
+html[data-ag-theme^="v2"] :is(button:not(.tabs button,.chips button,.srcs button)){background:var(--ag-surface);border-color:var(--ag-line-2);color:var(--ag-ink);border-radius:var(--ag-r-md)}
+html[data-ag-theme^="v2"] button.primary:not(.tabs button,.chips button,.srcs button){background:var(--ag-accent);border-color:var(--ag-accent);color:#fff;padding:6px 20px;font-weight:600}
+html[data-ag-theme^="v2"] .chips{gap:4px}
+html[data-ag-theme^="v2"] .chips button{border-radius:var(--ag-r-sm);background:var(--ag-surface);border-color:var(--ag-line-2);color:var(--ag-ink-2);padding:2px 10px;font-size:13px}
+html[data-ag-theme^="v2"] .chips button:not(.on):hover{background:var(--ag-hover);color:var(--ag-ink)}
+html[data-ag-theme^="v2"] .chips button.on{background:var(--ag-accent-soft);border-color:color-mix(in srgb,var(--ag-accent) 55%,transparent);color:var(--ag-accent-ink);font-weight:600}
+html[data-ag-theme^="v2"] :is(.lbl,.note,#status,.prog){color:var(--ag-ink-3)}
+html[data-ag-theme^="v2"] .bar{border-radius:var(--ag-r-xs);background:var(--ag-surface-3)}
+html[data-ag-theme^="v2"] .bar i{background:var(--ag-accent)}
+html[data-ag-theme^="v2"] :is(.results img,.gal img){border-radius:var(--ag-r-md)}
+html[data-ag-theme^="v2"] .srcs img{border-radius:var(--ag-r-sm)}
+html[data-ag-theme^="v2"] .srcs button{border-radius:var(--ag-r-xs);background:color-mix(in srgb,var(--ag-surface) 92%,transparent);border-color:var(--ag-line-2);color:var(--ag-ink)}
+html[data-ag-theme^="v2"] .gal .item .badge{border-radius:var(--ag-r-xs)}
+html[data-ag-theme^="v2"] .drop{border:1px dashed var(--ag-line-2);border-radius:var(--ag-r-lg);background:var(--ag-surface-2)}
+html[data-ag-theme^="v2"] .drop.over{color:var(--ag-accent-ink)}
+html[data-ag-theme^="v2"] .warn{border-radius:var(--ag-r-md);background:var(--ag-warn-soft);border-color:color-mix(in srgb,var(--ag-warn) 40%,transparent);color:var(--ag-ink)}
+html[data-ag-theme^="v2"] #view{background:var(--ag-backdrop)}
+html[data-ag-theme^="v2"] #view .in{background:var(--ag-surface);border:1px solid var(--ag-line);border-radius:var(--ag-r-xl);box-shadow:var(--ag-shadow-3)}
+html[data-ag-theme^="v2"] #view img{border-radius:var(--ag-r-md)}
+html[data-ag-theme^="v2"] #view .meta{color:var(--ag-ink-3)}
