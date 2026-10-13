@@ -440,14 +440,17 @@ def gpu_status():
 
 # ── 매일 백업 (../backup.sh, 03시 KST) ────────────────────────────────────
 def backup_loop():
-    """cron·systemd 없는 컨테이너라 포털이 부른다: 03시대(KST)에 마지막 백업이 20시간 넘었으면, 또는 30시간 넘게 못 했으면 실행"""
+    """cron·systemd 없는 컨테이너라 포털이 부른다: 03시대(KST)에 오늘 날짜 백업이 없으면, 또는 30시간 넘게 못 했으면 실행
+    (예전엔 '마지막 백업이 20시간 넘었으면'이라 낮에 손으로 한 백업이 있으면 다음 날 새벽 백업을 건너뛰었음)"""
     out = os.environ.get("AGENT_BACKUP_DIR") or os.path.expanduser("~/agent-page-backup")
     kst = datetime.timezone(datetime.timedelta(hours=9))
     while True:
         try:
             ages = [time.time() - os.path.getmtime(os.path.join(out, f)) for f in os.listdir(out) if f.startswith("agent-data-")] if os.path.isdir(out) else []
             age = min(ages) / 3600 if ages else 1e9
-            if (datetime.datetime.now(kst).hour == 3 and age > 20) or age > 30:
+            now = datetime.datetime.now(kst)
+            today = os.path.exists(os.path.join(out, f"agent-data-{now:%Y-%m-%d}.tar.gz"))
+            if (now.hour == 3 and not today) or age > 30:
                 sh = os.path.join(BASE, "backup.sh")
                 subprocess.run(["bash", sh if os.path.exists(sh) else os.path.join(ROOT, "scripts", "backup.sh")], timeout=3600)
         except Exception as e:  # 백업 실패가 포털을 죽이면 안 됨
