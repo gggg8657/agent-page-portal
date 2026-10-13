@@ -43,7 +43,7 @@
 - **그림 영역 `box`**: `{"x0":…, "y0":…, "x1":…, "y1":…}` (축선 안쪽, 픽셀).
 - **오류**: 본문 `{"error": "메시지"}`.
   - 404: 그림·PDF·작업 파일이 없음(`FileNotFoundError`), POST 의 없는 경로(`"없는 경로"`).
-  - 413: POST 본문이 약 56MB(40MB × 1.4) 초과.
+  - 413: POST 본문이 약 56MB(40MB × 1.4) 초과(포털을 거쳐도 413 — 서버가 본문을 버려 읽은 뒤 응답).
   - 500: 그 밖의 모든 오류(잘못된 id 형식, 필수 필드 누락, JSON 파싱 실패, LLM 연결 실패 등) — 메시지는 `"<예외 이름>: <내용>"` 형식(예 `"ValueError: 이미지 id 가 잘못되었습니다"`, 필드 누락은 `"KeyError: 'box'"`). 400 은 쓰지 않습니다.
 - **업로드 크기**: 원본 파일 40MB 이하(`MAX_UPLOAD`). 그림은 긴 변 6000px 초과 시 줄여 저장합니다.
 
@@ -55,12 +55,11 @@
 ### GET api/meta
 - 응답 예:
   ```json
-  {"model": "gemma4:31b", "llm": "http://<LLM 서버>", "models": ["gemma4:31b", "qwen3:32b"], "pdf": true, "xlsx": true}
+  {"model": "gemma4:31b", "models": ["gemma4:31b", "qwen3:32b"], "pdf": true, "xlsx": true}
   ```
   | 필드 | 설명 |
   |---|---|
   | `model` | 기본 VLM 모델(`VISION_MODEL` 또는 `LLM_MODEL`) |
-  | `llm` | LLM 서버 주소(내부 주소이므로 화면에 노출하지 않는 것을 권장) |
   | `models` | LLM 서버의 모델 목록(Ollama `/api/tags` 또는 OpenAI 호환 `/models`). 연결 실패 시 `[]` |
   | `pdf` | `pdftoppm` 이 있는지(없으면 PyMuPDF 로 대신 시도) |
   | `xlsx` | `openpyxl` 이 있는지 — 없으면 `api/export` 가 `xlsx` 요청에도 CSV 를 돌려줌 |

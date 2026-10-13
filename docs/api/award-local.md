@@ -6,7 +6,7 @@
 - 포털을 거치면 로그인 쿠키(`agsid`)가 필요합니다. 없으면 `401 {"error":"로그인이 필요합니다","login":"/login"}`.
 - 포털이 `X-Agent-User` 를 붙여 사용자별 폴더(`WORKSPACE/u/<id>`)를 씁니다(업로드 이미지·발급본·이력·다음 번호가 사용자마다 따로).
 - POST 본문은 모두 JSON, `Content-Length` 필수. 모든 응답에 `Cache-Control: no-store`.
-- 오류는 `{"error":"..."}` — 형식 오류·없는 파일·LLM 실패 등 대부분 `500`(예외 이름 앞에 붙음, 예 `"ValueError: 이미지가 너무 큽니다 (15MB 이하)"`), 일부만 `400`/`404`.
+- 오류는 `{"error":"..."}` — 형식 오류·없는 파일·LLM 실패 등 대부분 `500`(예외 이름 앞에 붙음, 예 `"UnidentifiedImageError: ..."`), 일부만 `400`/`404`, 크기 초과는 `413`.
 
 ## 요약 표
 | 메서드 | 경로 | 하는 일 | 오래 걸림/GPU·LLM | 사용자별 데이터 |
@@ -100,7 +100,7 @@
 ### POST api/upload
 - 요청: `{"data": "data:image/png;base64,...."}` (데이터 URL 또는 base64만)
 - 응답: `{"id": "1a2b3c4d5e6f7a8b"}` — 내용 해시(같은 그림이면 같은 id). 15MB 넘으면 거절, 긴 변 2400px 로 줄이고 PNG 로 저장.
-- 오류: `500 {"error":"ValueError: 이미지가 너무 큽니다 (15MB 이하)"}`, 이미지가 아니면 `500 {"error":"UnidentifiedImageError: ..."}`.
+- 오류: `413 {"error":"이미지가 너무 큽니다 (15MB 이하)"}`, POST 본문 25MB 초과(모든 POST 공통) `413 {"error":"요청이 너무 큽니다 (최대 25MB — 이미지 15MB 이하)"}`, 이미지가 아니면 `500 {"error":"UnidentifiedImageError: ..."}`.
 
 ### POST api/rows
 - 요청: `{"text": "이름\t소속\t직위\n홍길동\t○○실\t연구원"}` 또는 `{"xlsx": "data:...;base64,...."}`(첫 시트만)
@@ -110,7 +110,7 @@
 ### POST api/polish
 - 요청: `{"text": "올해 논문 3편 게재", "kind": "표창장", "model": "선택"}`
 - 응답: `{"text": "위 사람은 … 이에 표창합니다."}` (한 단락)
-- 오류: 빈 문구 `400 {"error":"다듬을 문구가 비어 있습니다"}`, LLM 연결 실패 `500 {"error":"RuntimeError: LLM 서버 연결 실패 (...)"}`.
+- 오류: 빈 문구 `400 {"error":"다듬을 문구가 비어 있습니다"}`, LLM 연결 실패 `500 {"error":"RuntimeError: LLM 서버 연결 실패: ..."}`(서버 주소는 넣지 않음).
 
 ## 흐름 예
 ```js

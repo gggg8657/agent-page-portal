@@ -30,7 +30,7 @@
 {"mtypes": ["연구논문", "리뷰(총설)", "학회 논문", "단신·레터", "학위논문(장)", "기술보고서"],
  "depths": [{"id": "quick", "label": "빠름"}, {"id": "deep", "label": "정밀"}],
  "langs": [{"id": "auto", "label": "원고 언어"}, {"id": "ko", "label": "국문"}, {"id": "en", "label": "영문"}],
- "model": "<기본 모델>", "llm": "<LLM 종류와 주소>", "tools": {"pdftotext": true, "kordoc": true}}
+ "model": "<기본 모델>", "tools": {"pdftotext": true, "kordoc": true}}
 ```
   - `tools.kordoc`: HWP·HWPX·DOCX 추출 도구 유무, `tools.pdftotext`: PDF 추출 도구 유무.
 
@@ -64,7 +64,7 @@
 | `mtype` | 문자열 | 아니오 | 원고 유형(`api/meta` 의 mtypes). 구조 점검 기준이 달라짐 |
 
 - 응답: 레코드(`review` 는 null, `issues` 는 기계적 점검 결과만).
-- 오류: `400 {"error":"지원하지 않는 형식: .xyz — PDF·DOCX·HWP·HWPX·TXT"}`, `400 {"error":"추출된 글자가 거의 없습니다. 스캔(이미지) PDF 이면 …"}`, `400 {"error":"파일이 비어 있습니다"}`, 본문이 크면 `413 {"error":"파일이 너무 큽니다 (최대 60MB)"}`(base64 본문 약 84MB 초과 시).
+- 오류: `400 {"error":"지원하지 않는 형식: .xyz — PDF·DOCX·HWP·HWPX·TXT"}`, `400 {"error":"추출된 글자가 거의 없습니다. 스캔(이미지) PDF 이면 …"}`, `400 {"error":"파일이 비어 있습니다"}`, 본문이 크면 `413 {"error":"파일이 너무 큽니다 (최대 60MB)"}`(base64 본문 약 84MB 초과 시, 포털을 거쳐도 413).
 - 메모: 원본 파일은 추출 뒤 바로 지우고, 추출된 텍스트·구조만 이력에 남습니다.
 
 ### POST api/run  (SSE)
@@ -141,6 +141,6 @@ location.href = base + `api/export/${done.id}.docx`;   // 보고서 받기
 ## 화면만의 것 / 주의
 - 원문 보기에서 지적 위치 하이라이트·쪽 계산·목차 이동, 심각도 필터, 지적 개수 집계는 화면이 `doc.text`·`pos`·`len`·`outline` 으로 직접 합니다.
 - 60MB 사전 확인, 옵션 기억(localStorage)은 화면 기능입니다.
-- `api/meta` 의 `llm` 에는 서버 내부 LLM 주소가 들어 있으니 화면에 그대로 노출하지 마세요.
+- `api/meta` 는 LLM 서버 주소를 내보내지 않습니다(모델 이름만). LLM 연결 실패 오류 문장에도 주소는 없습니다.
 - 코드에 `cross`(교차 확인 끄기) 옵션 분기가 있지만 `api/run` 이 받는 옵션 목록에 없어 API 로는 끌 수 없습니다(항상 켜짐).
 - `/static/` 경로는 없습니다.

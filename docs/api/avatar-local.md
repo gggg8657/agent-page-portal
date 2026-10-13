@@ -5,7 +5,7 @@
 공통:
 - 포털을 거치면 로그인 쿠키(`agsid`)가 필요합니다. 없으면 `401 {"error":"로그인이 필요합니다","login":"/login"}`.
 - 포털이 `X-Agent-User` 를 붙여 사용자별 폴더(`WORKSPACE/u/<id>`)에 저장합니다. 클라이언트가 보낸 값은 무시됩니다.
-- POST 는 `Content-Length` 와 올바른 JSON 본문이 반드시 있어야 합니다(없거나 깨지면 서버가 응답 없이 연결을 끊음). 포털 프록시 제한 시간 1시간.
+- POST 는 `Content-Length` 와 올바른 JSON 본문이 있어야 합니다(깨진 JSON 은 `400 {"error":"잘못된 요청(JSON)"}`). 본문 상한 약 28MB(넘으면 413). 포털 프록시 제한 시간 1시간.
 - `run_id` 형식: `YYYY-MM-DD-xxxx` (16진 4자리).
 - 규칙: 사진 업로드(`api/run`)는 본인 또는 동의한 사람의 얼굴만 — `consent: true` 가 없으면 거절합니다. 스튜디오는 생성 캐릭터만 다루므로 사진 업로드가 없습니다.
 
@@ -62,7 +62,7 @@
   - `{"log":"…"}` — SadTalker 진행 줄(퍼센트 등, 120자까지)
   - 끝: `{"done":{"run_id":"…","text":"…","engine":"tts-local","device":"cuda","ts":"…"}}` → 영상 `api/runs/<run_id>/final.mp4`
   - 실패: `{"error":"ValueError: 본인(또는 동의한 사람)의 얼굴임을 확인해야 합니다"}` / `"RuntimeError: 사진에서 얼굴을 찾지 못했습니다…"` / `"RuntimeError: TTS 도구(tts-local)를 켜 주세요…"` 등
-- 메모: 업로드 크기 제한은 코드에 없음. 업로드 원본은 끝나면 지우고 `photo.<확장자>` 로 실행 폴더에 복사본을 남깁니다.
+- 메모: 사진은 20MB 까지(요청 본문이 그 base64 크기 + 1MB 를 넘으면 스트림 전에 `413 {"error":"요청이 너무 큽니다 (사진 20MB 이하)"}`). 업로드 원본은 끝나면 지우고 `photo.<확장자>` 로 실행 폴더에 복사본을 남깁니다.
 
 ### POST api/imagine  (SSE)
 - 요청(JSON):

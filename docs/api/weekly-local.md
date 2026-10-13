@@ -6,9 +6,10 @@
 
 공통:
 - 포털을 거치면 로그인 쿠키(`agsid`)가 필요합니다. 없으면 `401 {"error":"로그인이 필요합니다","login":"/login"}`.
-- **데이터 공유**: 다른 도구와 달리 보고·취합·약어집·과제 등록부·조직 설정은 사용자 구분 없이 **모든 사용자가 같은 저장소**를 씁니다(부서 취합을 위해). 보고는 `org|dept|name` 조합으로 구분되며, 권한 검사는 없습니다(같은 이름으로 제출하면 덮어씀). 사용자별인 것은 `api/sources`(내 회의록·메일 기록 읽기)뿐입니다.
+- **데이터 공유**: 다른 도구와 달리 보고·취합·약어집·과제 등록부·조직 설정은 사용자 구분 없이 **모든 사용자가 같은 저장소**를 씁니다(부서 취합을 위해). 보고는 `org|dept|name` 조합으로 구분됩니다. 사용자별인 것은 `api/sources`(내 회의록·메일 기록 읽기)뿐입니다.
+- **권한**(포털이 붙인 `X-Agent-User` 기준, 관리자 = `owner`): 보기는 누구나. 덮어쓰기·고치기·지우기는 **처음 만든 계정 또는 owner 만** — 제출 보고, 취합본(주·소본부별), 약어집 사내 항목, "약어 아님" 해제, 과제 등록부의 과제(고치기·지우기·되살리기·순서·별칭)와 실 구성원. 만든 계정 기록이 없는 예전 데이터는 owner 만. 새로 만들기(새 보고·새 약어·새 과제·약어 아님 표시)는 누구나. **조직 설정(`api/orgs`)은 owner 만.** 거절은 `403 {"error": "…만든 사람이나 관리자만 …"}`. 만든 계정은 서버 파일에 `_by` 로 남고 응답에는 나가지 않습니다.
 - POST 본문은 JSON, `Content-Length` 필수. 응답에 `Cache-Control: no-store`.
-- 오류: `{"error":"..."}`. GET 은 잘못된 값·없는 파일이 `404`, 그 밖 `500`. POST 는 입력 오류(`ValueError`)가 `400`, 그 밖 `500`. 깨진 JSON 은 `400 {"error":"잘못된 요청"}`.
+- 오류: `{"error":"..."}`. GET 은 잘못된 값·없는 파일이 `404`, 그 밖 `500`. POST 는 입력 오류(`ValueError` 등)가 `400`, 권한 없음이 `403`, 그 밖 `500`. 깨진 JSON 은 `400 {"error":"잘못된 요청"}`.
 - 주차 키 형식: `YYYY-Www` (ISO 주, 예 `2026-W42`). 대부분 `week` 를 비우면 이번 주.
 
 ## 요약 표
@@ -69,7 +70,7 @@
 ## 엔드포인트 — 조회
 
 ### GET api/meta
-- 응답 키: `model`, `week`(아래 주 정보), `cats`(키→이름표), `kinds`(키→이름표), `guide`(입력 도움말 `[제목, 예시]` 배열), `orgs`(`{상위조직: [부서…]}`), `templates`(`[{id, name}]` — 내보내기 양식), `glossary`(약어집 통계), `fields`(약어 분야 목록), `levels`(분야별 기본 풀이 수준 1~3), `presets`(독자별 풀이 수준 묶음), `colors`, `has_sources`(회의록·메일 기록 폴더가 있는지), `kordoc`(HWPX 검증 도구 유무).
+- 응답 키: `model`, `is_owner`(이 요청 계정이 관리자인지 — 화면은 아니면 조직 설정을 잠금), `week`(아래 주 정보), `cats`(키→이름표), `kinds`(키→이름표), `guide`(입력 도움말 `[제목, 예시]` 배열), `orgs`(`{상위조직: [부서…]}`), `templates`(`[{id, name}]` — 내보내기 양식), `glossary`(약어집 통계), `fields`(약어 분야 목록), `levels`(분야별 기본 풀이 수준 1~3), `presets`(독자별 풀이 수준 묶음), `colors`, `has_sources`(회의록·메일 기록 폴더가 있는지), `kordoc`(HWPX 검증 도구 유무).
 
 ### GET api/week?d=<YYYY-MM-DD 또는 YYYY-Www>
 - 응답: `{"key":"2026-W42","mon":"2026-10-12","fri":"2026-10-16","label":"2026. 10. 12.(월) ~ 10. 16.(금)","title":"2026년 10월 2주차"}`. `d` 가 없으면 오늘. 형식 오류는 404.
@@ -134,7 +135,8 @@
 - 요청: `{"profile": {"org","dept","name"}, "week", "items": [<item>], "memo", "carry", "remarks": [...], "unresolved_reason": ""}` — `dept`·`name` 필수, 빈 `text` 항목은 버림.
 - 응답: `{"ok": true, "id": "<해시>", "week": "2026-W42", "path": "reports/2026-W42/<id>.json"}`
 - 오류: `400` 이름·부서 없음/항목 없음. **`409`** 미확인 약어·과제명이 남음: `{"error": "확인되지 않은 약어 2개(…) — …", "unresolved": [{"abbr","kind","sentence",…}]}` → 질문에 답하거나 `unresolved_reason` 에 사유를 넣어 다시 제출(사유는 제출본에 기록).
-- 메모: 같은 org·dept·name·주차는 덮어쓰고 `history` 에 기록이 쌓입니다.
+- 오류(권한): 같은 org·dept·name·주차 보고를 **다른 계정**이 내면 `403`(처음 제출한 계정·owner 만 고침).
+- 메모: 같은 계정이 같은 org·dept·name·주차로 다시 내면 덮어쓰고 `history` 에 기록이 쌓입니다.
 
 ## 엔드포인트 — 취합
 
@@ -148,6 +150,7 @@
  "notes": ["…"], "remarks": ["(<부서>) …"], "merge_suggest": {"<부서>": [ … ]}}
 ```
 - 메모: 서버에 저장도 합니다(같은 주·조직은 덮어씀). 합친 항목의 `src` 는 원래 항목 id 들.
+- 권한: 그 주·소본부 취합본이 이미 있고 처음 취합한 계정·owner 가 아니면 LLM 을 부르기 전에 `data: {"error": "…처음 취합한 사람이나 관리자만 …"}` 로 끝납니다(HTTP 는 200).
 
 ### POST api/compress  (SSE)
 - 요청: `{"agg": <취합본>, "template": "<양식 id>", "model"}`
@@ -156,9 +159,10 @@
 
 ### POST api/agg/save
 - 요청: `{"agg": <취합본>}` (`agg.week`·`agg.org` 로 저장 위치 결정) → `{"ok": true}`
+- 오류: 처음 취합한 계정·owner 가 아니면 `403`.
 
 ### POST api/orgs
-- 요청: `{"orgs": {"<상위조직>": ["부서1", "부서2"] 또는 "부서1,부서2"}}` → 정리된 객체. **전체를 덮어씁니다.**
+- 요청: `{"orgs": {"<상위조직>": ["부서1", "부서2"] 또는 "부서1,부서2"}}` → 정리된 객체. **전체를 덮어씁니다.** **owner 만**(그 밖 `403 {"error": "조직 설정은 관리자만 바꿀 수 있습니다"}`).
 
 ## 엔드포인트 — 문서
 
@@ -194,7 +198,7 @@
 - 응답: `{"inspect": {…HWPX 구조 점검…}, "kordoc": {"valid": true, "msg": "…", "text": "다시 읽은 본문"} 또는 null}`
 
 ### POST api/import
-- 요청: `{"files": [{"name": "보고.hwpx", "b64": "<base64 또는 data URL>"}], "week"}` — 형식 섞어도 됨(hwpx·docx·xlsx·pptx 등), 파일당 30MB 넘으면 건너뜀.
+- 요청: `{"files": [{"name": "보고.hwpx", "b64": "<base64 또는 data URL>"}], "week"}` — 형식 섞어도 됨(hwpx·docx·xlsx·pptx 등), 파일당 30MB 넘으면 건너뜀. 요청 본문 전체가 160MB 를 넘으면(모든 POST 공통) `413 {"error":"요청이 너무 큽니다(최대 160MB)"}`.
 - 응답: `{"files": [{"name","format","method":"embedded|table|form|memo","rows":[{"row","dept","name","item":<item>,"errors":[],"warnings":[],"suggest_project"?}],"abbrs":[{"abbr","full",…,"known"}],"remarks":[],"org","memo","notes":[]}], "asks": [확인 필요한 약어], "week": <주 정보>}`
 - 메모: 저장하지 않습니다. 읽은 항목을 화면에서 확인한 뒤 제출·취합에 씁니다.
 
@@ -220,6 +224,7 @@
   - `alias`: `name`(등록 이름), `alias`(앞으로 이 이름으로 합침)
   - `copy_prev`: `week` — 최근 4주 제출에서 쓴 과제명을 한꺼번에 추가
 - 응답: `api/registry?org=` 와 같은 모양(조직 전체).
+- 권한: `add`·`copy_prev`(새 과제)는 누구나. `update`·`delete`·`restore`·`reorder`(순서가 바뀌는 과제)·`alias`(이미 있는 과제에 별칭을 더하거나 다른 과제를 합쳐 지울 때)는 그 과제를 만든 계정·owner 만, `members` 는 그 실 등록부를 처음 만든 계정·owner 만. 아니면 `403`.
 
 ### POST api/registry/template
 - 요청: `{"org", "dept"(비우면 조직 전체), "fmt":"hwpx|docx|pptx|xlsx", "week", "template", "person", "per_person", "prefill", "preview"}`
@@ -228,10 +233,12 @@
 ### POST api/glossary/save
 - 요청: `{"abbr", "full", "ko", "desc", "field", "note", "editor", "src", "ctx"}` — `abbr` 와 (`full` 또는 `ko`) 필수.
 - 응답: 저장된 약어 행.
+- 권한: 이미 있는 사내 항목은 만든 계정·owner 만 고침(기록 없는 예전 항목은 owner 만). 지운 항목은 누구나 다시 만들 수 있음. 아니면 `403`.
 
 ### POST api/glossary/delete · api/glossary/ignore
 - `delete`: `{"abbr", "editor"}` → `{"ok": true}`
 - `ignore`: `{"abbr", "on": true|false}` → `{"ok": true}` (`true` = 약어 아님으로 표시)
+- 권한: `delete` 는 만든 계정·owner 만. `ignore` 표시는 누구나, 해제(`on:false`)는 표시한 계정·owner 만(기록 없는 예전 것은 owner 만). 아니면 `403`.
 
 ## 흐름 예
 개인 작성 → 제출:
@@ -259,5 +266,5 @@ console.log('미확인 약어', f.headers.get('X-Unresolved'));
 - 질문 카드 진행, 항목 편집(드래그·들여쓰기), 지난 계획 상태 고르기, 압축 뒤 되살리기 버튼은 화면이 `items`·`dropped` 를 직접 고쳐 다시 보냅니다.
 - 내보내기 전 "미확인 약어 N개" 확인 창은 화면이 셉니다(서버는 `X-Unresolved` 헤더로도 알려줌).
 - `api/compress` 와 `api/import` 는 저장하지 않습니다. 저장은 `api/agg/save`·`api/submit` 으로만.
-- 모든 사용자가 같은 저장소를 쓰므로, 새 화면에서 `api/orgs`(전체 덮어쓰기)·`api/registry/op`·`api/glossary/*` 를 부를 때 다른 사람 데이터에 영향이 갑니다.
+- 모든 사용자가 같은 저장소를 쓰므로 다른 사람 데이터는 볼 수 있지만, 고치기·지우기는 만든 계정·owner 만 됩니다(위 권한). `api/orgs` 는 owner 만.
 - `/static/` 경로는 없습니다.

@@ -9,7 +9,7 @@
 |---|---|---|---|---|
 | GET | `api/models` | LLM 모델 이름 목록 | 아니오 | 아니오 |
 | GET | `api/schema` | 연결된 DB 의 테이블·열·FK + 스키마 설명 | 아니오 | 아니오 (DB·설명 공유) |
-| POST | `api/notes` | 스키마 설명 저장(LLM 프롬프트에 들어감) | 아니오 | **공유** |
+| POST | `api/notes` | 스키마 설명 저장(LLM 프롬프트에 들어감) | 아니오 | **공유**(테이블별 만든 사람·owner 만 고침) |
 | POST | `api/ask` | 질문 → SQL 생성·실행 (SSE) | **예 (LLM 1~2회, 수 초~수십 초)** | 예 (기록 저장) |
 | POST | `api/rerun` | 고친 SQL 직접 실행 (LLM 없음) | 아니오 (쿼리 최대 10초) | 예 (기록 저장) |
 | GET | `api/runs` | 내 최근 기록 50개 | 아니오 | 예 |
@@ -57,24 +57,26 @@
 ### GET api/schema
 - 응답:
   ```json
-  {"db": "<DB 경로 또는 접속 URL>", "demo": true, "kind": "sqlite",
+  {"db": "research.db", "demo": true, "kind": "sqlite",
    "tables": [{"name": "논문", "cols": [["id", "INTEGER"], ["과제id", "INTEGER"], ["제목", "TEXT"]], "fks": ["과제id → 연구과제.id"]}],
-   "notes": {"논문": {"_": "발표 논문", "IF": "임팩트 팩터"}}}
+   "notes": {"논문": {"_": "발표 논문", "IF": "임팩트 팩터"}}, "locked": ["논문"]}
   ```
   | 필드 | 설명 |
   |---|---|
-  | `db` | 서버 환경변수 `DB_URL` 그대로(sqlite 파일 경로 또는 `postgresql://…`/`mysql://…`). 화면은 마지막 경로 조각만 보여 줌 |
+  | `db` | DB 이름만: sqlite 는 파일 이름(경로 없음), PostgreSQL/MySQL 은 DB 이름. 사용자·비밀번호·호스트는 내보내지 않음 |
   | `demo` | 동봉 가상 샘플 DB(`sample/research.db`)면 `true` |
   | `kind` | `sqlite`·`postgresql`·`mysql` |
   | `tables[].cols` | `[열 이름, 자료형]` 쌍 배열 |
   | `tables[].fks` | `"열 → 테이블.열"` 문자열(sqlite 만, 나머지는 빈 배열) |
   | `notes` | 스키마 설명 `{테이블: {"_": 테이블 설명, <열>: 열 설명}}` |
+  | `locked` | 이 사용자가 고칠 수 없는 테이블 이름(다른 사람이 쓴 설명). owner 는 항상 빈 배열. 화면은 그 입력칸을 잠근다 |
 - 오류: DB 파일이 없으면 `404 {"error": "없음"}`(FileNotFoundError), 드라이버 없음 등 `500`.
 
 ### POST api/notes
-- 요청: 본문 = notes 객체 그대로 (`{테이블: {"_": "...", "<열>": "..."}}`). **통째로 덮어쓴다**(부분 병합 아님). 지금 화면은 `Content-Type` 없이 보내며 서버도 헤더를 보지 않는다.
+- 요청: 본문 = notes 객체 전체 (`{테이블: {"_": "...", "<열>": "..."}}`). 서버는 저장된 것과 **테이블 단위로 비교**해 바뀐(추가·수정·삭제) 테이블만 권한을 검사한 뒤 통째로 저장한다. 그래서 남의 테이블 설명은 받은 그대로 다시 보내면 된다. 지금 화면은 `Content-Type` 없이 보내며 서버도 헤더를 보지 않는다.
+- 권한: 테이블 설명을 처음 쓴 계정(`X-Agent-User`)이 주인. 주인 또는 owner 만 고치거나 지울 수 있다. 만든 사람 기록이 없는 예전 설명은 owner 만. 주인 기록은 `schema_notes_by.json` 에 따로 두고 응답에 내보내지 않는다.
 - 응답: `{"ok": true}`
-- 오류: JSON 아님 등 `500 {"error": "..."}`
+- 오류: 남의 설명을 바꾸면 `403 {"error": "'논문' 설명은 만든 사람이나 관리자만 고칠 수 있습니다"}`. JSON 아님·형식 틀림은 `400`.
 - 메모: 다음 질문부터 LLM 프롬프트의 스키마 옆에 주석으로 붙는다.
 
 ### POST api/ask
@@ -100,12 +102,12 @@
   | `{"token": "..."}` | LLM 원문 조각(JSON 텍스트) |
   | `{"done": <run>}` | 끝. SQL 실패·답할 수 없는 질문도 `done` 으로 오며 `error` 필드에 사유 |
   | `{"error": "..."}` | LLM 연결 실패, LLM 이 JSON 을 안 냄 등 파이프라인 자체 실패 |
-- 메모: 결과는 성공·실패 모두 사용자 기록에 저장된다. 쿼리 실행 제한 10초(sqlite 만 강제 중단 — 아래 주의).
+- 메모: 결과는 성공·실패 모두 사용자 기록에 저장된다. 쿼리 실행 제한 10초(sqlite·PostgreSQL·MySQL 모두 강제 중단 — 아래 안전 필터).
 
 ### POST api/rerun
 - 요청: `{"sql": "SELECT ...", "chart": {"type": "bar", "x": "부서", "y": "합계"}}` (`chart` 선택)
 - 응답: 결과(run) JSON(스트리밍 아님). 새 `run_id` 로 저장.
-- 오류: 안전 필터 위반·SQL 오류·시간 초과는 모두 `500 {"error": "ValueError: SELECT/WITH 로 시작하는 조회만 허용"}` 식.
+- 오류: 안전 필터 위반·JSON 깨짐은 `400 {"error": "ValueError: SELECT/WITH 로 시작하는 조회만 허용"}` 식. SQL 오류·시간 초과는 `500`. 오류 문장에서 DB 접속 문자열·사용자·호스트·파일 경로는 `***` 로 가려진다.
 - 메모: 차트 종류·축만 바꿔 다시 그릴 때도 화면은 이걸 부른다(쿼리를 다시 실행함).
 
 ### GET api/runs
@@ -123,9 +125,10 @@
 
 ## 안전 필터 (서버가 강제)
 - 주석 제거 후 문장 하나만(`;` 로 여러 문장 불가), `SELECT` 또는 `WITH` 로 시작해야 함.
-- 금지어(단어 단위, 대소문자 무시): `insert update delete drop alter create replace truncate pragma attach detach vacuum grant revoke exec execute copy into outfile load_file`. 열·함수 이름이 이 단어와 같아도 막힌다(예: SQL 함수 `replace()`).
+- 금지어(단어 단위, 대소문자 무시): `insert update delete drop alter create replace truncate pragma attach detach vacuum grant revoke exec execute copy into merge load_file`, 그리고 읽기만 해도 위험한 함수 `set_config pg_read_file pg_read_binary_file pg_ls_dir pg_stat_file lo_import lo_export lo_from_bytea lo_put dblink* pg_terminate_backend pg_cancel_backend pg_reload_conf pg_rotate_logfile pg_sleep* query_to_xml* query_to_json* sleep benchmark get_lock release_lock dumpfile load_extension readfile writefile`. 열·함수 이름이 이 단어와 같아도 막힌다(예: SQL 함수 `replace()`).
 - `LIMIT 숫자` 가 없으면 `LIMIT 500` 을 붙임. 있어도 최대 500행만 가져옴.
-- sqlite 는 읽기 전용(`mode=ro`)으로 연다.
+- 연결 자체도 읽기 전용: sqlite 는 `mode=ro`, PostgreSQL 은 `default_transaction_read_only=on`, MySQL 은 `SET SESSION TRANSACTION READ ONLY`. 그래도 외부 DB 에는 읽기 권한만 있는 계정을 쓰는 것이 가장 안전하다.
+- 10초 제한: sqlite 는 진행 핸들러, PostgreSQL 은 `statement_timeout=10000`, MySQL 은 `max_execution_time`(MariaDB 는 `max_statement_time`) + 시간이 지나면 `KILL QUERY` 보조, PostgreSQL 도 시간이 지나면 연결에서 취소 요청. 넘기면 `쿼리가 10초를 넘겨 중단됨`.
 
 ## 흐름 예
 
@@ -169,7 +172,7 @@ if (j.error) alert(j.error); else chartBox.innerHTML = j.svg || '';
 
 ## 화면만의 것 / 주의
 - 표 그리기, 차트 다크 테마 색 바꾸기(SVG 안 `text/line/path…` 색을 화면이 덮어씀), 이어 묻기 `history` 관리(성공한 문답만 쌓음)는 화면 몫.
-- **스키마 설명(`api/notes`)과 DB 는 모든 사용자 공유**: 설명은 사용자 폴더가 아니라 기본 작업 폴더의 `schema_notes.json` 한 곳에 저장되고, 로그인한 누구나 덮어쓸 수 있다(owner 검사 없음). 질문 기록(`runs/`)만 `X-Agent-User` 별로 나뉜다(`WORKSPACE/u/<id>/runs/`).
-- **`api/schema` 의 `db` 는 `DB_URL` 원문**이다. PostgreSQL/MySQL 을 `postgresql://user:비번@host/db` 로 붙이면 비밀번호가 응답에 그대로 나간다 — 외부 DB 를 연결할 때는 주의(화면에 보여 주지 말 것).
-- 10초 실행 제한은 sqlite 에서만 실제로 쿼리를 끊는다(진행 핸들러). PostgreSQL/MySQL 은 타이머만 돌고 중단 코드가 없다.
+- **스키마 설명(`api/notes`)과 DB 는 모든 사용자 공유**: 설명은 기본 작업 폴더의 `schema_notes.json` 한 곳에 저장되고 누구나 볼 수 있다. 고치기·지우기는 테이블별로 처음 쓴 사람이나 owner 만(위 `api/notes`). 질문 기록(`runs/`)만 `X-Agent-User` 별로 나뉜다(`WORKSPACE/u/<id>/runs/`).
+- `api/schema` 의 `db` 는 DB 이름만 준다(접속 문자열·비밀번호 없음). 오류 문장에서도 접속 정보는 가려진다.
+- PostgreSQL/MySQL 경로(읽기 전용 연결·시간 제한)는 이 서버에 드라이버가 없어 실제 DB 로는 시험하지 못했다(코드 경로만).
 - 기록 삭제 API 는 없다. 정적 파일 경로 없음. 모든 응답에 `X-Author` 헤더.

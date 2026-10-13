@@ -13,8 +13,8 @@ HWP·HWPX·PDF·DOCX·XLSX·이미지 문서를 kordoc 으로 읽어 로컬 LLM 
 | POST | `api/polish_text` | 글(마크다운)만 윤문, JSON 한 번에 | 예 — LLM | 아니오(저장 안 함) |
 | GET | `api/forms` | 등록된 HWPX 양식 목록 | 아니오 | **공유** |
 | POST | `api/forms` | 양식 등록(분석) | 조금(kordoc, LLM 없음) | **공유** |
-| POST | `api/forms/delete` | 양식 삭제 | 아니오 | **공유** |
-| POST | `api/forms/kind` | 양식 종류(fill/body) 바꾸기 | 아니오 | **공유** |
+| POST | `api/forms/delete` | 양식 삭제 | 아니오 | **공유**(만든 사람·owner 만) |
+| POST | `api/forms/kind` | 양식 종류(fill/body) 바꾸기 | 아니오 | **공유**(만든 사람·owner 만) |
 | GET | 그 밖의 모든 경로 | 화면(`ui.html`) | 아니오 | 아니오 |
 
 ## 엔드포인트
@@ -53,7 +53,7 @@ HWP·HWPX·PDF·DOCX·XLSX·이미지 문서를 kordoc 으로 읽어 로컬 LLM 
 | `question` | string | 조건 | 요청 문장. 파일이 없으면 필수(둘 다 없으면 400). polish 에선 안 씀 |
 | `file_name` | string | 아니오 | 올린 문서 이름(확장자로 형식 판단) |
 | `file_b64` | string | 아니오 | 문서 내용 base64(`data:` 접두어 없이). 확장자 `.hwp .hwpx .hml .pdf .docx .xlsx .xls .png .jpg .jpeg .webp .md .txt` |
-| `from_run` | string | 아니오 | 이전 실행 id. 그 실행의 결과 HWPX/HWP(없으면 올렸던 원본)를 문서로 씀 — 화면의 "윤문하기". `file_b64` 보다 우선 |
+| `from_run` | string | 아니오 | 이전 실행 id. 그 실행의 결과 HWPX/HWP(없으면 올렸던 원본)를 문서로 씀 — 화면의 "윤문하기". `file_b64` 와 함께 보내면 400 |
 | `model` | string | 아니오 | 비우면 서버 기본 |
 | `preset` | string | 아니오 | draft 서식: `보고서`(기본)·`기안문`·`간이기안문`·`계획서`·`통지`·`회의록`·`개조식`·`업무보고`·`서울방침`·`보도자료`, 또는 `form:<양식id>`(등록 양식). 모르는 값은 `보고서` |
 | `strength` | string | 아니오 | polish 강도 `light`·`standard`(기본)·`strong` |
@@ -68,8 +68,8 @@ HWP·HWPX·PDF·DOCX·XLSX·이미지 문서를 kordoc 으로 읽어 로컬 LLM 
 - 결과 객체 공통 필드: `run_id`, `task`, `model`, `question`, `file`(원본 이름 또는 null), `truncated`(문서가 `MAX_CHARS`=12000자에서 잘렸는지), `output`(답/초안 마크다운, polish 는 윤문된 마크다운), `source`(파싱한 원문 마크다운), `hwpx`(내려받을 결과 파일 이름 또는 null), `valid`(kordoc validate 통과 여부), `lint`(표기법 검수 JSON, 실패 시 `{"raw": ...}`), `preset`, `log`, `ts`
   - draft + 기안문·간이기안문·양식: `fields`(채운 칸 값), 양식이면 `form`(양식 id)
   - polish 추가: `changes`(`[{n, before, after, ratio, applied}]`), `rejected`(`[{n, before, after, reason}]` — 숫자·고유 표기 변경·길이 과다 등으로 원문 유지), `units`(조각 수), `strength`, `mode`(`patch`=HWP/HWPX 원본 서식 유지, `generate`=새 HWPX), `applied`(patch 일 때 실제 반영 개수)
-- 오류(스트림 시작 전, HTTP 400 JSON): `{"error": "문서나 요청 중 하나는 있어야 합니다"}`, 양식이 HWPX 가 아님, `from_run` 이 잘못되었거나 결과 없음
-- 메모: 요약·질문은 LLM 1콜(수십 초~수 분). 초안은 + lint·generate·validate. 윤문은 조각 2,500자 묶음마다 1콜(2개 병렬)이라 문서 길이에 비례. 업로드 크기 제한 코드에 없음(본문 전체를 메모리로 읽음 — 큰 파일은 피할 것). 진행률 숫자는 polish 묶음 수만.
+- 오류(스트림 시작 전, HTTP JSON): 400 `{"error": "문서나 요청 중 하나는 있어야 합니다"}`, `file_b64`·`from_run` 을 같이 보냄, 양식이 HWPX 가 아님·분석 실패, `from_run` 이 잘못되었거나 결과 없음, 깨진 JSON. 413 파일(문서·양식 각각) 50MB 초과 또는 요청 본문 150MB 초과. 이 경우 올린 파일은 서버에 남지 않음(`_upload` 정리).
+- 메모: 요약·질문은 LLM 1콜(수십 초~수 분). 초안은 + lint·generate·validate. 윤문은 조각 2,500자 묶음마다 1콜(2개 병렬)이라 문서 길이에 비례. 업로드 크기 상한: 파일 하나 50MB(서버 환경변수 `MAX_UPLOAD_MB`), 요청 본문은 그 3배. 진행률 숫자는 polish 묶음 수만.
 
 ### POST api/polish_text
 - 다른 도구(writer·notebook 등)가 부르는 글 윤문. 파일·기록 없음.
@@ -87,20 +87,23 @@ HWP·HWPX·PDF·DOCX·XLSX·이미지 문서를 kordoc 으로 읽어 로컬 LLM 
 - 응답: 양식 메타 배열
 ```json
 [{"id": "a443508d", "name": "국문 이력서 양식", "kind": "fill", "roles": {"table": 3},
-  "front": [{"i": 0, "text": "..."}], "fields": [{"label": "성명", "hint": ""}], "boxes": ["사유"], "blocks": 12}]
+  "front": [{"i": 0, "text": "..."}], "fields": [{"label": "성명", "hint": ""}], "boxes": ["사유"], "blocks": 12, "can_edit": false}]
 ```
+- `can_edit`: 이 사용자가 지우거나 종류를 바꿀 수 있는지(만든 계정 또는 owner). 만든 계정 자체는 내보내지 않음. 화면은 `false` 면 삭제 버튼을 숨기고 종류 칸을 잠금
 - `kind`: `fill`(칸 채우기형) / `body`(본문 작성형, □○- 같은 단계 기호가 3개 이상인 양식)
 
 ### POST api/forms
 - 요청: `{"name": "표시 이름(선택, 60자)", "file_name": "양식.hwpx", "file_b64": "<base64>"}`
 - 응답: 새 양식 메타(위 모양)
-- 오류: 400 `{"error": "양식은 HWPX 파일만 받습니다(.hwp). 한글에서 ..."}` / `"HWPX 문서가 아닙니다. ..."`
+- 오류: 400 `{"error": "양식은 HWPX 파일만 받습니다(.hwp). 한글에서 ..."}` / `"HWPX 문서가 아닙니다. ..."`, 413 파일 50MB 초과
+- 메모: 올린 계정(`X-Agent-User`)이 양식의 주인이 됨. 분석이 실패하면 올린 파일은 지워짐.
 
 ### POST api/forms/delete
 - 요청 `{"id": "a443508d"}` → 응답 `{"ok": true}`. 잘못된 id → 400
+- 권한: 만든 계정 또는 owner 만. 만든 사람 기록이 없는 예전 양식은 owner 만. 아니면 403 `{"error": "이 양식은 만든 사람이나 관리자만 지울 수 있습니다"}`
 
 ### POST api/forms/kind
-- 요청 `{"id": "a443508d", "kind": "fill"|"body"}` → 바뀐 메타. 잘못된 값 → 400 `{"error": "kind"}`
+- 요청 `{"id": "a443508d", "kind": "fill"|"body"}` → 바뀐 메타. 잘못된 값 → 400 `{"error": "kind"}`. 권한은 삭제와 같음(아니면 403)
 
 ## 흐름 예
 ```js
@@ -121,7 +124,7 @@ await fetch(base + 'api/run', {method: 'POST', headers: {'Content-Type': 'applic
 ```
 
 ## 화면만의 것 / 주의
-- **양식(`api/forms`)은 모든 사용자가 함께 씀**(사용자별 폴더 아님). 지우면 모두에게서 사라짐. 실행 기록·결과 파일은 사용자별.
+- **양식(`api/forms`)은 모든 사용자가 함께 씀**(사용자별 폴더 아님). 누구나 쓰고 올릴 수 있지만, 지우기·종류 바꾸기는 올린 사람이나 owner 만(지우면 모두에게서 사라짐). 실행 기록·결과 파일은 사용자별.
 - 경로 비교가 정확히 일치해야 함 → `api/runs?x=1` 처럼 쿼리를 붙이면 화면 HTML 이 돌아옴.
 - 화면이 직접 하는 것: 파일 → base64 변환(FileReader), 결과 탭(표기법·바뀐 곳·원문) 그리기. 서버는 계산된 값만 줌.
 - 기안문·간이기안문의 기관명·결재라인 같은 고정 값은 서버 설정 파일(`gian_defaults.json`)에서 채움 — API 로 바꿀 수 없음.
