@@ -1,0 +1,889 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "KAERI AI Agent Portal API — image-local",
+  "version": "2026.10.13",
+  "summary": "그림 생성 — 말로 그리기(Qwen-Image)·말로 고치기(Qwen-Image-Edit). 문서: docs/api/image-local.md",
+  "description": "© 2026 gggg8657 · 내부 시험용 · 배포용 아님\n\nKAERI AI 에이전트 포털과 도구들의 HTTP API(도구 수는 summary 참고). 근거: `docs/api/README.md` 와 `docs/api/<도구>.md`(문서와 실제 응답이 다르면 응답이 맞음 — 알려 주면 고침).\n\n## 연결 방법 요약\n- **같은 출처 전제** (`servers: [{url: \"/\"}]`). 포털은 CORS 헤더를 내보내지 않고, 로그인 쿠키 `agsid` 는 HttpOnly·SameSite=Lax 입니다.\n  개발할 때는 개발 서버 프록시(Vite `server.proxy`, Next.js `rewrites`)로 `/api`·`/t`·`/logout` 을 포털로 넘기세요 — 예시는 README \"3. 새 화면을 연결하는 방법\".\n- **로그인**: `POST /api/login` → 쿠키 `agsid` 가 붙음. 이후 `fetch(…, {credentials: \"same-origin\"})`(기본값). JS 에서 쿠키를 읽을 수 없음.\n  로그인 안 된 API 요청은 401 `{\"error\": \"로그인이 필요합니다\", \"login\": \"/login\"}`.\n- **도구 경로**: 도구 문서의 `api/xxx` 는 포털에서 `/t/<도구 dir>/api/xxx`. 포털이 `X-Agent-User` 를 붙여 사용자별로 저장(화면이 보낸 `X-Agent-User` 는 지워짐).\n- **도구가 꺼져 있으면 502** → `POST /api/start {\"dir\": \"<도구>\"}` 뒤 다시 시도.\n- **오류 모양**: 대부분 `{\"error\": \"한국어 설명\"}`. 예외(예: tts-local 의 POST 는 OpenAI 모양 `{\"error\": {\"message\", \"type\"}}`)는 해당 operation 에 그대로 적음.\n- **스트리밍**: `text/event-stream`(SSE) 또는 `application/x-ndjson` 응답은 이벤트 목록을 `x-stream-events` 확장에 둠. **도중 오류도 HTTP 200 으로 오고 스트림 안 `error` 이벤트로만 옴.** 포털은 버퍼링 없이 흘림(최대 1시간).\n- **확장 필드**: `x-permission`(admin 관리자 · dept-head 부서장 · creator 만든 사람 · self 본인), `x-shared-data`(여러 사람이 같이 보는 데이터), `x-gpu`·`x-llm`·`x-long-running`(GPU·LLM 사용, 오래 걸림 — 버튼 연타 막기), `x-stream-events`.\n- **도구 태그 확장**(등록용): `x-tool-id`(dir 에서 -local 뺀 것) · `x-name` · `x-description` · `x-kind`(LLM 을 쓰면 agent, 아니면 tool) · `x-category` · `x-entry`(/t/<dir>/) · `x-health-path`(가벼운 GET, 200) · `x-long-running` · `x-docs-input`(text·chunks·file·none) · `x-external-network`(외부 인터넷 호출 여부) · `x-response-style`(sse·json·file·polling). 판단 근거가 애매한 곳은 `x-<항목>-note`.\n- 스키마 description 에 \"코드 확인 필요\" 라고 적힌 곳은 문서·코드로 모양을 확정하지 못한 부분입니다(`additionalProperties: true`).\n\nREADME: `docs/api/README.md` (OpenAPI 절 — 타입 생성 명령).",
+  "contact": {
+   "name": "gggg8657",
+   "url": "https://github.com/gggg8657"
+  },
+  "license": {
+   "name": "All rights reserved (portal) — 도구별 라이선스는 각 도구 저장소 LICENSE",
+   "identifier": "LicenseRef-AllRightsReserved"
+  },
+  "x-tool-id": "image",
+  "x-name": "그림 생성",
+  "x-description": "말로 그리고 고치는 그림",
+  "x-kind": "agent",
+  "x-kind-note": "그림은 GPU 확산 모델(worker.py), LLM 은 generate 의 enhance(프롬프트 다듬기)에만",
+  "x-category": "기타",
+  "x-category-note": "README 분류: 그림",
+  "x-entry": "/t/image-local/",
+  "x-health-path": "/t/image-local/api/status",
+  "x-health-path-note": "api/health 없음. api/status 는 worker 를 띄우지 않고 2초 핑만 함",
+  "x-long-running": true,
+  "x-docs-input": "file",
+  "x-docs-input-note": "문서가 아닌 그림 업로드(api/edit uploads base64). 글 프롬프트가 주 입력",
+  "x-external-network": false,
+  "x-external-network-note": "코드에 외부 URL 호출 없음. 단 worker.py 의 from_pretrained 가 모델 캐시가 없으면 Hugging Face 에서 내려받을 수 있음",
+  "x-response-style": "sse",
+  "x-response-style-note": "결과 그림은 api/runs/<id>/<file> PNG"
+ },
+ "servers": [
+  {
+   "url": "/",
+   "description": "포털과 같은 출처(개발 때는 개발 서버 프록시로)"
+  }
+ ],
+ "security": [
+  {
+   "cookieAuth": []
+  }
+ ],
+ "tags": [
+  {
+   "name": "image-local",
+   "description": "그림 생성 — 말로 그리기(Qwen-Image)·말로 고치기(Qwen-Image-Edit). 문서: docs/api/image-local.md",
+   "x-tool-id": "image",
+   "x-name": "그림 생성",
+   "x-description": "말로 그리고 고치는 그림",
+   "x-kind": "agent",
+   "x-kind-note": "그림은 GPU 확산 모델(worker.py), LLM 은 generate 의 enhance(프롬프트 다듬기)에만",
+   "x-category": "기타",
+   "x-category-note": "README 분류: 그림",
+   "x-entry": "/t/image-local/",
+   "x-health-path": "/t/image-local/api/status",
+   "x-health-path-note": "api/health 없음. api/status 는 worker 를 띄우지 않고 2초 핑만 함",
+   "x-long-running": true,
+   "x-docs-input": "file",
+   "x-docs-input-note": "문서가 아닌 그림 업로드(api/edit uploads base64). 글 프롬프트가 주 입력",
+   "x-external-network": false,
+   "x-external-network-note": "코드에 외부 URL 호출 없음. 단 worker.py 의 from_pretrained 가 모델 캐시가 없으면 Hugging Face 에서 내려받을 수 있음",
+   "x-response-style": "sse",
+   "x-response-style-note": "결과 그림은 api/runs/<id>/<file> PNG"
+  }
+ ],
+ "paths": {
+  "/t/image-local/api/status": {
+   "get": {
+    "tags": [
+     "image-local"
+    ],
+    "operationId": "imageStatus",
+    "summary": "GPU 작업 프로세스 상태 + 스타일·비율·품질 목록",
+    "description": "비율별 실제 크기(서버 고정): 1:1=1328×1328, 4:3=1472×1104, 3:4=1104×1472, 16:9=1664×928, 9:16=928×1664, 3:2=1584×1056, 2:3=1056×1584",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ImageStatus"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/image-local/api/runs": {
+   "get": {
+    "tags": [
+     "image-local"
+    ],
+    "operationId": "imageRuns",
+    "summary": "내 그림 기록(끝난 것만, 최근 80개 폴더, 최근 수정순)",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/ImageRun"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/image-local/api/runs/{run_id}/{file}": {
+   "get": {
+    "tags": [
+     "image-local"
+    ],
+    "operationId": "imageFile",
+    "summary": "그림 파일(PNG)",
+    "description": "파일이 없으면 404 {\"error\":\"없음\"}. 파일 이름 형식이 틀린 경로는 404 가 아니라 화면 HTML(200, text/html) — Content-Type 으로 구분.",
+    "parameters": [
+     {
+      "name": "run_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{6}$",
+       "description": "YYYY-MM-DD-xxxxxx",
+       "example": "2026-10-07-24c0fb"
+      }
+     },
+     {
+      "name": "file",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^(img|src)_\\d\\.png$"
+      },
+      "description": "img_0.png~img_3.png(결과) · src_0.png~src_2.png(고치기 원본)"
+     },
+     {
+      "name": "download",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string"
+      },
+      "description": "있으면(?download=1) 첨부로 받기"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "PNG 바이트. ?download 가 있으면 Content-Disposition 붙음",
+      "content": {
+       "image/png": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       }
+      },
+      "headers": {
+       "Content-Disposition": {
+        "schema": {
+         "type": "string"
+        },
+        "description": "download 쿼리가 있을 때만: attachment; filename*=UTF-8''<run_id>_<파일>"
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/image-local/api/generate": {
+   "post": {
+    "tags": [
+     "image-local"
+    ],
+    "operationId": "imageGenerate",
+    "summary": "글 → 그림 (SSE)",
+    "description": "SSE(상태 코드 항상 200). 이벤트(data: <JSON>): {stage,msg,run_id?,final_prompt?} 단계 · {step,total,image,run_id} 진행 · {saved,path,run_id} 한 장 저장 · {done:<ImageRun>} 완료 · {error} 오류(스트림 끝, 실패한 묶음 폴더는 지워짐).\n도중 오류도 HTTP 200 으로 오고 스트림 안 error 이벤트로만 옴. POST 라 EventSource 대신 fetch + body.getReader() 로 읽음.\nGPU 를 씀: 보통 품질 한 장 약 25초, 모델이 안 올라 있으면 30초~1분 더. 동시 요청은 잠금으로 하나씩(대기 순번 알림 없음). 서버 시간 제한 2시간.\n선택적으로 LLM(enhance) 사용. 본문이 JSON 객체가 아니면 스트림 전에 400 {\"error\":\"잘못된 요청\"}.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ImageGenerateRequest"
+       }
+      }
+     }
+    },
+    "x-gpu": true,
+    "x-llm": true,
+    "x-long-running": true,
+    "responses": {
+     "200": {
+      "description": "SSE — 이벤트는 description 참고",
+      "content": {
+       "text/event-stream": {
+        "schema": {
+         "type": "string",
+         "description": "data: <JSON>\\n\\n 이 이어지는 스트림 (이벤트 이름 줄 없음)"
+        },
+        "x-stream-events": [
+         {
+          "name": "stage",
+          "schema": {
+           "$ref": "#/components/schemas/ImageStageEvent"
+          }
+         },
+         {
+          "name": "progress",
+          "schema": {
+           "$ref": "#/components/schemas/ImageProgressEvent"
+          }
+         },
+         {
+          "name": "saved",
+          "schema": {
+           "$ref": "#/components/schemas/ImageSavedEvent"
+          }
+         },
+         {
+          "name": "done",
+          "schema": {
+           "$ref": "#/components/schemas/ImageDoneEvent"
+          }
+         },
+         {
+          "name": "error",
+          "schema": {
+           "$ref": "#/components/schemas/ImageErrorEvent"
+          }
+         }
+        ]
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/image-local/api/edit": {
+   "post": {
+    "tags": [
+     "image-local"
+    ],
+    "operationId": "imageEdit",
+    "summary": "그림 + 지시 → 고친 그림 (SSE)",
+    "description": "SSE(상태 코드 항상 200). 이벤트(data: <JSON>): {stage,msg,run_id?,final_prompt?} 단계 · {step,total,image,run_id} 진행 · {saved,path,run_id} 한 장 저장 · {done:<ImageRun>} 완료 · {error} 오류(스트림 끝, 실패한 묶음 폴더는 지워짐).\n도중 오류도 HTTP 200 으로 오고 스트림 안 error 이벤트로만 옴. POST 라 EventSource 대신 fetch + body.getReader() 로 읽음.\nGPU 를 씀: 보통 품질 한 장 약 25초, 모델이 안 올라 있으면 30초~1분 더. 동시 요청은 잠금으로 하나씩(대기 순번 알림 없음). 서버 시간 제한 2시간.\n결과는 약 100만 화소. 업로드는 JSON 안 base64(크기 제한은 코드에 없음 — 본문 전체를 한 번에 읽음). 오류 error 이벤트 예: '잘못된 그림 경로'·'없는 그림'·'그림 파일(png·jpg·webp)만'·'고칠 그림을 올리거나 갤러리에서 고르세요'·'어떻게 고칠지 써 주세요'.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ImageEditRequest"
+       }
+      }
+     }
+    },
+    "x-gpu": true,
+    "x-long-running": true,
+    "responses": {
+     "200": {
+      "description": "SSE — generate 와 같은 형식(prompt 단계·final_prompt 없음)",
+      "content": {
+       "text/event-stream": {
+        "schema": {
+         "type": "string",
+         "description": "data: <JSON>\\n\\n 이 이어지는 스트림 (이벤트 이름 줄 없음)"
+        },
+        "x-stream-events": [
+         {
+          "name": "stage",
+          "schema": {
+           "$ref": "#/components/schemas/ImageStageEvent"
+          }
+         },
+         {
+          "name": "progress",
+          "schema": {
+           "$ref": "#/components/schemas/ImageProgressEvent"
+          }
+         },
+         {
+          "name": "saved",
+          "schema": {
+           "$ref": "#/components/schemas/ImageSavedEvent"
+          }
+         },
+         {
+          "name": "done",
+          "schema": {
+           "$ref": "#/components/schemas/ImageDoneEvent"
+          }
+         },
+         {
+          "name": "error",
+          "schema": {
+           "$ref": "#/components/schemas/ImageErrorEvent"
+          }
+         }
+        ]
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/image-local/api/delete": {
+   "post": {
+    "tags": [
+     "image-local"
+    ],
+    "operationId": "imageDelete",
+    "summary": "그림 묶음 하나를 휴지통(.trash/)으로",
+    "description": "폴더를 지우지 않고 .trash/ 로 옮김. 400 {\"error\":\"잘못된 ID\"}(형식) · {\"error\":\"없는 그림\"}.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "run_id": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{6}$",
+          "description": "YYYY-MM-DD-xxxxxx",
+          "example": "2026-10-07-24c0fb"
+         }
+        },
+        "required": [
+         "run_id"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ok"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "securitySchemes": {
+   "cookieAuth": {
+    "type": "apiKey",
+    "in": "cookie",
+    "name": "agsid",
+    "description": "POST /api/login 이 주는 세션 쿠키(HttpOnly, SameSite=Lax). 같은 출처 fetch 면 브라우저가 자동으로 붙임. 서버 안(127.0.0.1)에서 쿠키 없이 부르면 서버 주인(관리자)으로 처리."
+   }
+  },
+  "schemas": {
+   "Error": {
+    "type": "object",
+    "required": [
+     "error"
+    ],
+    "properties": {
+     "error": {
+      "type": "string",
+      "description": "사람이 읽을 수 있는 한국어 설명"
+     }
+    }
+   },
+   "Unauthorized": {
+    "type": "object",
+    "required": [
+     "error",
+     "login"
+    ],
+    "properties": {
+     "error": {
+      "type": "string",
+      "examples": [
+       "로그인이 필요합니다"
+      ]
+     },
+     "login": {
+      "type": "string",
+      "const": "/login"
+     }
+    }
+   },
+   "Ok": {
+    "type": "object",
+    "required": [
+     "ok"
+    ],
+    "properties": {
+     "ok": {
+      "type": "boolean"
+     }
+    }
+   },
+   "ImageStatus": {
+    "type": "object",
+    "properties": {
+     "worker": {
+      "oneOf": [
+       {
+        "type": "null"
+       },
+       {
+        "type": "object",
+        "properties": {
+         "ok": {
+          "type": "boolean"
+         },
+         "device": {
+          "type": "string",
+          "description": "어느 GPU 인지 설명(안 올렸으면 '아직 안 올림')"
+         },
+         "loaded": {
+          "type": [
+           "string",
+           "null"
+          ],
+          "enum": [
+           "generate",
+           "edit",
+           null
+          ]
+         },
+         "mode": {
+          "type": [
+           "string",
+           "null"
+          ]
+         }
+        },
+        "required": [
+         "ok",
+         "device",
+         "loaded"
+        ]
+       }
+      ],
+      "description": "GPU 작업 프로세스. 꺼져 있으면 null(처음 그릴 때 자동으로 켜짐)"
+     },
+     "styles": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "키 → 표시 이름(none, photo, illust, 3d, anime, watercolor, poster, logo, product). 요청엔 키"
+     },
+     "ratios": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "enum": [
+        "1:1",
+        "4:3",
+        "3:4",
+        "16:9",
+        "9:16",
+        "3:2",
+        "2:3"
+       ]
+      }
+     },
+     "quality": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "fast·normal·high → 표시 이름"
+     }
+    },
+    "required": [
+     "worker",
+     "styles",
+     "ratios",
+     "quality"
+    ]
+   },
+   "ImageRun": {
+    "type": "object",
+    "properties": {
+     "run_id": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{6}$",
+      "description": "YYYY-MM-DD-xxxxxx",
+      "example": "2026-10-07-24c0fb"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "generate",
+       "edit"
+      ]
+     },
+     "prompt": {
+      "type": "string"
+     },
+     "final_prompt": {
+      "type": "string",
+      "description": "그림 모델에 실제로 보낸 문장"
+     },
+     "negative": {
+      "type": "string"
+     },
+     "style": {
+      "type": "string",
+      "description": "generate 만"
+     },
+     "ratio": {
+      "type": "string",
+      "description": "generate 만"
+     },
+     "quality": {
+      "type": "string"
+     },
+     "seed": {
+      "type": "integer"
+     },
+     "n": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4
+     },
+     "sources": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "pattern": "^src_\\d\\.png$"
+      },
+      "description": "edit 만 — 원본 사본 파일 이름"
+     },
+     "ts": {
+      "type": "string"
+     },
+     "images": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "pattern": "^img_\\d\\.png$"
+      }
+     }
+    },
+    "required": [
+     "run_id",
+     "kind",
+     "prompt",
+     "ts",
+     "images"
+    ]
+   },
+   "ImageGenerateRequest": {
+    "type": "object",
+    "properties": {
+     "prompt": {
+      "type": "string",
+      "description": "그릴 내용(한국어 가능). 그림 속 글자는 따옴표로"
+     },
+     "style": {
+      "type": "string",
+      "default": "none",
+      "description": "api/status styles 키. 모르는 값이면 none"
+     },
+     "ratio": {
+      "type": "string",
+      "enum": [
+       "1:1",
+       "4:3",
+       "3:4",
+       "16:9",
+       "9:16",
+       "3:2",
+       "2:3"
+      ],
+      "default": "1:1"
+     },
+     "n": {
+      "type": [
+       "integer",
+       "string"
+      ],
+      "description": "장수 1~4(범위 밖은 잘림)",
+      "default": 1
+     },
+     "quality": {
+      "type": "string",
+      "enum": [
+       "fast",
+       "normal",
+       "high"
+      ],
+      "default": "normal",
+      "description": "단계 수 fast 20 / normal 30 / high 50"
+     },
+     "seed": {
+      "type": [
+       "integer",
+       "string"
+      ],
+      "description": "정수면 고정, 빈 문자열이면 무작위"
+     },
+     "negative": {
+      "type": "string",
+      "description": "빼고 싶은 것(서버가 안전 네거티브를 항상 덧붙임)"
+     },
+     "enhance": {
+      "type": "boolean",
+      "default": true,
+      "description": "LLM 으로 영어 그림 프롬프트로 다듬기(실패하면 원문 그대로)"
+     }
+    },
+    "required": [
+     "prompt"
+    ]
+   },
+   "ImageUpload": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "pattern": "(?i)\\.(png|jpe?g|webp)$",
+      "description": ".png·.jpg·.jpeg·.webp 로 끝나야 함"
+     },
+     "b64": {
+      "type": "string",
+      "contentEncoding": "base64",
+      "description": "data URL 머리 없는 순수 base64"
+     }
+    },
+    "required": [
+     "name",
+     "b64"
+    ]
+   },
+   "ImageEditRequest": {
+    "type": "object",
+    "properties": {
+     "instruction": {
+      "type": "string",
+      "description": "어떻게 고칠지(LLM 다듬기 없이 그대로 모델에)"
+     },
+     "refs": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "pattern": "^\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{6}/(img|src)_\\d\\.png$"
+      },
+      "description": "갤러리 그림 '<run_id>/img_0.png'"
+     },
+     "uploads": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/ImageUpload"
+      },
+      "description": "새 그림. refs 먼저, 그다음 uploads 순서로 합쳐 앞의 3장까지만 씀"
+     },
+     "n": {
+      "type": [
+       "integer",
+       "string"
+      ],
+      "description": "장수 1~4(범위 밖은 잘림)",
+      "default": 1
+     },
+     "quality": {
+      "type": "string",
+      "enum": [
+       "fast",
+       "normal",
+       "high"
+      ],
+      "default": "normal",
+      "description": "단계 수 fast 20 / normal 30 / high 50"
+     },
+     "seed": {
+      "type": [
+       "integer",
+       "string"
+      ],
+      "description": "정수면 고정, 빈 문자열이면 무작위"
+     },
+     "negative": {
+      "type": "string"
+     }
+    },
+    "description": "refs·uploads 중 하나 이상 필요",
+    "required": [
+     "instruction"
+    ]
+   },
+   "ImageStageEvent": {
+    "type": "object",
+    "properties": {
+     "stage": {
+      "type": "string",
+      "enum": [
+       "worker",
+       "prompt",
+       "draw",
+       "load"
+      ]
+     },
+     "msg": {
+      "type": "string"
+     },
+     "run_id": {
+      "type": "string",
+      "description": "draw 시작 때 확정"
+     },
+     "final_prompt": {
+      "type": "string",
+      "description": "draw 시작 때(generate 만)"
+     }
+    },
+    "required": [
+     "stage",
+     "msg"
+    ]
+   },
+   "ImageProgressEvent": {
+    "type": "object",
+    "properties": {
+     "step": {
+      "type": "integer"
+     },
+     "total": {
+      "type": "integer"
+     },
+     "image": {
+      "type": "integer",
+      "description": "0부터 몇 번째 장"
+     },
+     "run_id": {
+      "type": "string"
+     }
+    },
+    "description": "전체 진행률 = (image + step/total) / n",
+    "required": [
+     "step",
+     "total"
+    ]
+   },
+   "ImageSavedEvent": {
+    "type": "object",
+    "properties": {
+     "saved": {
+      "type": "integer",
+      "description": "장 번호"
+     },
+     "path": {
+      "type": "string",
+      "description": "파일 이름만(img_N.png)"
+     },
+     "run_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "saved",
+     "path",
+     "run_id"
+    ]
+   },
+   "ImageDoneEvent": {
+    "type": "object",
+    "properties": {
+     "done": {
+      "$ref": "#/components/schemas/ImageRun"
+     }
+    },
+    "required": [
+     "done"
+    ]
+   },
+   "ImageErrorEvent": {
+    "type": "object",
+    "properties": {
+     "error": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "error"
+    ]
+   }
+  },
+  "responses": {
+   "BadRequest": {
+    "description": "입력이 잘못됨(본문이 JSON 객체가 아님, 필수 값 없음 등)",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "Unauthorized": {
+    "description": "로그인 필요 — /login 으로",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Unauthorized"
+      }
+     }
+    }
+   },
+   "NotFound": {
+    "description": "없는 경로·도구·항목",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "BadGateway": {
+    "description": "도구가 꺼져 있음(응답 없음) → POST /api/start {\"dir\": \"<도구>\"} 로 켠 뒤 다시 시도",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   }
+  }
+ }
+}

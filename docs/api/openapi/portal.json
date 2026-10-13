@@ -1,0 +1,2199 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "KAERI AI Agent Portal API — 포털",
+  "version": "2026.10.13",
+  "summary": "포털 자체 API(로그인·도구 목록·계정·승인·관리)",
+  "description": "© 2026 gggg8657 · 내부 시험용 · 배포용 아님\n\nKAERI AI 에이전트 포털과 도구들의 HTTP API(도구 수는 summary 참고). 근거: `docs/api/README.md` 와 `docs/api/<도구>.md`(문서와 실제 응답이 다르면 응답이 맞음 — 알려 주면 고침).\n\n## 연결 방법 요약\n- **같은 출처 전제** (`servers: [{url: \"/\"}]`). 포털은 CORS 헤더를 내보내지 않고, 로그인 쿠키 `agsid` 는 HttpOnly·SameSite=Lax 입니다.\n  개발할 때는 개발 서버 프록시(Vite `server.proxy`, Next.js `rewrites`)로 `/api`·`/t`·`/logout` 을 포털로 넘기세요 — 예시는 README \"3. 새 화면을 연결하는 방법\".\n- **로그인**: `POST /api/login` → 쿠키 `agsid` 가 붙음. 이후 `fetch(…, {credentials: \"same-origin\"})`(기본값). JS 에서 쿠키를 읽을 수 없음.\n  로그인 안 된 API 요청은 401 `{\"error\": \"로그인이 필요합니다\", \"login\": \"/login\"}`.\n- **도구 경로**: 도구 문서의 `api/xxx` 는 포털에서 `/t/<도구 dir>/api/xxx`. 포털이 `X-Agent-User` 를 붙여 사용자별로 저장(화면이 보낸 `X-Agent-User` 는 지워짐).\n- **도구가 꺼져 있으면 502** → `POST /api/start {\"dir\": \"<도구>\"}` 뒤 다시 시도.\n- **오류 모양**: 대부분 `{\"error\": \"한국어 설명\"}`. 예외(예: tts-local 의 POST 는 OpenAI 모양 `{\"error\": {\"message\", \"type\"}}`)는 해당 operation 에 그대로 적음.\n- **스트리밍**: `text/event-stream`(SSE) 또는 `application/x-ndjson` 응답은 이벤트 목록을 `x-stream-events` 확장에 둠. **도중 오류도 HTTP 200 으로 오고 스트림 안 `error` 이벤트로만 옴.** 포털은 버퍼링 없이 흘림(최대 1시간).\n- **확장 필드**: `x-permission`(admin 관리자 · dept-head 부서장 · creator 만든 사람 · self 본인), `x-shared-data`(여러 사람이 같이 보는 데이터), `x-gpu`·`x-llm`·`x-long-running`(GPU·LLM 사용, 오래 걸림 — 버튼 연타 막기), `x-stream-events`.\n- **도구 태그 확장**(등록용): `x-tool-id`(dir 에서 -local 뺀 것) · `x-name` · `x-description` · `x-kind`(LLM 을 쓰면 agent, 아니면 tool) · `x-category` · `x-entry`(/t/<dir>/) · `x-health-path`(가벼운 GET, 200) · `x-long-running` · `x-docs-input`(text·chunks·file·none) · `x-external-network`(외부 인터넷 호출 여부) · `x-response-style`(sse·json·file·polling). 판단 근거가 애매한 곳은 `x-<항목>-note`.\n- 스키마 description 에 \"코드 확인 필요\" 라고 적힌 곳은 문서·코드로 모양을 확정하지 못한 부분입니다(`additionalProperties: true`).\n\nREADME: `docs/api/README.md` (OpenAPI 절 — 타입 생성 명령).",
+  "contact": {
+   "name": "gggg8657",
+   "url": "https://github.com/gggg8657"
+  },
+  "license": {
+   "name": "All rights reserved (portal) — 도구별 라이선스는 각 도구 저장소 LICENSE",
+   "identifier": "LicenseRef-AllRightsReserved"
+  }
+ },
+ "servers": [
+  {
+   "url": "/",
+   "description": "포털과 같은 출처(개발 때는 개발 서버 프록시로)"
+  }
+ ],
+ "security": [
+  {
+   "cookieAuth": []
+  }
+ ],
+ "tags": [
+  {
+   "name": "portal",
+   "description": "포털 자체 API — 로그인·도구 목록·계정·승인·관리. 문서: docs/api/README.md"
+  }
+ ],
+ "paths": {
+  "/api/login": {
+   "post": {
+    "operationId": "portalLogin",
+    "summary": "로그인",
+    "security": [],
+    "description": "성공하면 Set-Cookie agsid. remember=false 면 세션 쿠키(브라우저 닫으면 끝) + 서버 12시간. 10분에 5번 틀리면 10분 잠김.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LoginRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LoginOk"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/signup": {
+   "post": {
+    "operationId": "portalSignup",
+    "summary": "가입(바로 로그인됨, 30일)",
+    "security": [],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SignupRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LoginOk"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/depts": {
+   "get": {
+    "operationId": "portalDepts",
+    "summary": "부서 목록(로그인 전에도)",
+    "security": [],
+    "responses": {
+     "200": {
+      "description": "부서",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "depts"
+         ],
+         "properties": {
+          "depts": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/me": {
+   "get": {
+    "operationId": "portalMe",
+    "summary": "지금 사용자",
+    "responses": {
+     "200": {
+      "description": "사용자",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Me"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/tools": {
+   "get": {
+    "operationId": "portalTools",
+    "summary": "도구 목록·사용자 랭킹·노하우 글·나",
+    "description": "숨김 도구(hidden)는 빠짐. up = 도구 포트가 응답함.",
+    "responses": {
+     "200": {
+      "description": "목록",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ToolsResponse"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/gpu": {
+   "get": {
+    "operationId": "portalGpu",
+    "summary": "GPU 사용 현황(5초 캐시)",
+    "responses": {
+     "200": {
+      "description": "GPU",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/GpuResponse"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/events": {
+   "get": {
+    "operationId": "portalEvents",
+    "summary": "1분 넘게 걸려 끝난 내 작업",
+    "parameters": [
+     {
+      "name": "since",
+      "in": "query",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "이벤트",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "events",
+          "last"
+         ],
+         "properties": {
+          "events": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/JobEvent"
+           }
+          },
+          "last": {
+           "type": "integer"
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/guide/{dir}": {
+   "get": {
+    "operationId": "portalGuide",
+    "summary": "도구 사용법(마크다운). dir=portal 이면 포털 사용법",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Dir"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "마크다운",
+      "content": {
+       "text/plain": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "description": "모르는 도구면 빈 문자열(guide) 또는 \"README 없음\"(readme) — 404 아님.",
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/readme/{dir}": {
+   "get": {
+    "operationId": "portalReadme",
+    "summary": "도구 README(마크다운) — '실행 방법 보기'",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/Dir"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "마크다운",
+      "content": {
+       "text/plain": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "description": "모르는 도구면 빈 문자열(guide) 또는 \"README 없음\"(readme) — 404 아님.",
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/start": {
+   "post": {
+    "operationId": "portalStart",
+    "summary": "꺼진 도구 켜기(켜진 도구 재시작은 관리자만 — 아니면 409)",
+    "requestBody": {
+     "$ref": "#/components/requestBodies/Dir"
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "description": "꺼진 도구 켜기는 누구나. 이미 켜진 도구를 다시 시작하는 것은 관리자만(아니면 409 \"이미 실행 중입니다\").",
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/stop": {
+   "post": {
+    "operationId": "portalStop",
+    "summary": "도구 끄기(관리자)",
+    "requestBody": {
+     "$ref": "#/components/requestBodies/Dir"
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "x-permission": "admin",
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/open": {
+   "post": {
+    "operationId": "portalOpen",
+    "summary": "사용 기록(순위·최근 30일 횟수)",
+    "requestBody": {
+     "$ref": "#/components/requestBodies/Dir"
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/like": {
+   "post": {
+    "operationId": "portalLike",
+    "summary": "좋아요",
+    "requestBody": {
+     "$ref": "#/components/requestBodies/Dir"
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/post": {
+   "post": {
+    "operationId": "portalPost",
+    "summary": "노하우 글쓰기(작성자는 로그인 계정 이름)",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "title"
+        ],
+        "properties": {
+         "title": {
+          "type": "string"
+         },
+         "body": {
+          "type": "string"
+         },
+         "tags": {
+          "type": "string",
+          "description": "띄어쓰기로 구분"
+         },
+         "dept": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/post_like": {
+   "post": {
+    "operationId": "portalPostLike",
+    "summary": "노하우 글 좋아요",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id"
+        ],
+        "properties": {
+         "id": {
+          "type": "integer"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/account": {
+   "get": {
+    "operationId": "portalAccount",
+    "summary": "계정 설정 화면 자료",
+    "responses": {
+     "200": {
+      "description": "계정",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AccountResponse"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/account/theme": {
+   "get": {
+    "operationId": "portalThemeGet",
+    "summary": "고른 테마",
+    "responses": {
+     "200": {
+      "description": "테마",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "theme",
+          "themes"
+         ],
+         "properties": {
+          "theme": {
+           "$ref": "#/components/schemas/Theme"
+          },
+          "themes": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/Theme"
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   },
+   "post": {
+    "operationId": "portalThemeSet",
+    "summary": "테마 저장(계정 + 쿠키 agtheme). 모든 도구 화면에 같이 적용",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "theme"
+        ],
+        "properties": {
+         "theme": {
+          "$ref": "#/components/schemas/Theme"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "저장",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "ok",
+          "theme"
+         ],
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "theme": {
+           "$ref": "#/components/schemas/Theme"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/account/name": {
+   "post": {
+    "operationId": "portalAccountName",
+    "summary": "이름 바꾸기",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "name"
+        ],
+        "properties": {
+         "name": {
+          "type": "string",
+          "maxLength": 40
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/account/dept": {
+   "post": {
+    "operationId": "portalAccountDept",
+    "summary": "부서 소속 요청(부서장 승인)",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "dept"
+        ],
+        "properties": {
+         "dept": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/account/head": {
+   "post": {
+    "operationId": "portalAccountHead",
+    "summary": "부서장 권한 요청(관리자 승인)",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/account/cancel": {
+   "post": {
+    "operationId": "portalAccountCancel",
+    "summary": "내 대기 요청 취소",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id"
+        ],
+        "properties": {
+         "id": {
+          "type": "integer"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/account/onboarded": {
+   "post": {
+    "operationId": "portalAccountOnboarded",
+    "summary": "첫 로그인 둘러보기 마침·건너뜀",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "done": {
+          "type": "boolean"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "x-permission": "self",
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/pin": {
+   "post": {
+    "operationId": "portalPin",
+    "summary": "PIN 바꾸기(다른 기기 세션은 끊김, 지금 세션은 새 쿠키로 유지)",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "pin",
+         "new"
+        ],
+        "properties": {
+         "pin": {
+          "type": "string"
+         },
+         "new": {
+          "type": "string",
+          "pattern": "^[0-9]{4,8}$"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/logout": {
+   "get": {
+    "operationId": "portalLogout",
+    "summary": "세션 삭제 → 302 /login",
+    "responses": {
+     "302": {
+      "description": "로그인 화면으로"
+     }
+    },
+    "security": [],
+    "description": "세션 삭제(쿠키 agsid 지움) 후 302 /login.",
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/login": {
+   "get": {
+    "operationId": "portalLoginPage",
+    "summary": "로그인 화면(랜딩 HTML)",
+    "security": [],
+    "description": "이미 로그인했으면 `next`(같은 사이트 경로만, 아니면 `/`)로 302.",
+    "parameters": [
+     {
+      "name": "next",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "description": "로그인 뒤 갈 같은 사이트 경로"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "HTML",
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "302": {
+      "description": "이미 로그인 → next 로"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/account/notices": {
+   "get": {
+    "operationId": "portalAccountNotices",
+    "summary": "내 요청 결과 알림(한 번만 — 읽으면 읽음 처리)",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "notices",
+          "approvals"
+         ],
+         "properties": {
+          "notices": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/AccountRequest"
+           }
+          },
+          "approvals": {
+           "type": "integer",
+           "description": "내가 처리할 대기 요청 수"
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/approvals": {
+   "get": {
+    "operationId": "portalApprovals",
+    "summary": "부서 승인 화면 자료(부서장·관리자)",
+    "x-permission": "dept-head",
+    "description": "부서장 또는 관리자만. 아니면 403. members: 내가 부서장인 부서별 구성원.",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "pending",
+          "members",
+          "done"
+         ],
+         "properties": {
+          "pending": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/AccountRequest"
+           },
+           "description": "내가 처리할 수 있는 대기 요청"
+          },
+          "members": {
+           "type": "object",
+           "description": "부서 이름 → 구성원",
+           "additionalProperties": {
+            "type": "array",
+            "items": {
+             "$ref": "#/components/schemas/DeptMember"
+            }
+           }
+          },
+          "done": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/AccountRequest"
+           },
+           "description": "내가 처리한 최근 20건"
+          }
+         }
+        }
+       }
+      }
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/approvals/decide": {
+   "post": {
+    "operationId": "portalApprovalsDecide",
+    "summary": "요청 승인·반려(부서장·관리자)",
+    "x-permission": "dept-head",
+    "description": "그 요청을 처리할 권한이 없으면 403. 부서 소속 요청은 그 부서장(없으면 관리자), 부서장 요청은 관리자.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id",
+         "ok"
+        ],
+        "properties": {
+         "id": {
+          "type": "integer"
+         },
+         "ok": {
+          "type": "boolean",
+          "description": "true 승인 · false 반려"
+         },
+         "note": {
+          "type": "string",
+          "maxLength": 200
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/admin": {
+   "get": {
+    "operationId": "portalAdmin",
+    "summary": "관리 화면 자료(관리자)",
+    "x-permission": "admin",
+    "description": "관리자만. 아니면 403.",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "users",
+          "depts",
+          "pending",
+          "owners",
+          "audit"
+         ],
+         "properties": {
+          "users": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/AdminUser"
+           }
+          },
+          "depts": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/AdminDept"
+           }
+          },
+          "pending": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/AccountRequest"
+           }
+          },
+          "owners": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           },
+           "description": "관리자 계정 id"
+          },
+          "audit": {
+           "type": "array",
+           "description": "최근 60건 감사 기록",
+           "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "audit 테이블 한 줄(코드 확인 필요)"
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/admin/dept": {
+   "post": {
+    "operationId": "portalAdminDept",
+    "summary": "부서 추가·이름 바꾸기·숨기기·보이기",
+    "x-permission": "admin",
+    "description": "관리자만(아니면 403). 감사 기록에 남음.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "op",
+         "name"
+        ],
+        "properties": {
+         "op": {
+          "type": "string",
+          "enum": [
+           "add",
+           "rename",
+           "hide",
+           "show"
+          ]
+         },
+         "name": {
+          "type": "string",
+          "maxLength": 40
+         },
+         "new": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "rename 때 새 이름"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/admin/head": {
+   "post": {
+    "operationId": "portalAdminHead",
+    "summary": "부서장 권한 부여·회수",
+    "x-permission": "admin",
+    "description": "관리자만(아니면 403). 감사 기록에 남음.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "op",
+         "dept",
+         "uid"
+        ],
+        "properties": {
+         "op": {
+          "type": "string",
+          "enum": [
+           "grant",
+           "revoke"
+          ]
+         },
+         "dept": {
+          "type": "string"
+         },
+         "uid": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/admin/reset": {
+   "post": {
+    "operationId": "portalAdminReset",
+    "summary": "PIN 초기화(무작위 6자리, 응답에 한 번만)",
+    "x-permission": "admin",
+    "description": "관리자만(아니면 403). 감사 기록에 남음.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "uid"
+        ],
+        "properties": {
+         "uid": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "ok",
+          "pin"
+         ],
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "pin": {
+           "type": "string",
+           "pattern": "^[0-9]{6}$"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/admin/disable": {
+   "post": {
+    "operationId": "portalAdminDisable",
+    "summary": "계정 정지·해제(정지하면 세션 끊김, 관리자 계정은 불가)",
+    "x-permission": "admin",
+    "description": "관리자만(아니면 403). 감사 기록에 남음.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "uid"
+        ],
+        "properties": {
+         "uid": {
+          "type": "string"
+         },
+         "disabled": {
+          "type": "boolean"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/tool_add": {
+   "post": {
+    "operationId": "portalToolAdd",
+    "summary": "개발자 앱 등록(tools.json 에 한 줄 — 모든 사람 화면에 카드)",
+    "x-permission": "admin",
+    "description": "관리자만(아니면 403). 문자열 값의 HTML·따옴표 문자는 지워지고 200자로 잘림.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "dir",
+         "port"
+        ],
+        "properties": {
+         "dir": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$"
+         },
+         "port": {
+          "type": "integer",
+          "exclusiveMinimum": 1024,
+          "maximum": 65535
+         },
+         "name": {
+          "type": "string"
+         },
+         "title": {
+          "type": "string"
+         },
+         "desc": {
+          "type": "string"
+         },
+         "group": {
+          "type": "string",
+          "default": "기타"
+         },
+         "tags": {
+          "type": "string",
+          "description": "띄어쓰기로 구분"
+         },
+         "dept": {
+          "type": "string"
+         },
+         "author": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "등록된 줄",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Tool"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  }
+ },
+ "components": {
+  "securitySchemes": {
+   "cookieAuth": {
+    "type": "apiKey",
+    "in": "cookie",
+    "name": "agsid",
+    "description": "POST /api/login 이 주는 세션 쿠키(HttpOnly, SameSite=Lax). 같은 출처 fetch 면 브라우저가 자동으로 붙임. 서버 안(127.0.0.1)에서 쿠키 없이 부르면 서버 주인(관리자)으로 처리."
+   }
+  },
+  "schemas": {
+   "Error": {
+    "type": "object",
+    "required": [
+     "error"
+    ],
+    "properties": {
+     "error": {
+      "type": "string",
+      "description": "사람이 읽을 수 있는 한국어 설명"
+     }
+    }
+   },
+   "Unauthorized": {
+    "type": "object",
+    "required": [
+     "error",
+     "login"
+    ],
+    "properties": {
+     "error": {
+      "type": "string",
+      "examples": [
+       "로그인이 필요합니다"
+      ]
+     },
+     "login": {
+      "type": "string",
+      "const": "/login"
+     }
+    }
+   },
+   "Ok": {
+    "type": "object",
+    "required": [
+     "ok"
+    ],
+    "properties": {
+     "ok": {
+      "type": "boolean"
+     }
+    }
+   },
+   "Theme": {
+    "type": "string",
+    "enum": [
+     "classic-light",
+     "classic-dark",
+     "classic-auto",
+     "trendy-light",
+     "trendy-dark",
+     "trendy-auto",
+     "v2-light",
+     "v2-dark",
+     "v2-auto"
+    ]
+   },
+   "LoginRequest": {
+    "type": "object",
+    "required": [
+     "id",
+     "pin"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "pin": {
+      "type": "string"
+     },
+     "remember": {
+      "type": "boolean",
+      "default": true
+     }
+    }
+   },
+   "SignupRequest": {
+    "type": "object",
+    "required": [
+     "id",
+     "name",
+     "pin"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.-]{1,31}$"
+     },
+     "name": {
+      "type": "string",
+      "maxLength": 40
+     },
+     "pin": {
+      "type": "string",
+      "pattern": "^[0-9]{4,8}$"
+     },
+     "dept": {
+      "type": "string"
+     }
+    }
+   },
+   "LoginOk": {
+    "type": "object",
+    "required": [
+     "ok",
+     "id"
+    ],
+    "properties": {
+     "ok": {
+      "type": "boolean"
+     },
+     "id": {
+      "type": "string"
+     }
+    }
+   },
+   "Me": {
+    "type": "object",
+    "required": [
+     "id",
+     "name",
+     "owner",
+     "role",
+     "dept",
+     "heads",
+     "approvals",
+     "account",
+     "onboarded"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "owner": {
+      "type": "boolean"
+     },
+     "agent_user": {
+      "type": "string"
+     },
+     "role": {
+      "type": "string",
+      "description": "관리자·부서장·일반"
+     },
+     "dept": {
+      "type": "string"
+     },
+     "dept_pending": {
+      "type": "string"
+     },
+     "heads": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "approvals": {
+      "type": "integer",
+      "description": "내가 처리할 대기 요청 수"
+     },
+     "account": {
+      "type": "boolean",
+      "description": "false = 로컬 접속(계정 없음)"
+     },
+     "onboarded": {
+      "type": "boolean"
+     }
+    }
+   },
+   "Usage": {
+    "type": "object",
+    "required": [
+     "recent",
+     "total",
+     "users",
+     "likes"
+    ],
+    "properties": {
+     "recent": {
+      "type": "integer"
+     },
+     "total": {
+      "type": "integer"
+     },
+     "users": {
+      "type": "integer"
+     },
+     "likes": {
+      "type": "integer"
+     }
+    }
+   },
+   "Tool": {
+    "type": "object",
+    "required": [
+     "dir",
+     "port",
+     "title",
+     "desc",
+     "group",
+     "tags",
+     "up",
+     "installed",
+     "url",
+     "usage"
+    ],
+    "properties": {
+     "dir": {
+      "type": "string"
+     },
+     "port": {
+      "type": "integer"
+     },
+     "name": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "desc": {
+      "type": "string"
+     },
+     "group": {
+      "type": "string"
+     },
+     "tags": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "added": {
+      "type": "string",
+      "format": "date"
+     },
+     "dept": {
+      "type": "string"
+     },
+     "author": {
+      "type": "string"
+     },
+     "hidden": {
+      "type": "boolean"
+     },
+     "up": {
+      "type": "boolean"
+     },
+     "installed": {
+      "type": "boolean"
+     },
+     "url": {
+      "type": "string"
+     },
+     "usage": {
+      "$ref": "#/components/schemas/Usage"
+     }
+    }
+   },
+   "Rank": {
+    "type": "object",
+    "required": [
+     "user",
+     "n"
+    ],
+    "properties": {
+     "user": {
+      "type": "string"
+     },
+     "n": {
+      "type": "integer"
+     }
+    }
+   },
+   "Post": {
+    "type": "object",
+    "required": [
+     "id",
+     "title",
+     "body",
+     "author",
+     "dept",
+     "tags",
+     "ts",
+     "likes",
+     "liked"
+    ],
+    "properties": {
+     "id": {
+      "type": "integer"
+     },
+     "title": {
+      "type": "string"
+     },
+     "body": {
+      "type": "string"
+     },
+     "author": {
+      "type": "string"
+     },
+     "dept": {
+      "type": "string"
+     },
+     "tags": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "ts": {
+      "type": "string"
+     },
+     "likes": {
+      "type": "integer"
+     },
+     "liked": {
+      "type": "boolean"
+     }
+    }
+   },
+   "ToolsResponse": {
+    "type": "object",
+    "required": [
+     "tools",
+     "rank",
+     "posts",
+     "me"
+    ],
+    "properties": {
+     "tools": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Tool"
+      }
+     },
+     "rank": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Rank"
+      }
+     },
+     "posts": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Post"
+      }
+     },
+     "me": {
+      "$ref": "#/components/schemas/Me"
+     }
+    }
+   },
+   "GpuProc": {
+    "type": "object",
+    "required": [
+     "tool",
+     "mem"
+    ],
+    "properties": {
+     "tool": {
+      "type": "string"
+     },
+     "mem": {
+      "type": "number",
+      "description": "MiB"
+     }
+    }
+   },
+   "Gpu": {
+    "type": "object",
+    "required": [
+     "index",
+     "name",
+     "used",
+     "total",
+     "procs"
+    ],
+    "properties": {
+     "index": {
+      "type": "integer"
+     },
+     "name": {
+      "type": "string"
+     },
+     "used": {
+      "type": "number",
+      "description": "MiB"
+     },
+     "total": {
+      "type": "number",
+      "description": "MiB"
+     },
+     "util": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "procs": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/GpuProc"
+      }
+     }
+    }
+   },
+   "GpuResponse": {
+    "type": "object",
+    "required": [
+     "gpus"
+    ],
+    "properties": {
+     "gpus": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Gpu"
+      }
+     },
+     "error": {
+      "type": "string"
+     },
+     "t": {
+      "type": "number"
+     }
+    }
+   },
+   "JobEvent": {
+    "type": "object",
+    "required": [
+     "id",
+     "dir",
+     "name",
+     "ok",
+     "sec",
+     "t"
+    ],
+    "properties": {
+     "id": {
+      "type": "integer"
+     },
+     "dir": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "ok": {
+      "type": "boolean"
+     },
+     "sec": {
+      "type": "integer"
+     },
+     "t": {
+      "type": "integer"
+     }
+    }
+   },
+   "AccountRequest": {
+    "type": "object",
+    "required": [
+     "id",
+     "kind",
+     "uid",
+     "dept",
+     "status",
+     "ts",
+     "label",
+     "uname",
+     "route"
+    ],
+    "properties": {
+     "id": {
+      "type": "integer"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "dept_join",
+       "dept_head"
+      ]
+     },
+     "uid": {
+      "type": "string"
+     },
+     "dept": {
+      "type": "string"
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "pending",
+       "approved",
+       "rejected",
+       "cancelled"
+      ]
+     },
+     "ts": {
+      "type": "string"
+     },
+     "decided_ts": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "approver": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "approver_name": {
+      "type": "string"
+     },
+     "note": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "label": {
+      "type": "string"
+     },
+     "uname": {
+      "type": "string"
+     },
+     "route": {
+      "type": "string",
+      "description": "요청이 간 곳(관리자 / 부서장 이름)"
+     }
+    }
+   },
+   "AccountResponse": {
+    "type": "object",
+    "required": [
+     "me",
+     "depts",
+     "requests"
+    ],
+    "properties": {
+     "me": {
+      "$ref": "#/components/schemas/Me"
+     },
+     "depts": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "requests": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/AccountRequest"
+      }
+     }
+    }
+   },
+   "DeptMember": {
+    "type": "object",
+    "required": [
+     "id",
+     "name",
+     "total",
+     "recent",
+     "head"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "seen": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "마지막 접속(ISO, 5분 단위)"
+     },
+     "total": {
+      "type": "integer",
+      "description": "도구 사용 횟수"
+     },
+     "recent": {
+      "type": "integer",
+      "description": "최근 30일 사용 횟수"
+     },
+     "head": {
+      "type": "integer",
+      "enum": [
+       0,
+       1
+      ],
+      "description": "부서장이면 1"
+     }
+    }
+   },
+   "AdminUser": {
+    "type": "object",
+    "required": [
+     "id",
+     "name",
+     "role",
+     "heads"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "dept": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "ts": {
+      "type": "string"
+     },
+     "seen": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "disabled": {
+      "type": "integer",
+      "enum": [
+       0,
+       1
+      ]
+     },
+     "role": {
+      "type": "string",
+      "enum": [
+       "관리자",
+       "부서장",
+       "일반"
+      ]
+     },
+     "heads": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    }
+   },
+   "AdminDept": {
+    "type": "object",
+    "required": [
+     "name",
+     "hidden",
+     "members",
+     "heads"
+    ],
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "hidden": {
+      "type": "integer",
+      "enum": [
+       0,
+       1
+      ]
+     },
+     "members": {
+      "type": "integer"
+     },
+     "heads": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    }
+   }
+  },
+  "responses": {
+   "Ok": {
+    "description": "성공",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Ok"
+      }
+     }
+    }
+   },
+   "BadRequest": {
+    "description": "입력이 잘못됨(본문이 JSON 객체가 아님, 필수 값 없음 등)",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "Unauthorized": {
+    "description": "로그인 필요 — /login 으로",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Unauthorized"
+      }
+     }
+    }
+   },
+   "Forbidden": {
+    "description": "권한 없음(관리자·부서장·만든 사람 전용)",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "NotFound": {
+    "description": "없는 경로·도구·항목",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "Conflict": {
+    "description": "충돌(예: 이미 실행 중인 도구를 관리자가 아닌 사람이 다시 시작)",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   }
+  },
+  "parameters": {
+   "Dir": {
+    "name": "dir",
+    "in": "path",
+    "required": true,
+    "schema": {
+     "type": "string",
+     "pattern": "^[a-z0-9-]+$"
+    }
+   }
+  },
+  "requestBodies": {
+   "Dir": {
+    "required": true,
+    "content": {
+     "application/json": {
+      "schema": {
+       "type": "object",
+       "required": [
+        "dir"
+       ],
+       "properties": {
+        "dir": {
+         "type": "string"
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+}

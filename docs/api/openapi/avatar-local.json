@@ -1,0 +1,1339 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "KAERI AI Agent Portal API — avatar-local",
+  "version": "2026.10.13",
+  "summary": "Avatar — 사진 립싱크 영상, 가상 캐릭터 스튜디오(그림 후보 → 말하기·움직이기 영상). 문서: docs/api/avatar-local.md",
+  "description": "© 2026 gggg8657 · 내부 시험용 · 배포용 아님\n\nKAERI AI 에이전트 포털과 도구들의 HTTP API(도구 수는 summary 참고). 근거: `docs/api/README.md` 와 `docs/api/<도구>.md`(문서와 실제 응답이 다르면 응답이 맞음 — 알려 주면 고침).\n\n## 연결 방법 요약\n- **같은 출처 전제** (`servers: [{url: \"/\"}]`). 포털은 CORS 헤더를 내보내지 않고, 로그인 쿠키 `agsid` 는 HttpOnly·SameSite=Lax 입니다.\n  개발할 때는 개발 서버 프록시(Vite `server.proxy`, Next.js `rewrites`)로 `/api`·`/t`·`/logout` 을 포털로 넘기세요 — 예시는 README \"3. 새 화면을 연결하는 방법\".\n- **로그인**: `POST /api/login` → 쿠키 `agsid` 가 붙음. 이후 `fetch(…, {credentials: \"same-origin\"})`(기본값). JS 에서 쿠키를 읽을 수 없음.\n  로그인 안 된 API 요청은 401 `{\"error\": \"로그인이 필요합니다\", \"login\": \"/login\"}`.\n- **도구 경로**: 도구 문서의 `api/xxx` 는 포털에서 `/t/<도구 dir>/api/xxx`. 포털이 `X-Agent-User` 를 붙여 사용자별로 저장(화면이 보낸 `X-Agent-User` 는 지워짐).\n- **도구가 꺼져 있으면 502** → `POST /api/start {\"dir\": \"<도구>\"}` 뒤 다시 시도.\n- **오류 모양**: 대부분 `{\"error\": \"한국어 설명\"}`. 예외(예: tts-local 의 POST 는 OpenAI 모양 `{\"error\": {\"message\", \"type\"}}`)는 해당 operation 에 그대로 적음.\n- **스트리밍**: `text/event-stream`(SSE) 또는 `application/x-ndjson` 응답은 이벤트 목록을 `x-stream-events` 확장에 둠. **도중 오류도 HTTP 200 으로 오고 스트림 안 `error` 이벤트로만 옴.** 포털은 버퍼링 없이 흘림(최대 1시간).\n- **확장 필드**: `x-permission`(admin 관리자 · dept-head 부서장 · creator 만든 사람 · self 본인), `x-shared-data`(여러 사람이 같이 보는 데이터), `x-gpu`·`x-llm`·`x-long-running`(GPU·LLM 사용, 오래 걸림 — 버튼 연타 막기), `x-stream-events`.\n- **도구 태그 확장**(등록용): `x-tool-id`(dir 에서 -local 뺀 것) · `x-name` · `x-description` · `x-kind`(LLM 을 쓰면 agent, 아니면 tool) · `x-category` · `x-entry`(/t/<dir>/) · `x-health-path`(가벼운 GET, 200) · `x-long-running` · `x-docs-input`(text·chunks·file·none) · `x-external-network`(외부 인터넷 호출 여부) · `x-response-style`(sse·json·file·polling). 판단 근거가 애매한 곳은 `x-<항목>-note`.\n- 스키마 description 에 \"코드 확인 필요\" 라고 적힌 곳은 문서·코드로 모양을 확정하지 못한 부분입니다(`additionalProperties: true`).\n\nREADME: `docs/api/README.md` (OpenAPI 절 — 타입 생성 명령).",
+  "contact": {
+   "name": "gggg8657",
+   "url": "https://github.com/gggg8657"
+  },
+  "license": {
+   "name": "All rights reserved (portal) — 도구별 라이선스는 각 도구 저장소 LICENSE",
+   "identifier": "LicenseRef-AllRightsReserved"
+  },
+  "x-tool-id": "avatar",
+  "x-name": "Avatar",
+  "x-description": "캐릭터 그림 → 말하기·움직이기 영상",
+  "x-kind": "agent",
+  "x-category": "기타",
+  "x-entry": "/t/avatar-local/",
+  "x-health-path": "/t/avatar-local/api/studio",
+  "x-long-running": true,
+  "x-docs-input": "file",
+  "x-external-network": true,
+  "x-response-style": "sse",
+  "x-category-note": "README 분류: 토이",
+  "x-kind-note": "api/imagine·api/move 가 LLM 으로 프롬프트 생성",
+  "x-external-network-note": "from_pretrained·huggingface snapshot_download(S2V_CKPT 미설정 시) — 모델 캐시 없으면 Hugging Face 에서 내려받음. 그 밖 호출은 127.0.0.1(tts-local·studio worker·persona)",
+  "x-docs-input-note": "api/run 사진만 base64(문서 아님), 스튜디오는 글 묘사"
+ },
+ "servers": [
+  {
+   "url": "/",
+   "description": "포털과 같은 출처(개발 때는 개발 서버 프록시로)"
+  }
+ ],
+ "security": [
+  {
+   "cookieAuth": []
+  }
+ ],
+ "tags": [
+  {
+   "name": "avatar-local",
+   "description": "Avatar — 사진 립싱크 영상, 가상 캐릭터 스튜디오(그림 후보 → 말하기·움직이기 영상). 문서: docs/api/avatar-local.md",
+   "x-tool-id": "avatar",
+   "x-name": "Avatar",
+   "x-description": "캐릭터 그림 → 말하기·움직이기 영상",
+   "x-kind": "agent",
+   "x-category": "기타",
+   "x-entry": "/t/avatar-local/",
+   "x-health-path": "/t/avatar-local/api/studio",
+   "x-long-running": true,
+   "x-docs-input": "file",
+   "x-external-network": true,
+   "x-response-style": "sse",
+   "x-category-note": "README 분류: 토이",
+   "x-kind-note": "api/imagine·api/move 가 LLM 으로 프롬프트 생성",
+   "x-external-network-note": "from_pretrained·huggingface snapshot_download(S2V_CKPT 미설정 시) — 모델 캐시 없으면 Hugging Face 에서 내려받음. 그 밖 호출은 127.0.0.1(tts-local·studio worker·persona)",
+   "x-docs-input-note": "api/run 사진만 base64(문서 아님), 스튜디오는 글 묘사"
+  }
+ ],
+ "paths": {
+  "/t/avatar-local/api/status": {
+   "get": {
+    "tags": [
+     "avatar-local"
+    ],
+    "operationId": "avatarStatus",
+    "summary": "엔진 준비 상태",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AvatarStatus"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/avatar-local/api/studio": {
+   "get": {
+    "tags": [
+     "avatar-local"
+    ],
+    "operationId": "avatarStudio",
+    "summary": "스튜디오 선택지(스타일·구도)",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AvatarStudio"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/avatar-local/api/runs": {
+   "get": {
+    "tags": [
+     "avatar-local"
+    ],
+    "operationId": "avatarRuns",
+    "summary": "갤러리(완성된 영상, 최신순 최대 50)",
+    "description": "그림만 그리고 말하기/움직이기를 안 한 캐릭터는 안 나옴.",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/AvatarRunItem"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/avatar-local/api/runs/{run_id}/{file}": {
+   "get": {
+    "tags": [
+     "avatar-local"
+    ],
+    "operationId": "avatarRunFile",
+    "summary": "영상·후보 그림 받기",
+    "parameters": [
+     {
+      "name": "run_id",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4}$",
+       "description": "YYYY-MM-DD-xxxx"
+      },
+      "required": true
+     },
+     {
+      "name": "file",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^(final\\.mp4|talk\\.mp4|move\\.mp4|cand_\\d\\.png)$"
+      },
+      "required": true
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Content-Disposition 없음, Range 미지원(전체 전송). 같은 이름으로 다시 만들어지므로 ?<시각> 을 붙여 캐시 회피(쿼리 무시됨)",
+      "content": {
+       "video/mp4": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       },
+       "image/png": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "삭제됐거나 없는 파일입니다",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/avatar-local/api/run": {
+   "post": {
+    "tags": [
+     "avatar-local"
+    ],
+    "operationId": "avatarRun",
+    "summary": "사진 + 대사 → 립싱크 영상 (SSE)",
+    "description": "이벤트: {stage:'tts'|'lipsync',msg} · {log} · 끝 {done:{run_id,text,engine,device,ts}} → api/runs/<run_id>/final.mp4 · {error}. 사진은 본인/동의한 사람만(consent:true 필수). 본문 상한 약 28MB(사진 20MB base64 + 1MB) 넘으면 스트림 전에 413 {\"error\":\"요청이 너무 큽니다 (사진 20MB 이하)\"}.\n\n도중 오류도 HTTP 200 으로 오고 스트림 안 {\"error\": \"<예외이름>: 메시지\"} 이벤트로만 옴. 작업 id 폴링 API 없음 — 연결을 유지해야 함.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AvatarRunRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "SSE 스트림 (data: <JSON>\\n\\n)",
+      "content": {
+       "text/event-stream": {
+        "schema": {
+         "type": "string",
+         "description": "SSE 스트림 (data: <JSON>\\n\\n)"
+        },
+        "x-stream-events": [
+         {
+          "name": "stage",
+          "schema": {
+           "$ref": "#/components/schemas/AvatarStageEvent"
+          }
+         },
+         {
+          "name": "log",
+          "schema": {
+           "$ref": "#/components/schemas/AvatarLogEvent"
+          }
+         },
+         {
+          "name": "done",
+          "schema": {
+           "$ref": "#/components/schemas/AvatarRunDone"
+          }
+         },
+         {
+          "name": "error",
+          "schema": {
+           "$ref": "#/components/schemas/AvatarErrorEvent"
+          }
+         }
+        ]
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-gpu": true,
+    "x-long-running": true
+   }
+  },
+  "/t/avatar-local/api/imagine": {
+   "post": {
+    "tags": [
+     "avatar-local"
+    ],
+    "operationId": "avatarImagine",
+    "summary": "묘사 → 그림 후보 1~6장 (SSE)",
+    "description": "이벤트: {stage:'prompt'|'draw'|'worker'|'load',msg} · 후보마다 {image:<번호>,run_id} · 끝 {done:<캐릭터 meta>} · {error}(실패하면 실행 폴더 삭제). 1~수 분.\n\n도중 오류도 HTTP 200 으로 오고 스트림 안 {\"error\": \"<예외이름>: 메시지\"} 이벤트로만 옴. 작업 id 폴링 API 없음 — 연결을 유지해야 함.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AvatarImagineRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "SSE 스트림 (data: <JSON>\\n\\n)",
+      "content": {
+       "text/event-stream": {
+        "schema": {
+         "type": "string",
+         "description": "SSE 스트림 (data: <JSON>\\n\\n)"
+        },
+        "x-stream-events": [
+         {
+          "name": "stage",
+          "schema": {
+           "$ref": "#/components/schemas/AvatarStageEvent"
+          }
+         },
+         {
+          "name": "image",
+          "schema": {
+           "$ref": "#/components/schemas/AvatarImageEvent"
+          }
+         },
+         {
+          "name": "done",
+          "schema": {
+           "$ref": "#/components/schemas/AvatarImagineDone"
+          }
+         },
+         {
+          "name": "error",
+          "schema": {
+           "$ref": "#/components/schemas/AvatarErrorEvent"
+          }
+         }
+        ]
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-gpu": true,
+    "x-llm": true,
+    "x-long-running": true
+   }
+  },
+  "/t/avatar-local/api/speak": {
+   "post": {
+    "tags": [
+     "avatar-local"
+    ],
+    "operationId": "avatarSpeak",
+    "summary": "고른 그림이 대사 말하기 (SSE)",
+    "description": "이벤트: {stage:'tts'|'lipsync'|'s2v',msg} · {log} · best 는 {step,total,clip} · 끝 {done:{run_id,video:'talk.mp4',engine,model}} · {error}. 다시 부르면 talk.mp4 덮어씀. 연결을 끊으면 생성 중단(best).\n\n도중 오류도 HTTP 200 으로 오고 스트림 안 {\"error\": \"<예외이름>: 메시지\"} 이벤트로만 옴. 작업 id 폴링 API 없음 — 연결을 유지해야 함.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AvatarSpeakRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "SSE 스트림 (data: <JSON>\\n\\n)",
+      "content": {
+       "text/event-stream": {
+        "schema": {
+         "type": "string",
+         "description": "SSE 스트림 (data: <JSON>\\n\\n)"
+        },
+        "x-stream-events": [
+         {
+          "name": "stage",
+          "schema": {
+           "$ref": "#/components/schemas/AvatarStageEvent"
+          }
+         },
+         {
+          "name": "log",
+          "schema": {
+           "$ref": "#/components/schemas/AvatarLogEvent"
+          }
+         },
+         {
+          "name": "step",
+          "schema": {
+           "$ref": "#/components/schemas/AvatarStepEvent"
+          }
+         },
+         {
+          "name": "done",
+          "schema": {
+           "$ref": "#/components/schemas/AvatarVideoDone"
+          }
+         },
+         {
+          "name": "error",
+          "schema": {
+           "$ref": "#/components/schemas/AvatarErrorEvent"
+          }
+         }
+        ]
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-gpu": true,
+    "x-long-running": true
+   }
+  },
+  "/t/avatar-local/api/move": {
+   "post": {
+    "tags": [
+     "avatar-local"
+    ],
+    "operationId": "avatarMove",
+    "summary": "고른 그림이 동작하는 5초 영상 (SSE)",
+    "description": "이벤트: {stage:'prompt'|'video'|'tts',msg} · {step,total} · 끝 {done:{run_id,video:'move.mp4'}} · {error}. 16fps 5초.\n\n도중 오류도 HTTP 200 으로 오고 스트림 안 {\"error\": \"<예외이름>: 메시지\"} 이벤트로만 옴. 작업 id 폴링 API 없음 — 연결을 유지해야 함.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AvatarMoveRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "SSE 스트림 (data: <JSON>\\n\\n)",
+      "content": {
+       "text/event-stream": {
+        "schema": {
+         "type": "string",
+         "description": "SSE 스트림 (data: <JSON>\\n\\n)"
+        },
+        "x-stream-events": [
+         {
+          "name": "stage",
+          "schema": {
+           "$ref": "#/components/schemas/AvatarStageEvent"
+          }
+         },
+         {
+          "name": "step",
+          "schema": {
+           "$ref": "#/components/schemas/AvatarStepEvent"
+          }
+         },
+         {
+          "name": "done",
+          "schema": {
+           "$ref": "#/components/schemas/AvatarVideoDone"
+          }
+         },
+         {
+          "name": "error",
+          "schema": {
+           "$ref": "#/components/schemas/AvatarErrorEvent"
+          }
+         }
+        ]
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-gpu": true,
+    "x-llm": true,
+    "x-long-running": true
+   }
+  },
+  "/t/avatar-local/api/runs/delete": {
+   "post": {
+    "tags": [
+     "avatar-local"
+    ],
+    "operationId": "avatarRunsDelete",
+    "summary": "항목 휴지통으로",
+    "description": "폴더째 <사용자 폴더>/.trash/<batch>/ 로 이동. 완전 삭제 API 없음.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AvatarDeleteRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AvatarDeleteResult"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "잘못된 항목입니다(형식 틀린 id 하나라도 있으면 아무것도 안 옮김)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "하나도 못 지움(모두 없음) — 같은 모양 본문",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AvatarDeleteResult"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/avatar-local/api/runs/{run_id}": {
+   "delete": {
+    "tags": [
+     "avatar-local"
+    ],
+    "operationId": "avatarRunDelete",
+    "summary": "항목 하나 휴지통으로(api/runs/delete 와 같음)",
+    "parameters": [
+     {
+      "name": "run_id",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4}$",
+       "description": "YYYY-MM-DD-xxxx"
+      },
+      "required": true
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AvatarDeleteResult"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "description": "없음",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AvatarDeleteResult"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/avatar-local/api/runs/restore": {
+   "post": {
+    "tags": [
+     "avatar-local"
+    ],
+    "operationId": "avatarRunsRestore",
+    "summary": "휴지통 묶음 되살리기",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "batch": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "batch"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "같은 이름이 이미 있으면 건너뜀",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "restored": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           }
+          }
+         },
+         "required": [
+          "restored"
+         ]
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "잘못된 묶음입니다 / 휴지통에 없습니다",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/avatar-local/api/to_persona": {
+   "post": {
+    "tags": [
+     "avatar-local"
+    ],
+    "operationId": "avatarToPersona",
+    "summary": "(숨긴 기능) 고른 그림을 persona 캐릭터로",
+    "description": "숨긴 도구(persona) 연동. 새 화면에서는 쓰지 않아도 됨.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "run_id": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4}$",
+          "description": "YYYY-MM-DD-xxxx"
+         },
+         "idx": {
+          "type": "integer"
+         },
+         "name": {
+          "type": "string"
+         },
+         "personality": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "run_id"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "persona 쪽 응답 JSON 그대로 — 코드 확인 필요",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "description": "코드 확인 필요"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-llm": true
+   }
+  }
+ },
+ "components": {
+  "securitySchemes": {
+   "cookieAuth": {
+    "type": "apiKey",
+    "in": "cookie",
+    "name": "agsid",
+    "description": "POST /api/login 이 주는 세션 쿠키(HttpOnly, SameSite=Lax). 같은 출처 fetch 면 브라우저가 자동으로 붙임. 서버 안(127.0.0.1)에서 쿠키 없이 부르면 서버 주인(관리자)으로 처리."
+   }
+  },
+  "schemas": {
+   "Error": {
+    "type": "object",
+    "required": [
+     "error"
+    ],
+    "properties": {
+     "error": {
+      "type": "string",
+      "description": "사람이 읽을 수 있는 한국어 설명"
+     }
+    }
+   },
+   "Unauthorized": {
+    "type": "object",
+    "required": [
+     "error",
+     "login"
+    ],
+    "properties": {
+     "error": {
+      "type": "string",
+      "examples": [
+       "로그인이 필요합니다"
+      ]
+     },
+     "login": {
+      "type": "string",
+      "const": "/login"
+     }
+    }
+   },
+   "AvatarStatus": {
+    "type": "object",
+    "properties": {
+     "sadtalker": {
+      "type": "boolean"
+     },
+     "tts_server": {
+      "type": "boolean",
+      "description": "tts-local 응답함(없으면 영상 생성 불가)"
+     },
+     "device": {
+      "type": "string",
+      "enum": [
+       "cpu",
+       "cuda"
+      ]
+     },
+     "s2v": {
+      "type": "boolean",
+      "description": "최고 품질 말하기(Wan2.2) 코드 있음"
+     }
+    },
+    "required": [
+     "sadtalker",
+     "tts_server",
+     "device",
+     "s2v"
+    ]
+   },
+   "AvatarStudio": {
+    "type": "object",
+    "properties": {
+     "styles": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "키(real·virtual·3d·anime·webtoon·illust) → 한국어 이름"
+     },
+     "shots": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "키(face·half·full) → 한국어 이름"
+     }
+    },
+    "required": [
+     "styles",
+     "shots"
+    ]
+   },
+   "AvatarPhotoRun": {
+    "type": "object",
+    "properties": {
+     "run_id": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4}$",
+      "description": "YYYY-MM-DD-xxxx"
+     },
+     "text": {
+      "type": "string"
+     },
+     "engine": {
+      "type": "string"
+     },
+     "device": {
+      "type": "string"
+     },
+     "ts": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "run_id",
+     "ts"
+    ],
+    "description": "사진 립싱크 meta — 영상 api/runs/<run_id>/final.mp4"
+   },
+   "AvatarCharacter": {
+    "type": "object",
+    "properties": {
+     "run_id": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4}$",
+      "description": "YYYY-MM-DD-xxxx"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "character"
+      ]
+     },
+     "desc": {
+      "type": "string"
+     },
+     "style": {
+      "type": "string"
+     },
+     "shot": {
+      "type": "string"
+     },
+     "prompt": {
+      "type": "string"
+     },
+     "negative": {
+      "type": "string"
+     },
+     "n": {
+      "type": "integer"
+     },
+     "ts": {
+      "type": "string"
+     },
+     "candidates": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "pattern": "^cand_\\d\\.png$"
+      }
+     },
+     "picked": {
+      "type": "integer"
+     },
+     "talk": {
+      "type": "object",
+      "properties": {
+       "text": {
+        "type": "string"
+       },
+       "engine": {
+        "type": "string"
+       },
+       "model": {
+        "type": "string"
+       }
+      },
+      "description": "있으면 talk.mp4"
+     },
+     "move": {
+      "type": "object",
+      "properties": {
+       "action": {
+        "type": "string"
+       },
+       "prompt": {
+        "type": "string"
+       },
+       "text": {
+        "type": "string"
+       },
+       "quality": {
+        "type": "string"
+       },
+       "model": {
+        "type": "string"
+       }
+      },
+      "description": "있으면 move.mp4"
+     }
+    },
+    "required": [
+     "run_id",
+     "kind",
+     "ts"
+    ],
+    "description": "가상 캐릭터 meta(meta.json 그대로)"
+   },
+   "AvatarRunItem": {
+    "description": "api/runs 항목 — kind=character 면 가상 캐릭터, 없으면 사진 립싱크",
+    "anyOf": [
+     {
+      "$ref": "#/components/schemas/AvatarCharacter"
+     },
+     {
+      "$ref": "#/components/schemas/AvatarPhotoRun"
+     }
+    ]
+   },
+   "AvatarRunRequest": {
+    "type": "object",
+    "properties": {
+     "photo_b64": {
+      "type": "string",
+      "contentEncoding": "base64",
+      "description": "얼굴 사진 base64(데이터 URL 접두어 제외), 20MB 이하"
+     },
+     "photo_name": {
+      "type": "string",
+      "pattern": "(?i)\\.(jpe?g|png)$",
+      "description": ".jpg .jpeg .png 만"
+     },
+     "text": {
+      "type": "string",
+      "description": "대사"
+     },
+     "consent": {
+      "type": "boolean",
+      "description": "본인/동의한 사람 얼굴 확인. false 면 오류"
+     }
+    },
+    "required": [
+     "photo_b64",
+     "photo_name",
+     "text",
+     "consent"
+    ]
+   },
+   "AvatarImagineRequest": {
+    "type": "object",
+    "properties": {
+     "desc": {
+      "type": "string",
+      "description": "캐릭터 묘사(성인 가상 인물)"
+     },
+     "style": {
+      "type": "string",
+      "enum": [
+       "real",
+       "virtual",
+       "3d",
+       "anime",
+       "webtoon",
+       "illust"
+      ],
+      "default": "real"
+     },
+     "shot": {
+      "type": "string",
+      "enum": [
+       "face",
+       "half",
+       "full"
+      ],
+      "default": "half"
+     },
+     "n": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 6,
+      "default": 4
+     }
+    },
+    "required": [
+     "desc"
+    ]
+   },
+   "AvatarSpeakRequest": {
+    "type": "object",
+    "properties": {
+     "run_id": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4}$",
+      "description": "YYYY-MM-DD-xxxx"
+     },
+     "idx": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0
+     },
+     "text": {
+      "type": "string",
+      "description": "대사"
+     },
+     "quality": {
+      "type": "string",
+      "enum": [
+       "best",
+       "fast"
+      ],
+      "default": "best",
+      "description": "best=Wan2.2-S2V(5초당 약 25분, GPU 약 64GB) · fast=SadTalker(수십 초)"
+     }
+    },
+    "required": [
+     "run_id",
+     "text"
+    ]
+   },
+   "AvatarMoveRequest": {
+    "type": "object",
+    "properties": {
+     "run_id": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4}$",
+      "description": "YYYY-MM-DD-xxxx"
+     },
+     "idx": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0
+     },
+     "action": {
+      "type": "string",
+      "description": "어떻게 움직일지"
+     },
+     "text": {
+      "type": "string",
+      "description": "선택 — 있으면 음성을 입힘(입모양 동기화 아님)"
+     },
+     "quality": {
+      "type": "string",
+      "enum": [
+       "best",
+       "fast"
+      ],
+      "default": "best",
+      "description": "best=720p급 40단계(약 30~35분) · fast=480p급 30단계(약 7분)"
+     }
+    },
+    "required": [
+     "run_id",
+     "action"
+    ]
+   },
+   "AvatarStageEvent": {
+    "type": "object",
+    "properties": {
+     "stage": {
+      "type": "string",
+      "enum": [
+       "tts",
+       "lipsync",
+       "s2v",
+       "prompt",
+       "draw",
+       "worker",
+       "load",
+       "video"
+      ]
+     },
+     "msg": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "stage"
+    ]
+   },
+   "AvatarLogEvent": {
+    "type": "object",
+    "properties": {
+     "log": {
+      "type": "string",
+      "description": "진행 줄(120자까지)"
+     }
+    },
+    "required": [
+     "log"
+    ]
+   },
+   "AvatarImageEvent": {
+    "type": "object",
+    "properties": {
+     "image": {
+      "type": "integer",
+      "description": "후보 번호(0부터) — api/runs/<run_id>/cand_<번호>.png"
+     },
+     "run_id": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4}$",
+      "description": "YYYY-MM-DD-xxxx"
+     }
+    },
+    "required": [
+     "image",
+     "run_id"
+    ]
+   },
+   "AvatarStepEvent": {
+    "type": "object",
+    "properties": {
+     "step": {
+      "type": "integer"
+     },
+     "total": {
+      "type": "integer"
+     },
+     "clip": {
+      "type": "integer",
+      "description": "speak best: 5초 조각 번호"
+     }
+    },
+    "required": [
+     "step",
+     "total"
+    ]
+   },
+   "AvatarErrorEvent": {
+    "type": "object",
+    "properties": {
+     "error": {
+      "type": "string",
+      "description": "'<예외이름>: 메시지'"
+     }
+    },
+    "required": [
+     "error"
+    ]
+   },
+   "AvatarRunDone": {
+    "type": "object",
+    "properties": {
+     "done": {
+      "$ref": "#/components/schemas/AvatarPhotoRun"
+     }
+    },
+    "required": [
+     "done"
+    ]
+   },
+   "AvatarImagineDone": {
+    "type": "object",
+    "properties": {
+     "done": {
+      "$ref": "#/components/schemas/AvatarCharacter"
+     }
+    },
+    "required": [
+     "done"
+    ]
+   },
+   "AvatarVideoDone": {
+    "type": "object",
+    "properties": {
+     "done": {
+      "type": "object",
+      "properties": {
+       "run_id": {
+        "type": "string",
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4}$",
+        "description": "YYYY-MM-DD-xxxx"
+       },
+       "video": {
+        "type": "string",
+        "enum": [
+         "talk.mp4",
+         "move.mp4"
+        ]
+       },
+       "engine": {
+        "type": "string"
+       },
+       "model": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "run_id",
+       "video"
+      ]
+     }
+    },
+    "required": [
+     "done"
+    ]
+   },
+   "AvatarDeleteRequest": {
+    "type": "object",
+    "properties": {
+     "run_ids": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "pattern": "^\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4}$",
+       "description": "YYYY-MM-DD-xxxx"
+      },
+      "maxItems": 200
+     },
+     "run_id": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4}$",
+      "description": "YYYY-MM-DD-xxxx"
+     }
+    },
+    "description": "run_ids(최대 200) 또는 run_id 하나"
+   },
+   "AvatarDeleteResult": {
+    "type": "object",
+    "properties": {
+     "deleted": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "missing": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "batch": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "되살리기용 묶음 id(아무것도 안 지웠으면 null)"
+     }
+    },
+    "required": [
+     "deleted",
+     "missing",
+     "batch"
+    ]
+   }
+  },
+  "responses": {
+   "BadRequest": {
+    "description": "입력이 잘못됨(본문이 JSON 객체가 아님, 필수 값 없음 등)",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "Unauthorized": {
+    "description": "로그인 필요 — /login 으로",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Unauthorized"
+      }
+     }
+    }
+   },
+   "PayloadTooLarge": {
+    "description": "요청 본문이 너무 큼 — 상한은 operation description 참고",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "BadGateway": {
+    "description": "도구가 꺼져 있음(응답 없음) → POST /api/start {\"dir\": \"<도구>\"} 로 켠 뒤 다시 시도",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   }
+  }
+ }
+}

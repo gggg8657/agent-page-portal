@@ -1,0 +1,2565 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "KAERI AI Agent Portal API — protein-local",
+  "version": "2026.10.13",
+  "summary": "단백질 구조 예측 — 서열 → 3D 구조(Boltz), 친화도, 서열 설계(ProteinMPNN). 긴 작업은 작업 id → 폴링(SSE 없음). 문서: docs/api/protein-local.md",
+  "description": "© 2026 gggg8657 · 내부 시험용 · 배포용 아님\n\nKAERI AI 에이전트 포털과 도구들의 HTTP API(도구 수는 summary 참고). 근거: `docs/api/README.md` 와 `docs/api/<도구>.md`(문서와 실제 응답이 다르면 응답이 맞음 — 알려 주면 고침).\n\n## 연결 방법 요약\n- **같은 출처 전제** (`servers: [{url: \"/\"}]`). 포털은 CORS 헤더를 내보내지 않고, 로그인 쿠키 `agsid` 는 HttpOnly·SameSite=Lax 입니다.\n  개발할 때는 개발 서버 프록시(Vite `server.proxy`, Next.js `rewrites`)로 `/api`·`/t`·`/logout` 을 포털로 넘기세요 — 예시는 README \"3. 새 화면을 연결하는 방법\".\n- **로그인**: `POST /api/login` → 쿠키 `agsid` 가 붙음. 이후 `fetch(…, {credentials: \"same-origin\"})`(기본값). JS 에서 쿠키를 읽을 수 없음.\n  로그인 안 된 API 요청은 401 `{\"error\": \"로그인이 필요합니다\", \"login\": \"/login\"}`.\n- **도구 경로**: 도구 문서의 `api/xxx` 는 포털에서 `/t/<도구 dir>/api/xxx`. 포털이 `X-Agent-User` 를 붙여 사용자별로 저장(화면이 보낸 `X-Agent-User` 는 지워짐).\n- **도구가 꺼져 있으면 502** → `POST /api/start {\"dir\": \"<도구>\"}` 뒤 다시 시도.\n- **오류 모양**: 대부분 `{\"error\": \"한국어 설명\"}`. 예외(예: tts-local 의 POST 는 OpenAI 모양 `{\"error\": {\"message\", \"type\"}}`)는 해당 operation 에 그대로 적음.\n- **스트리밍**: `text/event-stream`(SSE) 또는 `application/x-ndjson` 응답은 이벤트 목록을 `x-stream-events` 확장에 둠. **도중 오류도 HTTP 200 으로 오고 스트림 안 `error` 이벤트로만 옴.** 포털은 버퍼링 없이 흘림(최대 1시간).\n- **확장 필드**: `x-permission`(admin 관리자 · dept-head 부서장 · creator 만든 사람 · self 본인), `x-shared-data`(여러 사람이 같이 보는 데이터), `x-gpu`·`x-llm`·`x-long-running`(GPU·LLM 사용, 오래 걸림 — 버튼 연타 막기), `x-stream-events`.\n- **도구 태그 확장**(등록용): `x-tool-id`(dir 에서 -local 뺀 것) · `x-name` · `x-description` · `x-kind`(LLM 을 쓰면 agent, 아니면 tool) · `x-category` · `x-entry`(/t/<dir>/) · `x-health-path`(가벼운 GET, 200) · `x-long-running` · `x-docs-input`(text·chunks·file·none) · `x-external-network`(외부 인터넷 호출 여부) · `x-response-style`(sse·json·file·polling). 판단 근거가 애매한 곳은 `x-<항목>-note`.\n- 스키마 description 에 \"코드 확인 필요\" 라고 적힌 곳은 문서·코드로 모양을 확정하지 못한 부분입니다(`additionalProperties: true`).\n\nREADME: `docs/api/README.md` (OpenAPI 절 — 타입 생성 명령).",
+  "contact": {
+   "name": "gggg8657",
+   "url": "https://github.com/gggg8657"
+  },
+  "license": {
+   "name": "All rights reserved (portal) — 도구별 라이선스는 각 도구 저장소 LICENSE",
+   "identifier": "LicenseRef-AllRightsReserved"
+  },
+  "x-tool-id": "protein",
+  "x-name": "단백질 구조 예측",
+  "x-description": "서열 → 3D 구조·pLDDT·PAE, 친화도 순위, 서열 설계",
+  "x-kind": "agent",
+  "x-kind-note": "핵심은 GPU 모델(Boltz·ProteinMPNN), LLM 은 결과 해설(api/job/{id}/explain)에만",
+  "x-category": "기타",
+  "x-category-note": "README 분류: 연구",
+  "x-health-path": "/t/protein-local/api/health",
+  "x-long-running": true,
+  "x-docs-input": "text",
+  "x-docs-input-note": "FASTA·PDB/mmCIF 텍스트를 JSON 안에 넣음(파일 업로드 없음)",
+  "x-external-network": false,
+  "x-external-network-note": "urlopen 은 LLM 서버(LLM_BASE)만, 엔진은 HF_HUB_OFFLINE=1",
+  "x-response-style": "polling",
+  "x-response-style-note": "작업 id → api/job/{id} 폴링, 결과 파일은 다운로드(file)",
+  "x-entry": "/t/protein-local/"
+ },
+ "servers": [
+  {
+   "url": "/",
+   "description": "포털과 같은 출처(개발 때는 개발 서버 프록시로)"
+  }
+ ],
+ "security": [
+  {
+   "cookieAuth": []
+  }
+ ],
+ "tags": [
+  {
+   "name": "protein-local",
+   "description": "단백질 구조 예측 — 서열 → 3D 구조(Boltz), 친화도, 서열 설계(ProteinMPNN). 긴 작업은 작업 id → 폴링(SSE 없음). 문서: docs/api/protein-local.md",
+   "x-tool-id": "protein",
+   "x-name": "단백질 구조 예측",
+   "x-description": "서열 → 3D 구조·pLDDT·PAE, 친화도 순위, 서열 설계",
+   "x-kind": "agent",
+   "x-kind-note": "핵심은 GPU 모델(Boltz·ProteinMPNN), LLM 은 결과 해설(api/job/{id}/explain)에만",
+   "x-category": "기타",
+   "x-category-note": "README 분류: 연구",
+   "x-health-path": "/t/protein-local/api/health",
+   "x-long-running": true,
+   "x-docs-input": "text",
+   "x-docs-input-note": "FASTA·PDB/mmCIF 텍스트를 JSON 안에 넣음(파일 업로드 없음)",
+   "x-external-network": false,
+   "x-external-network-note": "urlopen 은 LLM 서버(LLM_BASE)만, 엔진은 HF_HUB_OFFLINE=1",
+   "x-response-style": "polling",
+   "x-response-style-note": "작업 id → api/job/{id} 폴링, 결과 파일은 다운로드(file)",
+   "x-entry": "/t/protein-local/"
+  }
+ ],
+ "paths": {
+  "/t/protein-local/api/health": {
+   "get": {
+    "tags": [
+     "protein-local"
+    ],
+    "operationId": "proteinHealth",
+    "summary": "살아 있는지",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ok"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/protein-local/api/meta": {
+   "get": {
+    "tags": [
+     "protein-local"
+    ],
+    "operationId": "proteinMeta",
+    "summary": "엔진·모드·한도·예시·GPU·큐",
+    "description": "화면은 15초마다 부름. queue·running_n 은 전체, running 은 내 작업 id 만.",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProteinMeta"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/protein-local/api/models": {
+   "get": {
+    "tags": [
+     "protein-local"
+    ],
+    "operationId": "proteinModels",
+    "summary": "해설용 LLM 모델 이름(실패 시 [])",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/protein-local/api/jobs": {
+   "get": {
+    "tags": [
+     "protein-local"
+    ],
+    "operationId": "proteinJobs",
+    "summary": "내 작업 목록(최신 순, 최대 200)",
+    "description": "내 작업만(X-Agent-User 별 폴더). 남의 작업·없는 id 는 404.",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/ProteinJobItem"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/protein-local/api/job/{id}": {
+   "get": {
+    "tags": [
+     "protein-local"
+    ],
+    "operationId": "proteinJob",
+    "summary": "작업 하나 상태",
+    "description": "내 작업만(X-Agent-User 별 폴더). 남의 작업·없는 id 는 404.",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$"
+      },
+      "description": "작업 id (형식이 다르면 404)"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProteinJob"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/protein-local/api/job/{id}/log": {
+   "get": {
+    "tags": [
+     "protein-local"
+    ],
+    "operationId": "proteinJobLog",
+    "summary": "진행 로그(증분)",
+    "description": "since=next 로 새 줄만. 로그가 없으면 {lines:[],next:0}.",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$"
+      },
+      "description": "작업 id (형식이 다르면 404)"
+     },
+     {
+      "name": "since",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "minimum": 0,
+       "default": 0
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProteinLog"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/protein-local/api/job/{id}/result": {
+   "get": {
+    "tags": [
+     "protein-local"
+    ],
+    "operationId": "proteinJobResult",
+    "summary": "결과(완료 후)",
+    "description": "status=done 전이면 404.",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$"
+      },
+      "description": "작업 id (형식이 다르면 404)"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProteinResult"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/protein-local/api/job/{id}/validations": {
+   "get": {
+    "tags": [
+     "protein-local"
+    ],
+    "operationId": "proteinJobValidations",
+    "summary": "설계 작업의 재예측 작업들",
+    "description": "design: 0 = 원서열",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$"
+      },
+      "description": "작업 id (형식이 다르면 404)"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/ProteinValidation"
+         }
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/protein-local/api/job/{id}/fasta": {
+   "get": {
+    "tags": [
+     "protein-local"
+    ],
+    "operationId": "proteinJobFasta",
+    "summary": "설계 서열 FASTA",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$"
+      },
+      "description": "작업 id (형식이 다르면 404)"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "designs.fa (text/plain; charset=utf-8)",
+      "content": {
+       "text/plain": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       }
+      },
+      "headers": {
+       "Content-Disposition": {
+        "schema": {
+         "type": "string"
+        },
+        "description": "attachment; filename*=UTF-8''designs_<id>.fa"
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/protein-local/api/job/{id}/input": {
+   "get": {
+    "tags": [
+     "protein-local"
+    ],
+    "operationId": "proteinJobInput",
+    "summary": "설계 입력 구조 PDB(인라인)",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$"
+      },
+      "description": "작업 id (형식이 다르면 404)"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "PDB 텍스트. Content-Disposition 없음",
+      "content": {
+       "chemical/x-pdb": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/protein-local/api/job/{id}/file/{name}": {
+   "get": {
+    "tags": [
+     "protein-local"
+    ],
+    "operationId": "proteinJobFile",
+    "summary": "모델 PDB/mmCIF, 토큰·PAE JSON",
+    "description": "허용 이름: (l\\d{2}_)?(model|pae|tokens)_\\d.(pdb|cif|json) 또는 ref_aligned.pdb. 친화도 작업은 리간드마다 lNN_ 접두어. pae 는 없을 수 있음(404).",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$"
+      },
+      "description": "작업 id (형식이 다르면 404)"
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^((l\\d{2}_)?(model|pae|tokens)_\\d\\.(pdb|cif|json)|ref_aligned\\.pdb)$"
+      }
+     },
+     {
+      "name": "dl",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "enum": [
+        "1"
+       ]
+      },
+      "description": "1 이면 다운로드"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "model_K.pdb(chemical/x-pdb) · model_K.cif(chemical/x-mmcif) · tokens_K.json · pae_K.json({n,factor,grid,bounds,max}). dl=1 이면 Content-Disposition attachment",
+      "headers": {
+       "Content-Disposition": {
+        "schema": {
+         "type": "string"
+        },
+        "description": "dl=1 일 때만: attachment; filename*=UTF-8''<id>_<name>"
+       }
+      },
+      "content": {
+       "chemical/x-pdb": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       },
+       "chemical/x-mmcif": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       },
+       "application/json": {
+        "schema": {
+         "oneOf": [
+          {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+             "chain": {
+              "type": "string"
+             },
+             "resi": {
+              "type": "integer"
+             },
+             "resn": {
+              "type": "string"
+             },
+             "atom": {
+              "type": "string"
+             },
+             "plddt": {
+              "type": "number"
+             },
+             "het": {
+              "type": "boolean"
+             }
+            }
+           }
+          },
+          {
+           "type": "object",
+           "properties": {
+            "n": {
+             "type": "integer"
+            },
+            "factor": {
+             "type": "integer"
+            },
+            "grid": {
+             "type": "array",
+             "items": {
+              "type": "array",
+              "items": {
+               "type": "number"
+              }
+             }
+            },
+            "bounds": {
+             "type": "array",
+             "items": {
+              "type": "integer"
+             }
+            },
+            "max": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "n",
+            "grid"
+           ],
+           "additionalProperties": true
+          }
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/protein-local/api/job/{id}/zip": {
+   "get": {
+    "tags": [
+     "protein-local"
+    ],
+    "operationId": "proteinJobZip",
+    "summary": "작업 전체 ZIP",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$"
+      },
+      "description": "작업 id (형식이 다르면 404)"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "job.json·result.json·입력·로그·해설·models/·raw/·inputs/",
+      "content": {
+       "application/zip": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       }
+      },
+      "headers": {
+       "Content-Disposition": {
+        "schema": {
+         "type": "string"
+        },
+        "description": "attachment; filename*=UTF-8''protein_<id>.zip"
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/protein-local/api/validate": {
+   "post": {
+    "tags": [
+     "protein-local"
+    ],
+    "operationId": "proteinValidate",
+    "summary": "구조 예측 입력 검사(작업 안 만듦)",
+    "description": "오류가 있어도 200, errors 배열에 담김.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ProteinFoldInput"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProteinValidateResult"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/protein-local/api/validate_affinity": {
+   "post": {
+    "tags": [
+     "protein-local"
+    ],
+    "operationId": "proteinValidateAffinity",
+    "summary": "친화도 입력 검사",
+    "description": "엔진 boltz2 고정. 리간드마다 file(lig_01…).",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ProteinAffinityInput"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProteinValidateResult"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/protein-local/api/pdbinfo": {
+   "post": {
+    "tags": [
+     "protein-local"
+    ],
+    "operationId": "proteinPdbinfo",
+    "summary": "PDB/mmCIF 텍스트 → 사슬 정보",
+    "description": "mmCIF 변환 실패 400. CA 원자가 없거나 빈 입력이면 {chains:[]}.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "pdb": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "pdb"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "chains": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "id": {
+              "type": "string"
+             },
+             "n": {
+              "type": "integer"
+             },
+             "first": {
+              "type": "string"
+             },
+             "last": {
+              "type": "string"
+             }
+            },
+            "required": [
+             "id",
+             "n",
+             "first",
+             "last"
+            ]
+           }
+          }
+         },
+         "required": [
+          "chains"
+         ]
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/protein-local/api/submit": {
+   "post": {
+    "tags": [
+     "protein-local"
+    ],
+    "operationId": "proteinSubmit",
+    "summary": "작업 등록(구조·친화도·설계)",
+    "description": "GPU 큐(모든 사용자 한 줄). 수십 초~수 분, 최대 timeout(기본 3600초). 검사 실패 → 400 {error: 줄바꿈으로 이은 오류들}. 본문 크기 제한 없음(설계 구조만 8MB 검사).",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ProteinSubmitRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "작업 객체(status: queued) — 결과는 폴링",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProteinJob"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-gpu": true,
+    "x-long-running": true
+   }
+  },
+  "/t/protein-local/api/job/{id}/cancel": {
+   "post": {
+    "tags": [
+     "protein-local"
+    ],
+    "operationId": "proteinJobCancel",
+    "summary": "작업 취소",
+    "description": "실행 중 취소면 반영 전 상태일 수 있으니 다시 폴링. 내 작업만(X-Agent-User 별 폴더). 남의 작업·없는 id 는 404.",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$"
+      },
+      "description": "작업 id (형식이 다르면 404)"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "description": "빈 객체 {}"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProteinJob"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/protein-local/api/job/{id}/delete": {
+   "post": {
+    "tags": [
+     "protein-local"
+    ],
+    "operationId": "proteinJobDelete",
+    "summary": "작업·파일 삭제",
+    "description": "실행 중이면 400. 내 작업만(X-Agent-User 별 폴더). 남의 작업·없는 id 는 404.",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$"
+      },
+      "description": "작업 id (형식이 다르면 404)"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "description": "빈 객체 {}"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ok"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/protein-local/api/job/{id}/explain": {
+   "post": {
+    "tags": [
+     "protein-local"
+    ],
+    "operationId": "proteinJobExplain",
+    "summary": "LLM 결과 해설(동기)",
+    "description": "수십 초. 완료 전 작업 404, LLM 연결 실패 500. 저장돼 이후 result.explain 으로도 나옴.",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$"
+      },
+      "description": "작업 id (형식이 다르면 404)"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "k": {
+          "type": "integer",
+          "default": 0,
+          "description": "해설할 샘플(fold 만 의미)"
+         },
+         "model": {
+          "type": "string",
+          "description": "LLM 모델 이름(선택)"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "text": {
+           "type": "string",
+           "description": "한국어 마크다운"
+          }
+         },
+         "required": [
+          "text"
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-llm": true,
+    "x-long-running": true
+   }
+  },
+  "/t/protein-local/api/job/{id}/validate": {
+   "post": {
+    "tags": [
+     "protein-local"
+    ],
+    "operationId": "proteinJobValidate",
+    "summary": "설계 서열 재예측(fold 작업 여러 개 등록)",
+    "description": "하나라도 검사에 걸리면 아무것도 등록 안 하고 400(설계 N: …). 진행은 api/job/<설계id>/validations.",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$"
+      },
+      "description": "작업 id (형식이 다르면 404)"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "designs": {
+          "type": "array",
+          "items": {
+           "type": "integer"
+          },
+          "maxItems": 20
+         },
+         "native": {
+          "type": "boolean",
+          "description": "원서열(번호 0)도 추가"
+         },
+         "mode": {
+          "type": "string",
+          "enum": [
+           "fast",
+           "standard",
+           "precise"
+          ]
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "새 fold 작업 객체 배열",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/ProteinJob"
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-gpu": true
+   }
+  }
+ },
+ "components": {
+  "securitySchemes": {
+   "cookieAuth": {
+    "type": "apiKey",
+    "in": "cookie",
+    "name": "agsid",
+    "description": "POST /api/login 이 주는 세션 쿠키(HttpOnly, SameSite=Lax). 같은 출처 fetch 면 브라우저가 자동으로 붙임. 서버 안(127.0.0.1)에서 쿠키 없이 부르면 서버 주인(관리자)으로 처리."
+   }
+  },
+  "schemas": {
+   "Error": {
+    "type": "object",
+    "required": [
+     "error"
+    ],
+    "properties": {
+     "error": {
+      "type": "string",
+      "description": "사람이 읽을 수 있는 한국어 설명"
+     }
+    }
+   },
+   "Unauthorized": {
+    "type": "object",
+    "required": [
+     "error",
+     "login"
+    ],
+    "properties": {
+     "error": {
+      "type": "string",
+      "examples": [
+       "로그인이 필요합니다"
+      ]
+     },
+     "login": {
+      "type": "string",
+      "const": "/login"
+     }
+    }
+   },
+   "Ok": {
+    "type": "object",
+    "required": [
+     "ok"
+    ],
+    "properties": {
+     "ok": {
+      "type": "boolean"
+     }
+    }
+   },
+   "ProteinEngine": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "enum": [
+       "boltz2",
+       "boltz1"
+      ]
+     },
+     "label": {
+      "type": "string"
+     },
+     "ligand": {
+      "type": "boolean"
+     },
+     "affinity": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "id",
+     "label",
+     "ligand",
+     "affinity"
+    ]
+   },
+   "ProteinMode": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "enum": [
+       "fast",
+       "standard",
+       "precise"
+      ]
+     },
+     "label": {
+      "type": "string"
+     },
+     "recycling": {
+      "type": "integer"
+     },
+     "steps": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "id",
+     "label",
+     "recycling",
+     "steps"
+    ]
+   },
+   "ProteinGpu": {
+    "type": "object",
+    "properties": {
+     "index": {
+      "type": "string",
+      "description": "GPU 번호(문자열)"
+     },
+     "name": {
+      "type": "string"
+     },
+     "used": {
+      "type": "number",
+      "description": "MiB"
+     },
+     "free": {
+      "type": "number",
+      "description": "MiB"
+     },
+     "total": {
+      "type": "number",
+      "description": "MiB"
+     }
+    },
+    "required": [
+     "index",
+     "name",
+     "used",
+     "free",
+     "total"
+    ]
+   },
+   "ProteinMeta": {
+    "type": "object",
+    "properties": {
+     "engines": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/ProteinEngine"
+      }
+     },
+     "mpnn": {
+      "type": "boolean",
+      "description": "ProteinMPNN 사용 가능"
+     },
+     "max_aff_ligands": {
+      "type": "integer"
+     },
+     "max_designs": {
+      "type": "integer"
+     },
+     "modes": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/ProteinMode"
+      }
+     },
+     "max_res": {
+      "type": "integer",
+      "description": "토큰 한도(잔기 + 리간드 무거운 원자)"
+     },
+     "max_chains": {
+      "type": "integer"
+     },
+     "max_samples": {
+      "type": "integer"
+     },
+     "timeout": {
+      "type": "integer",
+      "description": "작업 하나 최대 초"
+     },
+     "examples": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "name": {
+         "type": "string"
+        },
+        "note": {
+         "type": "string"
+        },
+        "fasta": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "name",
+        "fasta"
+       ]
+      }
+     },
+     "gpus": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/ProteinGpu"
+      }
+     },
+     "model": {
+      "type": "string",
+      "description": "해설용 LLM 모델 이름"
+     },
+     "queue": {
+      "type": "integer",
+      "description": "전체 대기 작업 수(모든 사용자)"
+     },
+     "running_n": {
+      "type": "integer",
+      "description": "실행 중 작업 수(모든 사용자)"
+     },
+     "running": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "그중 내 작업 id"
+     }
+    },
+    "required": [
+     "engines",
+     "mpnn",
+     "max_aff_ligands",
+     "max_designs",
+     "modes",
+     "max_res",
+     "max_chains",
+     "max_samples",
+     "timeout",
+     "examples",
+     "gpus",
+     "model",
+     "queue",
+     "running_n",
+     "running"
+    ]
+   },
+   "ProteinKind": {
+    "type": "string",
+    "enum": [
+     "fold",
+     "affinity",
+     "design"
+    ]
+   },
+   "ProteinStatus": {
+    "type": "string",
+    "enum": [
+     "queued",
+     "running",
+     "done",
+     "error",
+     "canceled"
+    ]
+   },
+   "ProteinRef": {
+    "type": [
+     "object",
+     "null"
+    ],
+    "properties": {
+     "job": {
+      "type": "string"
+     },
+     "design": {
+      "type": "integer",
+      "description": "설계 번호, 0 = 원서열"
+     }
+    },
+    "required": [
+     "job",
+     "design"
+    ],
+    "description": "설계 재예측 작업이면 원 설계 작업"
+   },
+   "ProteinJobItem": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "kind": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/ProteinKind"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "옛 작업은 null(= fold 로 처리)"
+     },
+     "title": {
+      "type": "string"
+     },
+     "status": {
+      "$ref": "#/components/schemas/ProteinStatus"
+     },
+     "created": {
+      "type": "string"
+     },
+     "engine": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "mode": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "tokens": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "error": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "elapsed": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "ref": {
+      "$ref": "#/components/schemas/ProteinRef"
+     },
+     "plddt": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "ptm": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "iptm": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "rmsd": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "best": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "n_chains": {
+      "type": "integer"
+     },
+     "n_ligands": {
+      "type": "integer"
+     },
+     "position": {
+      "type": "integer",
+      "description": "대기 순번(1=다음), 대기 아니면 0"
+     }
+    },
+    "required": [
+     "id",
+     "kind",
+     "title",
+     "status",
+     "created",
+     "position"
+    ]
+   },
+   "ProteinJob": {
+    "type": "object",
+    "additionalProperties": true,
+    "description": "작업 저장본(job.json) 전체 + position. kind 별 필드: fold/affinity = engine, mode, samples, affinity, msa, ref?, chains[{id,name,seq}], ligands[{id,label,name,atoms,smiles|ccd,file?}]; design = engine:'proteinmpnn', model, n, temperature, design_chains, fixed, omit, source, chains[{id,n,seq}]",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "kind": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/ProteinKind"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "옛 작업은 null(= fold 로 처리)"
+     },
+     "title": {
+      "type": "string"
+     },
+     "status": {
+      "$ref": "#/components/schemas/ProteinStatus"
+     },
+     "created": {
+      "type": "string"
+     },
+     "started": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "finished": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "elapsed": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "error": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "tokens": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "chains": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "additionalProperties": true,
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "name": {
+         "type": "string"
+        },
+        "seq": {
+         "type": "string"
+        },
+        "n": {
+         "type": "integer"
+        }
+       },
+       "required": [
+        "id"
+       ]
+      }
+     },
+     "ligands": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "additionalProperties": true,
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "label": {
+         "type": "string"
+        },
+        "name": {
+         "type": "string"
+        },
+        "atoms": {
+         "type": "integer"
+        },
+        "smiles": {
+         "type": "string"
+        },
+        "ccd": {
+         "type": "string"
+        },
+        "file": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "gpu": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "gpu_free_mb": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "summary": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "완료 시 결과 summary(result 의 summary 와 같음)"
+     },
+     "engine": {
+      "type": "string"
+     },
+     "mode": {
+      "type": "string"
+     },
+     "samples": {
+      "type": "integer"
+     },
+     "affinity": {
+      "type": "boolean"
+     },
+     "msa": {
+      "type": "string"
+     },
+     "ref": {
+      "$ref": "#/components/schemas/ProteinRef"
+     },
+     "position": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "id",
+     "kind",
+     "title",
+     "status",
+     "created"
+    ]
+   },
+   "ProteinLog": {
+    "type": "object",
+    "properties": {
+     "lines": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "next": {
+      "type": "integer",
+      "description": "다음 호출의 since"
+     }
+    },
+    "required": [
+     "lines",
+     "next"
+    ]
+   },
+   "ProteinAffinityScore": {
+    "type": "object",
+    "properties": {
+     "log10_ic50_uM": {
+      "type": "number"
+     },
+     "ic50_uM": {
+      "type": "number"
+     },
+     "pic50": {
+      "type": "number"
+     },
+     "p_binder": {
+      "type": "number"
+     },
+     "models": {
+      "type": "array",
+      "description": "코드 확인 필요"
+     }
+    },
+    "additionalProperties": true
+   },
+   "ProteinSample": {
+    "type": "object",
+    "properties": {
+     "k": {
+      "type": "integer"
+     },
+     "plddt": {
+      "type": "number"
+     },
+     "ptm": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "iptm": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "confidence": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "ligand_iptm": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "complex_pde": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "pae_mean": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "chains": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "plddt": {
+         "type": "number"
+        },
+        "n": {
+         "type": "integer"
+        },
+        "ptm": {
+         "type": [
+          "number",
+          "null"
+         ]
+        }
+       },
+       "required": [
+        "id",
+        "plddt",
+        "n"
+       ]
+      }
+     },
+     "pairs": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "a": {
+         "type": "string"
+        },
+        "b": {
+         "type": "string"
+        },
+        "iptm": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "pae": {
+         "type": [
+          "number",
+          "null"
+         ]
+        }
+       },
+       "required": [
+        "a",
+        "b"
+       ]
+      }
+     },
+     "bands": {
+      "type": "object",
+      "properties": {
+       "vh": {
+        "type": "number"
+       },
+       "h": {
+        "type": "number"
+       },
+       "l": {
+        "type": "number"
+       },
+       "vl": {
+        "type": "number"
+       }
+      },
+      "required": [
+       "vh",
+       "h",
+       "l",
+       "vl"
+      ],
+      "description": "pLDDT ≥90 / 70–90 / 50–70 / <50 비율(%)"
+     },
+     "low_segments": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "chain": {
+         "type": "string"
+        },
+        "start": {
+         "type": "integer"
+        },
+        "end": {
+         "type": "integer"
+        },
+        "len": {
+         "type": "integer"
+        },
+        "mean": {
+         "type": "number"
+        }
+       }
+      }
+     }
+    },
+    "required": [
+     "k",
+     "plddt"
+    ],
+    "additionalProperties": true
+   },
+   "ProteinFoldResult": {
+    "type": "object",
+    "properties": {
+     "summary": {
+      "type": "object",
+      "properties": {
+       "plddt": {
+        "type": "number"
+       },
+       "ptm": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "iptm": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "confidence": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "gpu_peak_mb": {
+        "type": "number"
+       },
+       "gpu_name": {
+        "type": "string"
+       },
+       "engine_seconds": {
+        "type": "number"
+       },
+       "affinity": {
+        "oneOf": [
+         {
+          "$ref": "#/components/schemas/ProteinAffinityScore"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "description": "리간드 1개 + affinity:true 일 때"
+       },
+       "best": {
+        "type": "string"
+       },
+       "rmsd": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "ref_n": {
+        "type": "integer"
+       },
+       "ref_note": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "plddt",
+       "best"
+      ],
+      "additionalProperties": true
+     },
+     "samples": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/ProteinSample"
+      },
+      "description": "samples[0] 이 최상위(신뢰도 순)"
+     },
+     "explain": {
+      "type": "string",
+      "description": "LLM 해설(마크다운) — 만든 적 있을 때만"
+     }
+    },
+    "required": [
+     "summary",
+     "samples"
+    ],
+    "additionalProperties": true
+   },
+   "ProteinAffinityResult": {
+    "type": "object",
+    "properties": {
+     "summary": {
+      "type": "object",
+      "properties": {
+       "n": {
+        "type": "integer"
+       },
+       "n_ok": {
+        "type": "integer"
+       },
+       "top": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "top_p": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "best": {
+        "type": "string"
+       },
+       "gpu_peak_mb": {
+        "type": "number"
+       },
+       "gpu_name": {
+        "type": "string"
+       },
+       "engine_seconds": {
+        "type": "number"
+       }
+      },
+      "required": [
+       "n",
+       "n_ok",
+       "best"
+      ],
+      "additionalProperties": true
+     },
+     "ligands": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "additionalProperties": true,
+       "description": "실패한 리간드는 i·name·error 만",
+       "properties": {
+        "i": {
+         "type": "integer"
+        },
+        "file": {
+         "type": "string"
+        },
+        "name": {
+         "type": "string"
+        },
+        "label": {
+         "type": "string"
+        },
+        "smiles": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "ccd": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "log10_ic50_uM": {
+         "type": "number"
+        },
+        "ic50_uM": {
+         "type": "number"
+        },
+        "pic50": {
+         "type": "number"
+        },
+        "p_binder": {
+         "type": "number"
+        },
+        "models": {
+         "type": "array"
+        },
+        "plddt": {
+         "type": "number"
+        },
+        "iptm": {
+         "type": "number"
+        },
+        "ligand_iptm": {
+         "type": "number"
+        },
+        "confidence": {
+         "type": "number"
+        },
+        "lig_plddt": {
+         "type": "number"
+        },
+        "rank_p": {
+         "type": "integer"
+        },
+        "rank_ic50": {
+         "type": "integer"
+        },
+        "sample": {
+         "$ref": "#/components/schemas/ProteinSample"
+        },
+        "error": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "i",
+        "name"
+       ]
+      }
+     },
+     "explain": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "summary",
+     "ligands"
+    ],
+    "additionalProperties": true
+   },
+   "ProteinDesignResult": {
+    "type": "object",
+    "properties": {
+     "summary": {
+      "type": "object",
+      "properties": {
+       "n": {
+        "type": "integer"
+       },
+       "best_score": {
+        "type": "number"
+       },
+       "mean_recovery": {
+        "type": "number"
+       },
+       "best": {
+        "type": "string"
+       },
+       "gpu_peak_mb": {
+        "type": "number"
+       },
+       "gpu_name": {
+        "type": "string"
+       },
+       "engine_seconds": {
+        "type": "number"
+       }
+      },
+      "required": [
+       "n",
+       "best"
+      ],
+      "additionalProperties": true
+     },
+     "native": {
+      "type": "string",
+      "description": "여러 사슬은 ':' 로 이음(chain_ids 순서)"
+     },
+     "chain_ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "designs": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "i": {
+         "type": "integer"
+        },
+        "seq": {
+         "type": "string"
+        },
+        "confidence": {
+         "type": "number"
+        },
+        "score": {
+         "type": "number"
+        },
+        "global_score": {
+         "type": "number"
+        },
+        "recovery": {
+         "type": "number"
+        },
+        "mutations": {
+         "type": "integer"
+        }
+       },
+       "required": [
+        "i",
+        "seq",
+        "score"
+       ]
+      },
+      "description": "score 오름차순"
+     },
+     "explain": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "summary",
+     "native",
+     "chain_ids",
+     "designs"
+    ],
+    "additionalProperties": true
+   },
+   "ProteinResult": {
+    "anyOf": [
+     {
+      "$ref": "#/components/schemas/ProteinFoldResult"
+     },
+     {
+      "$ref": "#/components/schemas/ProteinAffinityResult"
+     },
+     {
+      "$ref": "#/components/schemas/ProteinDesignResult"
+     }
+    ],
+    "description": "작업 kind 에 따라 다름"
+   },
+   "ProteinValidation": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "design": {
+      "type": "integer"
+     },
+     "status": {
+      "$ref": "#/components/schemas/ProteinStatus"
+     },
+     "plddt": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "ptm": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "rmsd": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "error": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "id",
+     "design",
+     "status"
+    ]
+   },
+   "ProteinFoldInput": {
+    "type": "object",
+    "properties": {
+     "fasta": {
+      "type": "string",
+      "description": "FASTA(레코드 여러 개 = 복합체, 사슬 A,B,…) 또는 맨 서열. 표준 아미노산 20자, 사슬당 4잔기 이상"
+     },
+     "ligands": {
+      "type": "string",
+      "description": "한 줄에 하나: CCD 코드 또는 SMILES. ccd:/smiles: 접두어로 강제. 뒤에 공백 + 이름 가능"
+     },
+     "engine": {
+      "type": "string",
+      "enum": [
+       "boltz2",
+       "boltz1"
+      ],
+      "default": "boltz2"
+     },
+     "affinity": {
+      "type": "boolean",
+      "description": "결합 친화도(boltz2, 리간드 정확히 1개일 때만)"
+     },
+     "samples": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "default": 1
+     },
+     "mode": {
+      "type": "string",
+      "enum": [
+       "fast",
+       "standard",
+       "precise"
+      ],
+      "default": "standard"
+     },
+     "seed": {
+      "type": "string",
+      "pattern": "^\\d*$",
+      "description": "재현용 시드(숫자 문자열)"
+     }
+    },
+    "required": [
+     "fasta"
+    ]
+   },
+   "ProteinAffinityInput": {
+    "type": "object",
+    "properties": {
+     "fasta": {
+      "type": "string",
+      "description": "단백질"
+     },
+     "ligands": {
+      "type": "string",
+      "description": "한 줄에 하나, 최대 20"
+     },
+     "mode": {
+      "type": "string",
+      "enum": [
+       "fast",
+       "standard",
+       "precise"
+      ]
+     },
+     "seed": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "fasta",
+     "ligands"
+    ]
+   },
+   "ProteinValidateResult": {
+    "type": "object",
+    "properties": {
+     "errors": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "빈 배열이면 통과(오류가 있어도 HTTP 200)"
+     },
+     "tokens": {
+      "type": "integer"
+     },
+     "chains": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "name": {
+         "type": "string"
+        },
+        "len": {
+         "type": "integer"
+        }
+       },
+       "required": [
+        "id"
+       ]
+      }
+     },
+     "ligands": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "label": {
+         "type": "string"
+        },
+        "name": {
+         "type": "string"
+        },
+        "atoms": {
+         "type": "integer"
+        },
+        "ccd": {
+         "type": "string"
+        },
+        "smiles": {
+         "type": "string"
+        },
+        "file": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "id"
+       ],
+       "additionalProperties": true
+      }
+     }
+    },
+    "required": [
+     "errors"
+    ],
+    "additionalProperties": true
+   },
+   "ProteinSubmitRequest": {
+    "description": "kind 에 따라 필드가 다름. 공통: kind(기본 fold), title(80자), seed. fold = ProteinFoldInput + ref, affinity = ProteinAffinityInput, design = 아래 design 필드",
+    "type": "object",
+    "properties": {
+     "kind": {
+      "$ref": "#/components/schemas/ProteinKind",
+      "default": "fold"
+     },
+     "title": {
+      "type": "string",
+      "maxLength": 80
+     },
+     "seed": {
+      "type": "string"
+     },
+     "fasta": {
+      "type": "string"
+     },
+     "ligands": {
+      "type": "string"
+     },
+     "engine": {
+      "type": "string",
+      "enum": [
+       "boltz2",
+       "boltz1"
+      ]
+     },
+     "affinity": {
+      "type": "boolean"
+     },
+     "samples": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+     },
+     "mode": {
+      "type": "string",
+      "enum": [
+       "fast",
+       "standard",
+       "precise"
+      ]
+     },
+     "ref": {
+      "type": "object",
+      "properties": {
+       "job": {
+        "type": "string"
+       },
+       "design": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "job",
+       "design"
+      ],
+      "description": "fold: 설계 원구조와 RMSD 비교"
+     },
+     "from_job": {
+      "type": "string",
+      "description": "design: 구조 예측 작업 id(pdb 와 둘 중 하나)"
+     },
+     "k": {
+      "type": "integer",
+      "default": 0,
+      "description": "design: from_job 의 샘플 번호"
+     },
+     "pdb": {
+      "type": "string",
+      "description": "design: PDB 또는 mmCIF 텍스트(8MB 이하, 잔기 3000 이하)"
+     },
+     "filename": {
+      "type": "string"
+     },
+     "chains": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "design: 설계할 사슬(기본 전부)"
+     },
+     "fixed": {
+      "type": "string",
+      "description": "design: 고정 잔기 'A1-10, A25, B'"
+     },
+     "n": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 64,
+      "default": 8
+     },
+     "temperature": {
+      "type": "number",
+      "minimum": 0.01,
+      "maximum": 1.5,
+      "default": 0.1
+     },
+     "model": {
+      "type": "string",
+      "enum": [
+       "protein_mpnn",
+       "soluble_mpnn"
+      ],
+      "default": "protein_mpnn"
+     },
+     "omit": {
+      "type": "string",
+      "description": "제외할 아미노산 글자"
+     }
+    }
+   }
+  },
+  "responses": {
+   "BadRequest": {
+    "description": "입력이 잘못됨(본문이 JSON 객체가 아님, 필수 값 없음 등)",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "Unauthorized": {
+    "description": "로그인 필요 — /login 으로",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Unauthorized"
+      }
+     }
+    }
+   },
+   "NotFound": {
+    "description": "없는 경로·도구·항목",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "ServerError": {
+    "description": "서버 내부 오류",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "BadGateway": {
+    "description": "도구가 꺼져 있음(응답 없음) → POST /api/start {\"dir\": \"<도구>\"} 로 켠 뒤 다시 시도",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   }
+  }
+ }
+}

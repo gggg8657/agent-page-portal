@@ -1,0 +1,1565 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "KAERI AI Agent Portal API — battery-local",
+  "version": "2026.10.13",
+  "summary": "배터리 — PyBaMM 리튬이온 셀 성능·수명(열화) 계산 작업 큐. LLM 은 질문→설정·해설에만. 문서: docs/api/battery-local.md",
+  "description": "© 2026 gggg8657 · 내부 시험용 · 배포용 아님\n\nKAERI AI 에이전트 포털과 도구들의 HTTP API(도구 수는 summary 참고). 근거: `docs/api/README.md` 와 `docs/api/<도구>.md`(문서와 실제 응답이 다르면 응답이 맞음 — 알려 주면 고침).\n\n## 연결 방법 요약\n- **같은 출처 전제** (`servers: [{url: \"/\"}]`). 포털은 CORS 헤더를 내보내지 않고, 로그인 쿠키 `agsid` 는 HttpOnly·SameSite=Lax 입니다.\n  개발할 때는 개발 서버 프록시(Vite `server.proxy`, Next.js `rewrites`)로 `/api`·`/t`·`/logout` 을 포털로 넘기세요 — 예시는 README \"3. 새 화면을 연결하는 방법\".\n- **로그인**: `POST /api/login` → 쿠키 `agsid` 가 붙음. 이후 `fetch(…, {credentials: \"same-origin\"})`(기본값). JS 에서 쿠키를 읽을 수 없음.\n  로그인 안 된 API 요청은 401 `{\"error\": \"로그인이 필요합니다\", \"login\": \"/login\"}`.\n- **도구 경로**: 도구 문서의 `api/xxx` 는 포털에서 `/t/<도구 dir>/api/xxx`. 포털이 `X-Agent-User` 를 붙여 사용자별로 저장(화면이 보낸 `X-Agent-User` 는 지워짐).\n- **도구가 꺼져 있으면 502** → `POST /api/start {\"dir\": \"<도구>\"}` 뒤 다시 시도.\n- **오류 모양**: 대부분 `{\"error\": \"한국어 설명\"}`. 예외(예: tts-local 의 POST 는 OpenAI 모양 `{\"error\": {\"message\", \"type\"}}`)는 해당 operation 에 그대로 적음.\n- **스트리밍**: `text/event-stream`(SSE) 또는 `application/x-ndjson` 응답은 이벤트 목록을 `x-stream-events` 확장에 둠. **도중 오류도 HTTP 200 으로 오고 스트림 안 `error` 이벤트로만 옴.** 포털은 버퍼링 없이 흘림(최대 1시간).\n- **확장 필드**: `x-permission`(admin 관리자 · dept-head 부서장 · creator 만든 사람 · self 본인), `x-shared-data`(여러 사람이 같이 보는 데이터), `x-gpu`·`x-llm`·`x-long-running`(GPU·LLM 사용, 오래 걸림 — 버튼 연타 막기), `x-stream-events`.\n- **도구 태그 확장**(등록용): `x-tool-id`(dir 에서 -local 뺀 것) · `x-name` · `x-description` · `x-kind`(LLM 을 쓰면 agent, 아니면 tool) · `x-category` · `x-entry`(/t/<dir>/) · `x-health-path`(가벼운 GET, 200) · `x-long-running` · `x-docs-input`(text·chunks·file·none) · `x-external-network`(외부 인터넷 호출 여부) · `x-response-style`(sse·json·file·polling). 판단 근거가 애매한 곳은 `x-<항목>-note`.\n- 스키마 description 에 \"코드 확인 필요\" 라고 적힌 곳은 문서·코드로 모양을 확정하지 못한 부분입니다(`additionalProperties: true`).\n\nREADME: `docs/api/README.md` (OpenAPI 절 — 타입 생성 명령).",
+  "contact": {
+   "name": "gggg8657",
+   "url": "https://github.com/gggg8657"
+  },
+  "license": {
+   "name": "All rights reserved (portal) — 도구별 라이선스는 각 도구 저장소 LICENSE",
+   "identifier": "LicenseRef-AllRightsReserved"
+  },
+  "x-tool-id": "battery",
+  "x-name": "배터리",
+  "x-description": "PyBaMM 성능·수명 예측",
+  "x-kind": "agent",
+  "x-category": "기타",
+  "x-category-note": "연구",
+  "x-entry": "/t/battery-local/",
+  "x-health-path": "/t/battery-local/api/health",
+  "x-long-running": true,
+  "x-docs-input": "none",
+  "x-external-network": false,
+  "x-external-network-note": "외부 호출 없음 — LLM 서버(LLM_BASE)·옆 도구(localhost)만",
+  "x-response-style": "polling",
+  "x-response-style-note": "작업 제출 후 GET api/jobs/{id} 폴링. api/ask·explain 은 SSE, 결과 파일 다운로드도 있음",
+  "x-kind-note": "계산은 PyBaMM(LLM 아님), LLM 은 질문→설정·해설에만"
+ },
+ "servers": [
+  {
+   "url": "/",
+   "description": "포털과 같은 출처(개발 때는 개발 서버 프록시로)"
+  }
+ ],
+ "security": [
+  {
+   "cookieAuth": []
+  }
+ ],
+ "tags": [
+  {
+   "name": "battery-local",
+   "description": "배터리 — PyBaMM 리튬이온 셀 성능·수명(열화) 계산 작업 큐. LLM 은 질문→설정·해설에만. 문서: docs/api/battery-local.md",
+   "x-tool-id": "battery",
+   "x-name": "배터리",
+   "x-description": "PyBaMM 성능·수명 예측",
+   "x-kind": "agent",
+   "x-category": "기타",
+   "x-category-note": "연구",
+   "x-entry": "/t/battery-local/",
+   "x-health-path": "/t/battery-local/api/health",
+   "x-long-running": true,
+   "x-docs-input": "none",
+   "x-external-network": false,
+   "x-external-network-note": "외부 호출 없음 — LLM 서버(LLM_BASE)·옆 도구(localhost)만",
+   "x-response-style": "polling",
+   "x-response-style-note": "작업 제출 후 GET api/jobs/{id} 폴링. api/ask·explain 은 SSE, 결과 파일 다운로드도 있음",
+   "x-kind-note": "계산은 PyBaMM(LLM 아님), LLM 은 질문→설정·해설에만"
+  }
+ ],
+ "paths": {
+  "/t/battery-local/api/health": {
+   "get": {
+    "tags": [
+     "battery-local"
+    ],
+    "operationId": "batteryHealth",
+    "summary": "서버·PyBaMM 상태",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "python": {
+           "type": "boolean",
+           "description": "PyBaMM 파이썬을 찾았는지"
+          },
+          "pybamm": {
+           "type": [
+            "string",
+            "null"
+           ]
+          }
+         },
+         "required": [
+          "ok",
+          "python",
+          "pybamm"
+         ]
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/battery-local/api/meta": {
+   "get": {
+    "tags": [
+     "battery-local"
+    ],
+    "operationId": "batteryMeta",
+    "summary": "파라미터 세트·모델·한도 정보",
+    "description": "첫 호출만 수 초~수십 초(세트 정보 계산 후 캐시). 모든 사용자 공용.",
+    "x-shared-data": true,
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BatteryMeta"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/battery-local/api/models": {
+   "get": {
+    "tags": [
+     "battery-local"
+    ],
+    "operationId": "batteryModels",
+    "summary": "LLM 이름 목록(LLM 서버에 못 붙으면 [])",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/battery-local/api/jobs": {
+   "get": {
+    "tags": [
+     "battery-local"
+    ],
+    "operationId": "batteryJobs",
+    "summary": "내 작업 목록(최근 순, 최대 300) + 대기열",
+    "description": "화면은 4초마다 새로 고침. 서버 주인(owner)은 예전 기록도 봄.",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "jobs": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/BatteryJobStatus"
+           }
+          },
+          "queue": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           },
+           "description": "대기 중인 내 작업 id"
+          }
+         },
+         "required": [
+          "jobs",
+          "queue"
+         ]
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "battery-local"
+    ],
+    "operationId": "batterySubmit",
+    "summary": "계산 작업 제출(큐)",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "oneOf": [
+         {
+          "type": "object",
+          "properties": {
+           "job": {
+            "$ref": "#/components/schemas/BatteryJobConfig"
+           }
+          },
+          "required": [
+           "job"
+          ]
+         },
+         {
+          "$ref": "#/components/schemas/BatteryJobConfig"
+         }
+        ],
+        "description": "{job: {...}} 또는 설정 객체 그대로"
+       }
+      }
+     }
+    },
+    "description": "CPU 별도 프로세스(GPU 아님). 동시 meta.max_jobs(기본 2), 나머지는 모든 사용자 공용 대기열. 수 초~수십 분, 작업당 최대 7200초. 이후 GET api/jobs/{id} 폴링.",
+    "x-long-running": true,
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "id": {
+           "type": "string",
+           "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$",
+           "description": "YYYYMMDD-HHMMSS-xxxx. 형식이 다르면 404"
+          }
+         },
+         "required": [
+          "id"
+         ]
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/battery-local/api/jobs/{id}": {
+   "get": {
+    "tags": [
+     "battery-local"
+    ],
+    "operationId": "batteryJob",
+    "summary": "작업 상태·설정·결과·해설(폴링)",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$",
+       "description": "YYYYMMDD-HHMMSS-xxxx. 형식이 다르면 404"
+      }
+     }
+    ],
+    "description": "state 가 queued/running 인 동안 폴링(화면 1.5초). result·partial·explain 은 있을 때만. 남의 작업·없는 id → 404 {error:'없음'}.",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BatteryJobDetail"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/battery-local/api/jobs/{id}/file/{name}": {
+   "get": {
+    "tags": [
+     "battery-local"
+    ],
+    "operationId": "batteryFile",
+    "summary": "결과 파일 다운로드(CSV·PNG·JSON)",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$",
+       "description": "YYYYMMDD-HHMMSS-xxxx. 형식이 다르면 404"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[^.].*\\.(csv|png|json)$"
+      },
+      "description": "plot.png·summary.csv·curves.csv·cycles.csv·result.json — 목록은 result.files(+result.json)"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "파일. CSV 는 UTF-8 BOM 포함",
+      "headers": {
+       "Content-Disposition": {
+        "schema": {
+         "type": "string"
+        },
+        "description": "attachment; filename=\"battery-{id}-{name}\""
+       }
+      },
+      "content": {
+       "text/csv": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       },
+       "image/png": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       },
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/battery-local/api/validate": {
+   "post": {
+    "tags": [
+     "battery-local"
+    ],
+    "operationId": "batteryValidate",
+    "summary": "설정 검사·기본값 채우기(실행 안 함)",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "oneOf": [
+         {
+          "type": "object",
+          "properties": {
+           "job": {
+            "$ref": "#/components/schemas/BatteryJobConfig"
+           }
+          },
+          "required": [
+           "job"
+          ]
+         },
+         {
+          "$ref": "#/components/schemas/BatteryJobConfig"
+         }
+        ],
+        "description": "{job: {...}} 또는 설정 객체 그대로"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "job": {
+           "$ref": "#/components/schemas/BatteryJobConfig"
+          },
+          "steps": {
+           "type": [
+            "array",
+            "null"
+           ],
+           "items": {
+            "type": "array",
+            "items": {
+             "type": "string"
+            }
+           },
+           "description": "life 일 때 시나리오별 한 사이클 실험 문자열, 아니면 null"
+          }
+         },
+         "required": [
+          "job",
+          "steps"
+         ]
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/battery-local/api/jobs/{id}/cancel": {
+   "post": {
+    "tags": [
+     "battery-local"
+    ],
+    "operationId": "batteryCancel",
+    "summary": "대기·실행 중 작업 취소",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$",
+       "description": "YYYYMMDD-HHMMSS-xxxx. 형식이 다르면 404"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {}
+       }
+      }
+     }
+    },
+    "description": "이미 끝난 작업이면 409 {error:'이미 끝난 작업은 취소할 수 없습니다'}.",
+    "x-permission": "creator",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ok"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/battery-local/api/jobs/{id}/delete": {
+   "post": {
+    "tags": [
+     "battery-local"
+    ],
+    "operationId": "batteryDelete",
+    "summary": "작업 삭제(실행 중이면 취소 후, 되돌릴 수 없음)",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$",
+       "description": "YYYYMMDD-HHMMSS-xxxx. 형식이 다르면 404"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {}
+       }
+      }
+     }
+    },
+    "x-permission": "creator",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ok"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/battery-local/api/ask": {
+   "post": {
+    "tags": [
+     "battery-local"
+    ],
+    "operationId": "batteryAsk",
+    "summary": "자연어 질문 → 설정(→ 바로 제출) (SSE)",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "question": {
+          "type": "string",
+          "description": "앞 2000자만 씀"
+         },
+         "model": {
+          "type": "string"
+         },
+         "run": {
+          "type": "boolean",
+          "default": true,
+          "description": "false 면 설정만 돌려줌"
+         }
+        },
+        "required": [
+         "question"
+        ]
+       }
+      }
+     }
+    },
+    "description": "이벤트 {stage:'llm',msg} → {token}… ({stage,msg:'형식 재시도',reset:true} 면 토큰 표시 지움) → {done:{job,reason,steps,title,id}}. 오류(빈 질문·검증 실패 포함)도 HTTP 200 으로 오고 스트림 안 {error} 이벤트로만 옴.",
+    "x-llm": true,
+    "x-long-running": true,
+    "responses": {
+     "200": {
+      "description": "SSE 스트림 (data: <JSON>\\n\\n)",
+      "content": {
+       "text/event-stream": {
+        "schema": {
+         "type": "string",
+         "description": "SSE 스트림 (data: <JSON>\\n\\n)"
+        },
+        "x-stream-events": [
+         {
+          "name": "stage",
+          "schema": {
+           "$ref": "#/components/schemas/BatteryStageEvent"
+          }
+         },
+         {
+          "name": "token",
+          "schema": {
+           "$ref": "#/components/schemas/BatteryTokenEvent"
+          }
+         },
+         {
+          "name": "done",
+          "schema": {
+           "$ref": "#/components/schemas/BatteryAskDoneEvent"
+          }
+         },
+         {
+          "name": "error",
+          "schema": {
+           "$ref": "#/components/schemas/BatteryErrorEvent"
+          }
+         }
+        ]
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/battery-local/api/jobs/{id}/explain": {
+   "post": {
+    "tags": [
+     "battery-local"
+    ],
+    "operationId": "batteryExplainJob",
+    "summary": "결과 해설 생성 (SSE)",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$",
+       "description": "YYYYMMDD-HHMMSS-xxxx. 형식이 다르면 404"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "model": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "description": "이벤트 {stage}, {token}…, {done:{text,unverified_numbers,facts,disclaimer,model,ts}}. 결과는 저장되어 GET api/jobs/{id} 의 explain 으로도 나옴. 결과 없는 작업이면 {error} — 오류도 HTTP 200 스트림 안 error 이벤트로만 옴.",
+    "x-llm": true,
+    "x-long-running": true,
+    "responses": {
+     "200": {
+      "description": "SSE 스트림 (data: <JSON>\\n\\n)",
+      "content": {
+       "text/event-stream": {
+        "schema": {
+         "type": "string",
+         "description": "SSE 스트림 (data: <JSON>\\n\\n)"
+        },
+        "x-stream-events": [
+         {
+          "name": "stage",
+          "schema": {
+           "$ref": "#/components/schemas/BatteryStageEvent"
+          }
+         },
+         {
+          "name": "token",
+          "schema": {
+           "$ref": "#/components/schemas/BatteryTokenEvent"
+          }
+         },
+         {
+          "name": "done",
+          "schema": {
+           "$ref": "#/components/schemas/BatteryExplainDoneEvent"
+          }
+         },
+         {
+          "name": "error",
+          "schema": {
+           "$ref": "#/components/schemas/BatteryErrorEvent"
+          }
+         }
+        ]
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "securitySchemes": {
+   "cookieAuth": {
+    "type": "apiKey",
+    "in": "cookie",
+    "name": "agsid",
+    "description": "POST /api/login 이 주는 세션 쿠키(HttpOnly, SameSite=Lax). 같은 출처 fetch 면 브라우저가 자동으로 붙임. 서버 안(127.0.0.1)에서 쿠키 없이 부르면 서버 주인(관리자)으로 처리."
+   }
+  },
+  "schemas": {
+   "Error": {
+    "type": "object",
+    "required": [
+     "error"
+    ],
+    "properties": {
+     "error": {
+      "type": "string",
+      "description": "사람이 읽을 수 있는 한국어 설명"
+     }
+    }
+   },
+   "Unauthorized": {
+    "type": "object",
+    "required": [
+     "error",
+     "login"
+    ],
+    "properties": {
+     "error": {
+      "type": "string",
+      "examples": [
+       "로그인이 필요합니다"
+      ]
+     },
+     "login": {
+      "type": "string",
+      "const": "/login"
+     }
+    }
+   },
+   "Ok": {
+    "type": "object",
+    "required": [
+     "ok"
+    ],
+    "properties": {
+     "ok": {
+      "type": "boolean"
+     }
+    }
+   },
+   "BatteryState": {
+    "type": "string",
+    "enum": [
+     "queued",
+     "running",
+     "done",
+     "error",
+     "canceled"
+    ]
+   },
+   "BatteryKind": {
+    "type": "string",
+    "enum": [
+     "rate",
+     "charge",
+     "drive",
+     "life"
+    ],
+    "description": "방전 C-rate 비교 / CC-CV 충전 / 전류 프로파일 / 수명"
+   },
+   "BatteryParamSet": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "chem": {
+      "type": "string"
+     },
+     "cell": {
+      "type": "string"
+     },
+     "note": {
+      "type": "string"
+     },
+     "capacity": {
+      "type": "number",
+      "description": "공칭 Ah"
+     },
+     "vmin": {
+      "type": "number"
+     },
+     "vmax": {
+      "type": "number"
+     },
+     "caps": {
+      "type": "object",
+      "properties": {
+       "thermal": {
+        "type": "boolean"
+       },
+       "sei": {
+        "type": "boolean"
+       },
+       "plating": {
+        "type": "boolean"
+       },
+       "lam": {
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "thermal",
+       "sei",
+       "plating",
+       "lam"
+      ]
+     },
+     "sei_models": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "sei_model 로 허용되는 값"
+     },
+     "sei_ea": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "doc": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "capacity",
+     "vmin",
+     "vmax",
+     "caps",
+     "sei_models"
+    ]
+   },
+   "BatteryMeta": {
+    "type": "object",
+    "properties": {
+     "pybamm": {
+      "type": "string"
+     },
+     "python": {
+      "type": "string"
+     },
+     "sets": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/BatteryParamSet"
+      }
+     },
+     "models": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "SPM·SPMe·DFN → 설명"
+     },
+     "sei_label": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "sei_model 값 → 한국어 이름"
+     },
+     "mech_label": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "sei·plating·lam → 한국어 이름"
+     },
+     "ea_default": {
+      "type": "number"
+     },
+     "llm_model": {
+      "type": "string",
+      "description": "기본 LLM"
+     },
+     "max_cycles": {
+      "type": "integer"
+     },
+     "max_jobs": {
+      "type": "integer"
+     },
+     "disclaimer": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "sets",
+     "models",
+     "llm_model",
+     "max_cycles",
+     "max_jobs",
+     "disclaimer"
+    ]
+   },
+   "BatteryScenario": {
+    "type": "object",
+    "properties": {
+     "label": {
+      "type": "string",
+      "maxLength": 40
+     },
+     "temp_C": {
+      "type": "number",
+      "minimum": -20,
+      "maximum": 60
+     },
+     "dis_C": {
+      "type": "number",
+      "minimum": 0.05,
+      "maximum": 5,
+      "default": 1
+     },
+     "chg_C": {
+      "type": "number",
+      "minimum": 0.05,
+      "maximum": 5,
+      "default": 0.5
+     },
+     "dod": {
+      "type": "number",
+      "minimum": 5,
+      "maximum": 100,
+      "default": 100
+     },
+     "cv_cut_C": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 0.5,
+      "default": 0.05
+     },
+     "rest_min": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 600,
+      "default": 5
+     },
+     "vmax": {
+      "type": "number",
+      "description": "세트 vmin~vmax, 기본 세트 vmax"
+     },
+     "steps": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "maxLength": 120,
+       "pattern": "^(Discharge|Charge|Rest|Hold)"
+      },
+      "maxItems": 12,
+      "description": "직접 쓴 PyBaMM 실험 단계 — 있으면 위 C-rate 등 무시"
+     }
+    }
+   },
+   "BatteryJobConfig": {
+    "type": "object",
+    "properties": {
+     "kind": {
+      "$ref": "#/components/schemas/BatteryKind"
+     },
+     "set": {
+      "type": "string",
+      "description": "meta.sets[].name"
+     },
+     "model": {
+      "type": "string",
+      "enum": [
+       "SPM",
+       "SPMe",
+       "DFN"
+      ],
+      "description": "기본 life=SPM, 그 외 SPMe"
+     },
+     "temp_C": {
+      "type": "number",
+      "minimum": -20,
+      "maximum": 60,
+      "default": 25
+     },
+     "thermal": {
+      "type": "string",
+      "enum": [
+       "lumped",
+       "isothermal"
+      ],
+      "description": "life 제외. 기본 lumped(세트가 지원 안 하면 isothermal)"
+     },
+     "h": {
+      "type": "number",
+      "minimum": 0.1,
+      "maximum": 1000,
+      "description": "열전달계수(life 제외)"
+     },
+     "c_rates": {
+      "oneOf": [
+       {
+        "type": "array",
+        "items": {
+         "type": "number",
+         "minimum": 0.02,
+         "maximum": 10
+        },
+        "maxItems": 6
+       },
+       {
+        "type": "string",
+        "description": "예 '0.2, 0.5, 1'"
+       }
+      ],
+      "description": "rate·charge 필수. 최대 6개(초과분 버림)"
+     },
+     "cv_cut_C": {
+      "type": "number",
+      "minimum": 0.005,
+      "maximum": 0.5,
+      "default": 0.05
+     },
+     "soc0": {
+      "type": "number",
+      "description": "시작 SOC %. charge 0~90(기본 0), drive 5~100(기본 100)"
+     },
+     "profile": {
+      "type": "array",
+      "items": {
+       "type": "array",
+       "items": {
+        "type": "number"
+       },
+       "minItems": 2,
+       "maxItems": 2
+      },
+      "minItems": 2,
+      "maxItems": 50000,
+      "description": "drive 필수. [[시간 s, 전류], …] 양수=방전, 음수=충전"
+     },
+     "unit": {
+      "type": "string",
+      "enum": [
+       "A",
+       "C"
+      ],
+      "default": "A"
+     },
+     "repeat": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 200,
+      "default": 1
+     },
+     "mechanisms": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "enum": [
+        "sei",
+        "plating",
+        "lam"
+       ]
+      },
+      "description": "life. 기본 ['sei']. 세트 caps 에 없으면 400. lam 만 고르면 sei 자동 추가"
+     },
+     "sei_model": {
+      "type": "string",
+      "default": "solvent-diffusion limited"
+     },
+     "sei_arrhenius": {
+      "type": "boolean",
+      "default": true
+     },
+     "sei_scale": {
+      "type": "number",
+      "minimum": 0.01,
+      "maximum": 1000,
+      "default": 1
+     },
+     "max_cycles": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 500,
+      "description": "최대 meta.max_cycles"
+     },
+     "eol": {
+      "type": "number",
+      "minimum": 50,
+      "maximum": 99,
+      "default": 80
+     },
+     "scenarios": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/BatteryScenario"
+      },
+      "minItems": 1,
+      "maxItems": 4,
+      "description": "life. 기본 [{}]"
+     }
+    },
+    "description": "범위 밖이면 400 + 구체 메시지",
+    "required": [
+     "kind",
+     "set"
+    ]
+   },
+   "BatteryJobStatus": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$",
+      "description": "YYYYMMDD-HHMMSS-xxxx. 형식이 다르면 404"
+     },
+     "kind": {
+      "$ref": "#/components/schemas/BatteryKind"
+     },
+     "title": {
+      "type": "string"
+     },
+     "state": {
+      "$ref": "#/components/schemas/BatteryState"
+     },
+     "pct": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+     },
+     "msg": {
+      "type": "string"
+     },
+     "created": {
+      "type": "string"
+     },
+     "started": {
+      "type": "string"
+     },
+     "elapsed": {
+      "type": "number"
+     },
+     "origin": {
+      "type": "string",
+      "enum": [
+       "form",
+       "ask",
+       "cli"
+      ]
+     },
+     "question": {
+      "type": "string"
+     },
+     "partial": {
+      "type": "boolean",
+      "description": "수명 작업 중간 결과 있음"
+     }
+    },
+    "required": [
+     "id",
+     "kind",
+     "title",
+     "state",
+     "pct",
+     "msg",
+     "created",
+     "origin"
+    ]
+   },
+   "BatteryPerfRun": {
+    "type": "object",
+    "properties": {
+     "metrics": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "rate 예: label, c_rate, current_A, capacity_Ah, capacity_pct, energy_Wh, avg_V, duration_min, end_V, sec, T_max_C, T_rise_C. charge 는 cv_cut_C 추가 — 세부는 worker.py 기준(코드 확인 필요)"
+     },
+     "series": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "array",
+       "items": {
+        "type": "number"
+       }
+      },
+      "description": "그래프용 곡선 배열(예 t_min, q_Ah, V, I_A, soc, T_C)"
+     }
+    },
+    "required": [
+     "metrics",
+     "series"
+    ]
+   },
+   "BatteryResult": {
+    "type": "object",
+    "properties": {
+     "kind": {
+      "$ref": "#/components/schemas/BatteryKind"
+     },
+     "set": {
+      "type": "string"
+     },
+     "model": {
+      "type": "string"
+     },
+     "temp_C": {
+      "type": "number"
+     },
+     "sec": {
+      "type": "number",
+      "description": "계산 초"
+     },
+     "pybamm": {
+      "type": "string"
+     },
+     "cap_nom": {
+      "type": "number",
+      "description": "공칭 Ah"
+     },
+     "files": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "다운로드 가능한 파일 이름"
+     },
+     "notes": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "thermal": {
+      "type": "string",
+      "description": "rate·charge·drive"
+     },
+     "runs": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/BatteryPerfRun"
+      },
+      "description": "rate·charge·drive"
+     },
+     "scenarios": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "additionalProperties": true,
+       "description": "life: label, scenario, steps, temp_C, rows, curves, notes, eol{threshold_pct, simulated, …}, final{cycle, soh, …, dominant} — 세부는 worker.py run_life 반환값(코드 확인 필요)"
+      },
+      "description": "life"
+     }
+    },
+    "description": "세부 필드는 worker.py run_rate/charge/drive/life 반환값 기준",
+    "required": [
+     "kind",
+     "set",
+     "model",
+     "temp_C",
+     "sec",
+     "files",
+     "notes"
+    ]
+   },
+   "BatteryExplain": {
+    "type": "object",
+    "properties": {
+     "text": {
+      "type": "string"
+     },
+     "unverified_numbers": {
+      "type": "array",
+      "items": {},
+      "description": "해설 속 숫자 중 계산 결과에 없는 것 → 경고 표시"
+     },
+     "facts": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "코드 확인 필요"
+     },
+     "disclaimer": {
+      "type": "string"
+     },
+     "model": {
+      "type": "string"
+     },
+     "ts": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "text",
+     "unverified_numbers"
+    ]
+   },
+   "BatteryJobDetail": {
+    "type": "object",
+    "properties": {
+     "status": {
+      "$ref": "#/components/schemas/BatteryJobStatus"
+     },
+     "job": {
+      "$ref": "#/components/schemas/BatteryJobConfig"
+     },
+     "partial": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "수명 작업 계산 중 단계 결과(result 가 생기면 안 옴) — 코드 확인 필요"
+     },
+     "result": {
+      "$ref": "#/components/schemas/BatteryResult"
+     },
+     "explain": {
+      "$ref": "#/components/schemas/BatteryExplain"
+     },
+     "steps": {
+      "type": "array",
+      "items": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      },
+      "description": "kind=life 일 때만"
+     },
+     "disclaimer": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "status",
+     "job",
+     "disclaimer"
+    ]
+   },
+   "BatteryStageEvent": {
+    "type": "object",
+    "properties": {
+     "stage": {
+      "type": "string",
+      "enum": [
+       "llm"
+      ]
+     },
+     "msg": {
+      "type": "string"
+     },
+     "reset": {
+      "type": "boolean",
+      "description": "true 면 받은 토큰 표시를 지움(형식 재시도)"
+     }
+    },
+    "required": [
+     "stage",
+     "msg"
+    ]
+   },
+   "BatteryTokenEvent": {
+    "type": "object",
+    "properties": {
+     "token": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "token"
+    ]
+   },
+   "BatteryErrorEvent": {
+    "type": "object",
+    "properties": {
+     "error": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "error"
+    ]
+   },
+   "BatteryAskDoneEvent": {
+    "type": "object",
+    "properties": {
+     "done": {
+      "type": "object",
+      "properties": {
+       "job": {
+        "$ref": "#/components/schemas/BatteryJobConfig"
+       },
+       "reason": {
+        "type": "string"
+       },
+       "steps": {
+        "type": [
+         "array",
+         "null"
+        ],
+        "items": {
+         "type": "array",
+         "items": {
+          "type": "string"
+         }
+        },
+        "description": "life 일 때 시나리오별 한 사이클 실험 문자열, 아니면 null"
+       },
+       "title": {
+        "type": "string"
+       },
+       "id": {
+        "type": "string",
+        "description": "run=true 일 때 제출된 작업 id"
+       }
+      },
+      "required": [
+       "job"
+      ]
+     }
+    },
+    "required": [
+     "done"
+    ]
+   },
+   "BatteryExplainDoneEvent": {
+    "type": "object",
+    "properties": {
+     "done": {
+      "$ref": "#/components/schemas/BatteryExplain"
+     }
+    },
+    "required": [
+     "done"
+    ]
+   }
+  },
+  "responses": {
+   "BadRequest": {
+    "description": "입력이 잘못됨(본문이 JSON 객체가 아님, 필수 값 없음 등)",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "Unauthorized": {
+    "description": "로그인 필요 — /login 으로",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Unauthorized"
+      }
+     }
+    }
+   },
+   "NotFound": {
+    "description": "없는 경로·도구·항목",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "Conflict": {
+    "description": "충돌(예: 이미 실행 중인 도구를 관리자가 아닌 사람이 다시 시작)",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "ServerError": {
+    "description": "서버 내부 오류",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "BadGateway": {
+    "description": "도구가 꺼져 있음(응답 없음) → POST /api/start {\"dir\": \"<도구>\"} 로 켠 뒤 다시 시도",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   }
+  }
+ }
+}

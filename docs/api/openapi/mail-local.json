@@ -1,0 +1,1047 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "KAERI AI Agent Portal API — mail-local",
+  "version": "2026.10.13",
+  "summary": "메일 — 업무 메일 작성·회신·윤문(로컬 LLM, 메일은 보내지 않음). 문서: docs/api/mail-local.md",
+  "description": "© 2026 gggg8657 · 내부 시험용 · 배포용 아님\n\nKAERI AI 에이전트 포털과 도구들의 HTTP API(도구 수는 summary 참고). 근거: `docs/api/README.md` 와 `docs/api/<도구>.md`(문서와 실제 응답이 다르면 응답이 맞음 — 알려 주면 고침).\n\n## 연결 방법 요약\n- **같은 출처 전제** (`servers: [{url: \"/\"}]`). 포털은 CORS 헤더를 내보내지 않고, 로그인 쿠키 `agsid` 는 HttpOnly·SameSite=Lax 입니다.\n  개발할 때는 개발 서버 프록시(Vite `server.proxy`, Next.js `rewrites`)로 `/api`·`/t`·`/logout` 을 포털로 넘기세요 — 예시는 README \"3. 새 화면을 연결하는 방법\".\n- **로그인**: `POST /api/login` → 쿠키 `agsid` 가 붙음. 이후 `fetch(…, {credentials: \"same-origin\"})`(기본값). JS 에서 쿠키를 읽을 수 없음.\n  로그인 안 된 API 요청은 401 `{\"error\": \"로그인이 필요합니다\", \"login\": \"/login\"}`.\n- **도구 경로**: 도구 문서의 `api/xxx` 는 포털에서 `/t/<도구 dir>/api/xxx`. 포털이 `X-Agent-User` 를 붙여 사용자별로 저장(화면이 보낸 `X-Agent-User` 는 지워짐).\n- **도구가 꺼져 있으면 502** → `POST /api/start {\"dir\": \"<도구>\"}` 뒤 다시 시도.\n- **오류 모양**: 대부분 `{\"error\": \"한국어 설명\"}`. 예외(예: tts-local 의 POST 는 OpenAI 모양 `{\"error\": {\"message\", \"type\"}}`)는 해당 operation 에 그대로 적음.\n- **스트리밍**: `text/event-stream`(SSE) 또는 `application/x-ndjson` 응답은 이벤트 목록을 `x-stream-events` 확장에 둠. **도중 오류도 HTTP 200 으로 오고 스트림 안 `error` 이벤트로만 옴.** 포털은 버퍼링 없이 흘림(최대 1시간).\n- **확장 필드**: `x-permission`(admin 관리자 · dept-head 부서장 · creator 만든 사람 · self 본인), `x-shared-data`(여러 사람이 같이 보는 데이터), `x-gpu`·`x-llm`·`x-long-running`(GPU·LLM 사용, 오래 걸림 — 버튼 연타 막기), `x-stream-events`.\n- **도구 태그 확장**(등록용): `x-tool-id`(dir 에서 -local 뺀 것) · `x-name` · `x-description` · `x-kind`(LLM 을 쓰면 agent, 아니면 tool) · `x-category` · `x-entry`(/t/<dir>/) · `x-health-path`(가벼운 GET, 200) · `x-long-running` · `x-docs-input`(text·chunks·file·none) · `x-external-network`(외부 인터넷 호출 여부) · `x-response-style`(sse·json·file·polling). 판단 근거가 애매한 곳은 `x-<항목>-note`.\n- 스키마 description 에 \"코드 확인 필요\" 라고 적힌 곳은 문서·코드로 모양을 확정하지 못한 부분입니다(`additionalProperties: true`).\n\nREADME: `docs/api/README.md` (OpenAPI 절 — 타입 생성 명령).",
+  "contact": {
+   "name": "gggg8657",
+   "url": "https://github.com/gggg8657"
+  },
+  "license": {
+   "name": "All rights reserved (portal) — 도구별 라이선스는 각 도구 저장소 LICENSE",
+   "identifier": "LicenseRef-AllRightsReserved"
+  },
+  "x-tool-id": "mail",
+  "x-name": "메일",
+  "x-description": "업무 메일 작성·회신·윤문",
+  "x-kind": "agent",
+  "x-category": "업무지원",
+  "x-category-note": "README 분류: 문서",
+  "x-entry": "/t/mail-local/",
+  "x-health-path": "/t/mail-local/api/health",
+  "x-long-running": true,
+  "x-docs-input": "text",
+  "x-external-network": false,
+  "x-response-style": "sse"
+ },
+ "servers": [
+  {
+   "url": "/",
+   "description": "포털과 같은 출처(개발 때는 개발 서버 프록시로)"
+  }
+ ],
+ "security": [
+  {
+   "cookieAuth": []
+  }
+ ],
+ "tags": [
+  {
+   "name": "mail-local",
+   "description": "메일 — 업무 메일 작성·회신·윤문(로컬 LLM, 메일은 보내지 않음). 문서: docs/api/mail-local.md",
+   "x-tool-id": "mail",
+   "x-name": "메일",
+   "x-description": "업무 메일 작성·회신·윤문",
+   "x-kind": "agent",
+   "x-category": "업무지원",
+   "x-category-note": "README 분류: 문서",
+   "x-entry": "/t/mail-local/",
+   "x-health-path": "/t/mail-local/api/health",
+   "x-long-running": true,
+   "x-docs-input": "text",
+   "x-external-network": false,
+   "x-response-style": "sse"
+  }
+ ],
+ "paths": {
+  "/t/mail-local/api/health": {
+   "get": {
+    "tags": [
+     "mail-local"
+    ],
+    "operationId": "mailHealth",
+    "summary": "살아 있는지",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ok"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/mail-local/api/meta": {
+   "get": {
+    "tags": [
+     "mail-local"
+    ],
+    "operationId": "mailMeta",
+    "summary": "선택지·기본 모델·오늘 날짜",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MailMeta"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/mail-local/api/models": {
+   "get": {
+    "tags": [
+     "mail-local"
+    ],
+    "operationId": "mailModels",
+    "summary": "LLM 모델 이름 목록",
+    "responses": {
+     "200": {
+      "description": "모델 이름(임베딩 모델도 섞일 수 있음). LLM 서버에 닿지 못하면 오류 대신 []",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/mail-local/api/history": {
+   "get": {
+    "tags": [
+     "mail-local"
+    ],
+    "operationId": "mailHistory",
+    "summary": "내 작업 이력 목록(최근 먼저, 최대 200)",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/MailHistoryItem"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/mail-local/api/history/{id}": {
+   "get": {
+    "tags": [
+     "mail-local"
+    ],
+    "operationId": "mailHistoryGet",
+    "summary": "이력 하나(모든 판 포함)",
+    "description": "id 형식이 틀리거나 없으면 404 {\"error\":\"없음\"}",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$",
+       "description": "YYYYMMDD-HHMMSS-xxxx",
+       "example": "20261007-062603-e557"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MailHistoryDetail"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/mail-local/api/history/delete": {
+   "post": {
+    "tags": [
+     "mail-local"
+    ],
+    "operationId": "mailHistoryDelete",
+    "summary": "이력 삭제",
+    "description": "형식이 틀리면 400 {\"error\":\"잘못된 이력 id\"}",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string",
+          "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$",
+          "description": "YYYYMMDD-HHMMSS-xxxx",
+          "example": "20261007-062603-e557"
+         }
+        },
+        "required": [
+         "id"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "삭제(없는 id 도 ok)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ok"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/mail-local/api/run": {
+   "post": {
+    "tags": [
+     "mail-local"
+    ],
+    "operationId": "mailRun",
+    "summary": "작성·회신·윤문 실행 (SSE)",
+    "description": "LLM 1~2콜, 수 초~수십 초. 결과는 이력에 저장(id 를 주면 같은 이력에 새 판).\n이벤트(data: <JSON>): {\"stage\":\"llm\",\"msg\",\"reset\"?} — reset=true 면 받은 토큰 비우기(윤문 형식 재시도) · {\"token\"} 모델 원문 토큰 · {\"done\":{\"id\",\"kind\",\"version\",\"result\"}} · {\"error\"}.\n도중 오류(예: '핵심 내용을 적어 주세요', 윤문 12,000자 초과)도 HTTP 200 으로 오고 스트림 안 error 이벤트로만 옴. 본문 JSON 이 깨졌을 때만 스트림 전에 400 {\"error\":\"잘못된 요청\"}.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/MailRunRequest"
+       }
+      }
+     }
+    },
+    "x-llm": true,
+    "x-long-running": true,
+    "responses": {
+     "200": {
+      "description": "SSE. 이벤트: {stage:'llm',msg,reset?} → {token}… → {done:{id,kind,version,result}} | {error}",
+      "content": {
+       "text/event-stream": {
+        "schema": {
+         "type": "string",
+         "description": "data: <JSON>\\n\\n 이 이어지는 스트림 (이벤트 이름 줄 없음)"
+        },
+        "x-stream-events": [
+         {
+          "name": "stage",
+          "schema": {
+           "$ref": "#/components/schemas/MailStageEvent"
+          }
+         },
+         {
+          "name": "token",
+          "schema": {
+           "$ref": "#/components/schemas/MailTokenEvent"
+          }
+         },
+         {
+          "name": "done",
+          "schema": {
+           "$ref": "#/components/schemas/MailDoneEvent"
+          }
+         },
+         {
+          "name": "error",
+          "schema": {
+           "$ref": "#/components/schemas/MailErrorEvent"
+          }
+         }
+        ]
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "securitySchemes": {
+   "cookieAuth": {
+    "type": "apiKey",
+    "in": "cookie",
+    "name": "agsid",
+    "description": "POST /api/login 이 주는 세션 쿠키(HttpOnly, SameSite=Lax). 같은 출처 fetch 면 브라우저가 자동으로 붙임. 서버 안(127.0.0.1)에서 쿠키 없이 부르면 서버 주인(관리자)으로 처리."
+   }
+  },
+  "schemas": {
+   "Error": {
+    "type": "object",
+    "required": [
+     "error"
+    ],
+    "properties": {
+     "error": {
+      "type": "string",
+      "description": "사람이 읽을 수 있는 한국어 설명"
+     }
+    }
+   },
+   "Unauthorized": {
+    "type": "object",
+    "required": [
+     "error",
+     "login"
+    ],
+    "properties": {
+     "error": {
+      "type": "string",
+      "examples": [
+       "로그인이 필요합니다"
+      ]
+     },
+     "login": {
+      "type": "string",
+      "const": "/login"
+     }
+    }
+   },
+   "Ok": {
+    "type": "object",
+    "required": [
+     "ok"
+    ],
+    "properties": {
+     "ok": {
+      "type": "boolean"
+     }
+    }
+   },
+   "MailKind": {
+    "type": "string",
+    "enum": [
+     "write",
+     "reply",
+     "polish"
+    ],
+    "description": "write 작성 · reply 회신 · polish 윤문"
+   },
+   "MailMeta": {
+    "type": "object",
+    "properties": {
+     "relations": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "purposes": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "tones": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "lengths": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "polish_modes": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string",
+         "enum": [
+          "spell",
+          "natural",
+          "polite",
+          "concise",
+          "english"
+         ]
+        },
+        "label": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "id",
+        "label"
+       ]
+      }
+     },
+     "model": {
+      "type": "string",
+      "description": "서버 기본 모델"
+     },
+     "today": {
+      "type": "string",
+      "format": "date"
+     }
+    },
+    "required": [
+     "relations",
+     "purposes",
+     "tones",
+     "lengths",
+     "polish_modes",
+     "model",
+     "today"
+    ]
+   },
+   "MailHistoryItem": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$",
+      "description": "YYYYMMDD-HHMMSS-xxxx",
+      "example": "20261007-062603-e557"
+     },
+     "kind": {
+      "$ref": "#/components/schemas/MailKind"
+     },
+     "title": {
+      "type": "string",
+      "description": "첫 제목 후보 또는 첫 줄"
+     },
+     "ts": {
+      "type": "string"
+     },
+     "versions": {
+      "type": "integer",
+      "description": "판 수",
+      "minimum": 1
+     }
+    },
+    "required": [
+     "id",
+     "kind",
+     "title",
+     "ts",
+     "versions"
+    ]
+   },
+   "MailRecipient": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "org": {
+      "type": "string"
+     },
+     "relation": {
+      "type": "string",
+      "description": "api/meta relations 중 하나"
+     },
+     "addr": {
+      "type": "string",
+      "description": "화면이 보내지만 서버는 쓰지 않음"
+     }
+    }
+   },
+   "MailSender": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "dept": {
+      "type": "string"
+     },
+     "sig_ko": {
+      "type": "string",
+      "description": "있으면 본문 끝에 서명으로 붙임"
+     },
+     "sig_en": {
+      "type": "string"
+     }
+    },
+    "description": "보내는 사람 정보. 화면이 localStorage 에 두고 요청마다 보냄(이력에도 저장됨)"
+   },
+   "MailInputs": {
+    "type": "object",
+    "properties": {
+     "to": {
+      "$ref": "#/components/schemas/MailRecipient"
+     },
+     "purpose": {
+      "type": "string",
+      "description": "write: api/meta purposes 중 하나"
+     },
+     "points": {
+      "type": "string",
+      "description": "write: 핵심 내용(필수) · reply: 답장 요지"
+     },
+     "attach": {
+      "type": "string"
+     },
+     "due": {
+      "type": "string",
+      "description": "write: 날짜 YYYY-MM-DD 권장"
+     },
+     "tone": {
+      "type": "string",
+      "description": "api/meta tones"
+     },
+     "length": {
+      "type": "string",
+      "description": "api/meta lengths"
+     },
+     "lang": {
+      "type": "string",
+      "enum": [
+       "ko",
+       "en",
+       "auto"
+      ],
+      "description": "write: ko|en · reply: ko|en|auto(원문에 한글이 없으면 영어)"
+     },
+     "sender": {
+      "$ref": "#/components/schemas/MailSender"
+     },
+     "original": {
+      "type": "string",
+      "description": "reply: 받은 메일 원문(필수). 12,000자까지만 씀"
+     },
+     "text": {
+      "type": "string",
+      "description": "polish: 다듬을 글(필수). 12,000자 넘으면 오류",
+      "maxLength": 12000
+     },
+     "mode": {
+      "type": "string",
+      "enum": [
+       "spell",
+       "natural",
+       "polite",
+       "concise",
+       "english"
+      ],
+      "default": "natural",
+      "description": "polish 방식"
+     }
+    },
+    "description": "kind 별로 쓰는 필드가 다름: write(to·purpose·points*·attach·due·tone·length·lang·sender) · reply(original*·points·to.relation·attach·tone·length·lang·sender) · polish(text*·mode)",
+    "additionalProperties": true
+   },
+   "MailRunRequest": {
+    "type": "object",
+    "properties": {
+     "kind": {
+      "$ref": "#/components/schemas/MailKind"
+     },
+     "inputs": {
+      "$ref": "#/components/schemas/MailInputs"
+     },
+     "model": {
+      "type": "string",
+      "description": "비우면 서버 기본"
+     },
+     "id": {
+      "type": "string",
+      "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$",
+      "description": "기존 이력 id. 주면 그 이력에 새 판을 더함(못 찾으면 새 이력)",
+      "example": "20261007-062603-e557"
+     },
+     "instruction": {
+      "type": "string",
+      "description": "이어서 다듬기 지시(예 '더 짧게'). prev 와 함께"
+     },
+     "prev": {
+      "oneOf": [
+       {
+        "type": "object",
+        "properties": {
+         "subjects": {
+          "type": "array",
+          "items": {
+           "type": "string"
+          }
+         },
+         "body": {
+          "type": "string"
+         }
+        }
+       },
+       {
+        "type": "string"
+       }
+      ],
+      "description": "직전 결과. write·reply 는 {subjects, body}, polish 는 결과 글 문자열"
+     }
+    },
+    "required": [
+     "kind",
+     "inputs"
+    ]
+   },
+   "MailComposeResult": {
+    "type": "object",
+    "properties": {
+     "subjects": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "제목 후보"
+     },
+     "body": {
+      "type": "string",
+      "description": "본문(+서명)"
+     },
+     "checklist": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "ok": {
+         "type": [
+          "boolean",
+          "null"
+         ],
+         "description": "true 반영 · false 확인 필요·미반영 · null 판정 없음"
+        },
+        "text": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "ok",
+        "text"
+       ]
+      },
+      "description": "회신에서 원문 요청사항 반영 여부"
+     },
+     "notes": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "lang": {
+      "type": "string"
+     },
+     "diff": {
+      "type": "array",
+      "items": {
+       "type": "array",
+       "prefixItems": [
+        {
+         "type": "string",
+         "enum": [
+          "=",
+          "-",
+          "+"
+         ]
+        },
+        {
+         "type": "string"
+        }
+       ],
+       "minItems": 2,
+       "maxItems": 2
+      },
+      "description": "prev 가 있을 때만(직전 본문 ↔ 새 본문)"
+     },
+     "raw": {
+      "type": "string",
+      "description": "모델 출력"
+     },
+     "instruction": {
+      "type": "string"
+     },
+     "ts": {
+      "type": "string"
+     }
+    },
+    "description": "write·reply 결과",
+    "required": [
+     "subjects",
+     "body",
+     "raw",
+     "ts"
+    ]
+   },
+   "MailPolishUnit": {
+    "type": "object",
+    "properties": {
+     "i": {
+      "type": "integer"
+     },
+     "before": {
+      "type": "string"
+     },
+     "after": {
+      "type": "string"
+     },
+     "changed": {
+      "type": "boolean"
+     },
+     "use": {
+      "type": "boolean",
+      "description": "서버가 기본으로 적용했는지. 숫자·고유 표기가 바뀐 문장은 false + warn"
+     },
+     "warn": {
+      "type": "string"
+     },
+     "ops": {
+      "type": "array",
+      "items": {
+       "type": "array",
+       "prefixItems": [
+        {
+         "type": "string",
+         "enum": [
+          "=",
+          "-",
+          "+"
+         ]
+        },
+        {
+         "type": "string"
+        }
+       ],
+       "minItems": 2,
+       "maxItems": 2
+      },
+      "description": "문장 안 비교(바뀐 문장에만)"
+     }
+    },
+    "required": [
+     "i",
+     "before",
+     "after",
+     "changed",
+     "use"
+    ]
+   },
+   "MailPolishResult": {
+    "type": "object",
+    "properties": {
+     "mode": {
+      "type": "string"
+     },
+     "label": {
+      "type": "string"
+     },
+     "parts": {
+      "type": "array",
+      "items": {
+       "type": [
+        "string",
+        "integer"
+       ]
+      },
+      "description": "문자열(그대로 둘 조각)과 정수(units 번호)를 이은 것 — 문장별로 before/after 골라 재조립"
+     },
+     "units": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/MailPolishUnit"
+      }
+     },
+     "text": {
+      "type": "string",
+      "description": "적용된 최종 글"
+     },
+     "source": {
+      "type": "string",
+      "description": "원문"
+     },
+     "changed": {
+      "type": "integer"
+     },
+     "total": {
+      "type": "integer"
+     },
+     "warnings": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "raw": {
+      "type": "string"
+     },
+     "instruction": {
+      "type": "string"
+     },
+     "ts": {
+      "type": "string"
+     }
+    },
+    "description": "polish 결과",
+    "required": [
+     "mode",
+     "parts",
+     "units",
+     "text",
+     "source",
+     "changed",
+     "total",
+     "ts"
+    ]
+   },
+   "MailResult": {
+    "anyOf": [
+     {
+      "$ref": "#/components/schemas/MailComposeResult"
+     },
+     {
+      "$ref": "#/components/schemas/MailPolishResult"
+     }
+    ]
+   },
+   "MailHistoryDetail": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$",
+      "description": "YYYYMMDD-HHMMSS-xxxx",
+      "example": "20261007-062603-e557"
+     },
+     "kind": {
+      "$ref": "#/components/schemas/MailKind"
+     },
+     "title": {
+      "type": "string"
+     },
+     "ts": {
+      "type": "string"
+     },
+     "inputs": {
+      "$ref": "#/components/schemas/MailInputs"
+     },
+     "model": {
+      "type": "string"
+     },
+     "versions": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/MailResult"
+      },
+      "description": "판 목록(오래된 것부터)"
+     }
+    },
+    "required": [
+     "id",
+     "kind",
+     "title",
+     "ts",
+     "inputs",
+     "versions"
+    ]
+   },
+   "MailStageEvent": {
+    "type": "object",
+    "properties": {
+     "stage": {
+      "type": "string",
+      "enum": [
+       "llm"
+      ]
+     },
+     "msg": {
+      "type": "string"
+     },
+     "reset": {
+      "type": "boolean",
+      "description": "true 면 받은 토큰 비우기(형식 재시도)"
+     }
+    },
+    "required": [
+     "stage",
+     "msg"
+    ]
+   },
+   "MailTokenEvent": {
+    "type": "object",
+    "properties": {
+     "token": {
+      "type": "string",
+      "description": "모델 원문 토큰([제목]·[본문] 또는 [1] 번호 줄)"
+     }
+    },
+    "required": [
+     "token"
+    ]
+   },
+   "MailDoneEvent": {
+    "type": "object",
+    "properties": {
+     "done": {
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string",
+        "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$",
+        "description": "YYYYMMDD-HHMMSS-xxxx",
+        "example": "20261007-062603-e557"
+       },
+       "kind": {
+        "$ref": "#/components/schemas/MailKind"
+       },
+       "version": {
+        "type": "integer"
+       },
+       "result": {
+        "$ref": "#/components/schemas/MailResult"
+       }
+      },
+      "required": [
+       "id",
+       "kind",
+       "version",
+       "result"
+      ]
+     }
+    },
+    "required": [
+     "done"
+    ]
+   },
+   "MailErrorEvent": {
+    "type": "object",
+    "properties": {
+     "error": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "error"
+    ]
+   }
+  },
+  "responses": {
+   "BadRequest": {
+    "description": "입력이 잘못됨(본문이 JSON 객체가 아님, 필수 값 없음 등)",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "Unauthorized": {
+    "description": "로그인 필요 — /login 으로",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Unauthorized"
+      }
+     }
+    }
+   },
+   "NotFound": {
+    "description": "없는 경로·도구·항목",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "BadGateway": {
+    "description": "도구가 꺼져 있음(응답 없음) → POST /api/start {\"dir\": \"<도구>\"} 로 켠 뒤 다시 시도",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   }
+  }
+ }
+}

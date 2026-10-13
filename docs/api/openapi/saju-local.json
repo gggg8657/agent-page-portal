@@ -1,0 +1,2125 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "KAERI AI Agent Portal API — saju-local",
+  "version": "2026.10.13",
+  "summary": "팀 밸런스 맵 — 사주·MBTI 협업 궁합, 팀 맵, 오늘의 운, 리포트, 번개. 포털 계정 대신 id+token 으로 본인 확인, 데이터는 모두 공유. 문서: docs/api/saju-local.md",
+  "description": "© 2026 gggg8657 · 내부 시험용 · 배포용 아님\n\nKAERI AI 에이전트 포털과 도구들의 HTTP API(도구 수는 summary 참고). 근거: `docs/api/README.md` 와 `docs/api/<도구>.md`(문서와 실제 응답이 다르면 응답이 맞음 — 알려 주면 고침).\n\n## 연결 방법 요약\n- **같은 출처 전제** (`servers: [{url: \"/\"}]`). 포털은 CORS 헤더를 내보내지 않고, 로그인 쿠키 `agsid` 는 HttpOnly·SameSite=Lax 입니다.\n  개발할 때는 개발 서버 프록시(Vite `server.proxy`, Next.js `rewrites`)로 `/api`·`/t`·`/logout` 을 포털로 넘기세요 — 예시는 README \"3. 새 화면을 연결하는 방법\".\n- **로그인**: `POST /api/login` → 쿠키 `agsid` 가 붙음. 이후 `fetch(…, {credentials: \"same-origin\"})`(기본값). JS 에서 쿠키를 읽을 수 없음.\n  로그인 안 된 API 요청은 401 `{\"error\": \"로그인이 필요합니다\", \"login\": \"/login\"}`.\n- **도구 경로**: 도구 문서의 `api/xxx` 는 포털에서 `/t/<도구 dir>/api/xxx`. 포털이 `X-Agent-User` 를 붙여 사용자별로 저장(화면이 보낸 `X-Agent-User` 는 지워짐).\n- **도구가 꺼져 있으면 502** → `POST /api/start {\"dir\": \"<도구>\"}` 뒤 다시 시도.\n- **오류 모양**: 대부분 `{\"error\": \"한국어 설명\"}`. 예외(예: tts-local 의 POST 는 OpenAI 모양 `{\"error\": {\"message\", \"type\"}}`)는 해당 operation 에 그대로 적음.\n- **스트리밍**: `text/event-stream`(SSE) 또는 `application/x-ndjson` 응답은 이벤트 목록을 `x-stream-events` 확장에 둠. **도중 오류도 HTTP 200 으로 오고 스트림 안 `error` 이벤트로만 옴.** 포털은 버퍼링 없이 흘림(최대 1시간).\n- **확장 필드**: `x-permission`(admin 관리자 · dept-head 부서장 · creator 만든 사람 · self 본인), `x-shared-data`(여러 사람이 같이 보는 데이터), `x-gpu`·`x-llm`·`x-long-running`(GPU·LLM 사용, 오래 걸림 — 버튼 연타 막기), `x-stream-events`.\n- **도구 태그 확장**(등록용): `x-tool-id`(dir 에서 -local 뺀 것) · `x-name` · `x-description` · `x-kind`(LLM 을 쓰면 agent, 아니면 tool) · `x-category` · `x-entry`(/t/<dir>/) · `x-health-path`(가벼운 GET, 200) · `x-long-running` · `x-docs-input`(text·chunks·file·none) · `x-external-network`(외부 인터넷 호출 여부) · `x-response-style`(sse·json·file·polling). 판단 근거가 애매한 곳은 `x-<항목>-note`.\n- 스키마 description 에 \"코드 확인 필요\" 라고 적힌 곳은 문서·코드로 모양을 확정하지 못한 부분입니다(`additionalProperties: true`).\n\nREADME: `docs/api/README.md` (OpenAPI 절 — 타입 생성 명령).",
+  "contact": {
+   "name": "gggg8657",
+   "url": "https://github.com/gggg8657"
+  },
+  "license": {
+   "name": "All rights reserved (portal) — 도구별 라이선스는 각 도구 저장소 LICENSE",
+   "identifier": "LicenseRef-AllRightsReserved"
+  },
+  "x-tool-id": "saju",
+  "x-name": "팀 밸런스 맵",
+  "x-description": "사주·MBTI 협업 궁합, 팀 맵, 오늘의 운, 번개 모임",
+  "x-kind": "agent",
+  "x-kind-note": "LLM 은 문장 생성(오늘의 운·해설·리포트)에만, 없으면 규칙 문장",
+  "x-category": "기타",
+  "x-category-note": "README 분류: 재미",
+  "x-health-path": "/t/saju-local/api/meta",
+  "x-long-running": true,
+  "x-long-running-note": "대부분 즉시, 오늘의 운·해설 첫 호출 LLM 최대 90~120초, 리포트 2~3분(백그라운드)",
+  "x-docs-input": "none",
+  "x-external-network": false,
+  "x-external-network-note": "urlopen 은 LLM 서버만",
+  "x-response-style": "json",
+  "x-response-style-note": "사주 풀이 리포트는 시작 → GET api/fortune 폴링, 리포트 HTML 은 파일",
+  "x-entry": "/t/saju-local/"
+ },
+ "servers": [
+  {
+   "url": "/",
+   "description": "포털과 같은 출처(개발 때는 개발 서버 프록시로)"
+  }
+ ],
+ "security": [
+  {
+   "cookieAuth": []
+  }
+ ],
+ "tags": [
+  {
+   "name": "saju-local",
+   "description": "팀 밸런스 맵 — 사주·MBTI 협업 궁합, 팀 맵, 오늘의 운, 리포트, 번개. 포털 계정 대신 id+token 으로 본인 확인, 데이터는 모두 공유. 문서: docs/api/saju-local.md",
+   "x-tool-id": "saju",
+   "x-name": "팀 밸런스 맵",
+   "x-description": "사주·MBTI 협업 궁합, 팀 맵, 오늘의 운, 번개 모임",
+   "x-kind": "agent",
+   "x-kind-note": "LLM 은 문장 생성(오늘의 운·해설·리포트)에만, 없으면 규칙 문장",
+   "x-category": "기타",
+   "x-category-note": "README 분류: 재미",
+   "x-health-path": "/t/saju-local/api/meta",
+   "x-long-running": true,
+   "x-long-running-note": "대부분 즉시, 오늘의 운·해설 첫 호출 LLM 최대 90~120초, 리포트 2~3분(백그라운드)",
+   "x-docs-input": "none",
+   "x-external-network": false,
+   "x-external-network-note": "urlopen 은 LLM 서버만",
+   "x-response-style": "json",
+   "x-response-style-note": "사주 풀이 리포트는 시작 → GET api/fortune 폴링, 리포트 HTML 은 파일",
+   "x-entry": "/t/saju-local/"
+  }
+ ],
+ "paths": {
+  "/t/saju-local/api/meta": {
+   "get": {
+    "tags": [
+     "saju-local"
+    ],
+    "operationId": "sajuMeta",
+    "summary": "성향 축·라벨·취미 목록",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SajuMeta"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-shared-data": true
+   }
+  },
+  "/t/saju-local/api/status": {
+   "get": {
+    "tags": [
+     "saju-local"
+    ],
+    "operationId": "sajuStatus",
+    "summary": "LLM 연결 상태(30초 캐시)",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SajuStatus"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/saju-local/api/register": {
+   "post": {
+    "tags": [
+     "saju-local"
+    ],
+    "operationId": "sajuRegister",
+    "summary": "등록 → id·token 발급",
+    "description": "공유 데이터(people.json)에 새 기록. 생년월일시 원본·성별은 저장 안 함. 오류 400 '입력 오류: …'.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SajuRegisterRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SajuRegisterResult"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-shared-data": true
+   }
+  },
+  "/t/saju-local/api/me": {
+   "get": {
+    "tags": [
+     "saju-local"
+    ],
+    "operationId": "sajuMe",
+    "summary": "내 전체 프로필",
+    "description": "본인 확인: 헤더 X-Saju-Id·X-Saju-Token(POST 는 본문 id·token 도 됨). 포털 계정이 아니라 이 token 으로만 구분(관리자도 token 없이는 못 봄). 틀리면 400 {error:'권한 없음'}(POST 는 '입력 오류: 권한 없음').",
+    "parameters": [
+     {
+      "name": "X-Saju-Id",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{8}$"
+      },
+      "description": "등록 때 받은 id (POST 는 본문 id 가 우선)"
+     },
+     {
+      "name": "X-Saju-Token",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{32}$"
+      },
+      "description": "등록 때 받은 token. URL 쿼리로는 받지 않음"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SajuMe"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-permission": "self"
+   }
+  },
+  "/t/saju-local/api/prefs": {
+   "post": {
+    "tags": [
+     "saju-local"
+    ],
+    "operationId": "sajuPrefs",
+    "summary": "취미·성향·원하는 상대 성향 저장",
+    "description": "본인 확인: 헤더 X-Saju-Id·X-Saju-Token(POST 는 본문 id·token 도 됨). 포털 계정이 아니라 이 token 으로만 구분(관리자도 token 없이는 못 봄). 틀리면 400 {error:'권한 없음'}(POST 는 '입력 오류: 권한 없음').",
+    "parameters": [
+     {
+      "name": "X-Saju-Id",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{8}$"
+      },
+      "description": "등록 때 받은 id (POST 는 본문 id 가 우선)"
+     },
+     {
+      "name": "X-Saju-Token",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{32}$"
+      },
+      "description": "등록 때 받은 token. URL 쿼리로는 받지 않음"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}$"
+         },
+         "token": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+         },
+         "hobbies": {
+          "type": "array",
+          "items": {
+           "type": "string"
+          }
+         },
+         "traits": {
+          "type": "object",
+          "additionalProperties": {
+           "type": "integer",
+           "enum": [
+            -1,
+            0,
+            1
+           ]
+          },
+          "description": "{축: -1/0/1} — 축 이름은 api/meta 의 axes"
+         },
+         "wants": {
+          "type": "object",
+          "additionalProperties": {
+           "type": "integer",
+           "enum": [
+            -1,
+            0,
+            1
+           ]
+          },
+          "description": "{축: -1/0/1} — 축 이름은 api/meta 의 axes"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "hobbies": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           }
+          },
+          "traits": {
+           "type": "object",
+           "additionalProperties": {
+            "type": "integer",
+            "enum": [
+             -1,
+             0,
+             1
+            ]
+           },
+           "description": "{축: -1/0/1} — 축 이름은 api/meta 의 axes"
+          },
+          "wants": {
+           "type": "object",
+           "additionalProperties": {
+            "type": "integer",
+            "enum": [
+             -1,
+             0,
+             1
+            ]
+           },
+           "description": "{축: -1/0/1} — 축 이름은 api/meta 의 axes"
+          }
+         },
+         "required": [
+          "ok",
+          "hobbies",
+          "traits",
+          "wants"
+         ]
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-permission": "self"
+   }
+  },
+  "/t/saju-local/api/delete": {
+   "post": {
+    "tags": [
+     "saju-local"
+    ],
+    "operationId": "sajuDelete",
+    "summary": "내 기록·풀이·번개 삭제",
+    "description": "본인 확인: 헤더 X-Saju-Id·X-Saju-Token(POST 는 본문 id·token 도 됨). 포털 계정이 아니라 이 token 으로만 구분(관리자도 token 없이는 못 봄). 틀리면 400 {error:'권한 없음'}(POST 는 '입력 오류: 권한 없음').",
+    "parameters": [
+     {
+      "name": "X-Saju-Id",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{8}$"
+      },
+      "description": "등록 때 받은 id (POST 는 본문 id 가 우선)"
+     },
+     {
+      "name": "X-Saju-Token",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{32}$"
+      },
+      "description": "등록 때 받은 token. URL 쿼리로는 받지 않음"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}$"
+         },
+         "token": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ok"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-permission": "self"
+   }
+  },
+  "/t/saju-local/api/today": {
+   "get": {
+    "tags": [
+     "saju-local"
+    ],
+    "operationId": "sajuToday",
+    "summary": "오늘의 운",
+    "description": "하루 첫 호출에 LLM(최대 90초), LLM 결과만 날짜별 캐시. 본인 확인: 헤더 X-Saju-Id·X-Saju-Token(POST 는 본문 id·token 도 됨). 포털 계정이 아니라 이 token 으로만 구분(관리자도 token 없이는 못 봄). 틀리면 400 {error:'권한 없음'}(POST 는 '입력 오류: 권한 없음').",
+    "parameters": [
+     {
+      "name": "X-Saju-Id",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{8}$"
+      },
+      "description": "등록 때 받은 id (POST 는 본문 id 가 우선)"
+     },
+     {
+      "name": "X-Saju-Token",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{32}$"
+      },
+      "description": "등록 때 받은 token. URL 쿼리로는 받지 않음"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SajuToday"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-permission": "self",
+    "x-llm": true
+   }
+  },
+  "/t/saju-local/api/reading": {
+   "get": {
+    "tags": [
+     "saju-local"
+    ],
+    "operationId": "sajuReading",
+    "summary": "일하는 스타일 + 명리 해설",
+    "description": "처음 한 번 LLM 2회(각 최대 120초) 후 저장. 본인 확인: 헤더 X-Saju-Id·X-Saju-Token(POST 는 본문 id·token 도 됨). 포털 계정이 아니라 이 token 으로만 구분(관리자도 token 없이는 못 봄). 틀리면 400 {error:'권한 없음'}(POST 는 '입력 오류: 권한 없음').",
+    "parameters": [
+     {
+      "name": "X-Saju-Id",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{8}$"
+      },
+      "description": "등록 때 받은 id (POST 는 본문 id 가 우선)"
+     },
+     {
+      "name": "X-Saju-Token",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{32}$"
+      },
+      "description": "등록 때 받은 token. URL 쿼리로는 받지 않음"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "reading": {
+           "type": "string",
+           "description": "'\\n\\n§\\n\\n' 로 두 부분(LLM 없으면 구분자 없는 한 줄)"
+          }
+         },
+         "required": [
+          "reading"
+         ]
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-permission": "self",
+    "x-llm": true
+   }
+  },
+  "/t/saju-local/api/match": {
+   "get": {
+    "tags": [
+     "saju-local"
+    ],
+    "operationId": "sajuMatch",
+    "summary": "궁합 상위 10명",
+    "description": "scope=dept 면 내 부서(실명), 그 외 전체 공개 동의자(별명만). 전체 범위 후보 3명 미만이면 400(익명 보호). 본인 확인: 헤더 X-Saju-Id·X-Saju-Token(POST 는 본문 id·token 도 됨). 포털 계정이 아니라 이 token 으로만 구분(관리자도 token 없이는 못 봄). 틀리면 400 {error:'권한 없음'}(POST 는 '입력 오류: 권한 없음').",
+    "parameters": [
+     {
+      "name": "X-Saju-Id",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{8}$"
+      },
+      "description": "등록 때 받은 id (POST 는 본문 id 가 우선)"
+     },
+     {
+      "name": "X-Saju-Token",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{32}$"
+      },
+      "description": "등록 때 받은 token. URL 쿼리로는 받지 않음"
+     },
+     {
+      "name": "scope",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "enum": [
+        "dept",
+        "all"
+       ]
+      }
+     },
+     {
+      "name": "age_band",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "dept",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "mbti",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "dm_el",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "blood",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/SajuMatch"
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-permission": "self"
+   }
+  },
+  "/t/saju-local/api/graph": {
+   "get": {
+    "tags": [
+     "saju-local"
+    ],
+    "operationId": "sajuGraph",
+    "summary": "팀 맵(노드·엣지·오행 균형)",
+    "description": "dept 없음 = 인증 없음, 전체 공개 동의자·별명만. dept 있음 = 그 부서에 등록한 본인(헤더 id·token) 또는 포털 owner 만, 노드에 실명 — 아니면 403. 토큰이 틀리면 손님.",
+    "parameters": [
+     {
+      "name": "X-Saju-Id",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{8}$"
+      },
+      "description": "등록 때 받은 id (POST 는 본문 id 가 우선)"
+     },
+     {
+      "name": "X-Saju-Token",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{32}$"
+      },
+      "description": "등록 때 받은 token. URL 쿼리로는 받지 않음"
+     },
+     {
+      "name": "dept",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string"
+      },
+      "description": "부서 지도"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SajuGraph"
+        }
+       }
+      }
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-shared-data": true
+   }
+  },
+  "/t/saju-local/api/fortune": {
+   "get": {
+    "tags": [
+     "saju-local"
+    ],
+    "operationId": "sajuFortuneStatus",
+    "summary": "사주 풀이 리포트 작업 상태",
+    "description": "진행은 서버 메모리(재시작하면 사라짐). 본인 확인: 헤더 X-Saju-Id·X-Saju-Token(POST 는 본문 id·token 도 됨). 포털 계정이 아니라 이 token 으로만 구분(관리자도 token 없이는 못 봄). 틀리면 400 {error:'권한 없음'}(POST 는 '입력 오류: 권한 없음').",
+    "parameters": [
+     {
+      "name": "X-Saju-Id",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{8}$"
+      },
+      "description": "등록 때 받은 id (POST 는 본문 id 가 우선)"
+     },
+     {
+      "name": "X-Saju-Token",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{32}$"
+      },
+      "description": "등록 때 받은 token. URL 쿼리로는 받지 않음"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SajuFortune"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-permission": "self"
+   },
+   "post": {
+    "tags": [
+     "saju-local"
+    ],
+    "operationId": "sajuFortuneStart",
+    "summary": "사주 풀이 리포트 작성 시작(백그라운드)",
+    "description": "LLM 15개 섹션, 2~3분. GET api/fortune 폴링. 이미 실행 중이거나 같은 성별 리포트가 있고 regen=false 면 새로 시작 안 함. 본인 확인: 헤더 X-Saju-Id·X-Saju-Token(POST 는 본문 id·token 도 됨). 포털 계정이 아니라 이 token 으로만 구분(관리자도 token 없이는 못 봄). 틀리면 400 {error:'권한 없음'}(POST 는 '입력 오류: 권한 없음').",
+    "parameters": [
+     {
+      "name": "X-Saju-Id",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{8}$"
+      },
+      "description": "등록 때 받은 id (POST 는 본문 id 가 우선)"
+     },
+     {
+      "name": "X-Saju-Token",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{32}$"
+      },
+      "description": "등록 때 받은 token. URL 쿼리로는 받지 않음"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}$"
+         },
+         "token": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+         },
+         "gender": {
+          "type": "string",
+          "enum": [
+           "M",
+           "F",
+           ""
+          ]
+         },
+         "regen": {
+          "type": "boolean",
+          "default": false
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "상태 객체(즉시)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SajuFortune"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-permission": "self",
+    "x-llm": true,
+    "x-long-running": true
+   }
+  },
+  "/t/saju-local/report": {
+   "post": {
+    "tags": [
+     "saju-local"
+    ],
+    "operationId": "sajuReport",
+    "summary": "리포트 HTML(폼 본문)",
+    "description": "본문 application/x-www-form-urlencoded(HTML 폼, 새 탭). token 이 주소에 남지 않게 폼으로. 오류는 JSON.",
+    "parameters": [
+     {
+      "name": "X-Saju-Id",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{8}$"
+      },
+      "description": "등록 때 받은 id (POST 는 본문 id 가 우선)"
+     },
+     {
+      "name": "X-Saju-Token",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{32}$"
+      },
+      "description": "등록 때 받은 token. URL 쿼리로는 받지 않음"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/x-www-form-urlencoded": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}$"
+         },
+         "token": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+         },
+         "download": {
+          "type": "string",
+          "enum": [
+           "1"
+          ]
+         }
+        },
+        "required": [
+         "id",
+         "token"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "text/html 리포트. download=1 이면 Content-Disposition attachment; filename*=UTF-8''사주리포트_<실명>.html",
+      "headers": {
+       "Content-Disposition": {
+        "schema": {
+         "type": "string"
+        },
+        "description": "download=1 일 때만"
+       }
+      },
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-permission": "self"
+   },
+   "get": {
+    "tags": [
+     "saju-local"
+    ],
+    "operationId": "sajuReportGet",
+    "summary": "리포트 HTML(헤더 인증)",
+    "description": "헤더 X-Saju-Id·X-Saju-Token 필요(새 창으로는 못 붙이므로 화면은 POST 폼 사용).",
+    "parameters": [
+     {
+      "name": "X-Saju-Id",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{8}$"
+      },
+      "description": "등록 때 받은 id (POST 는 본문 id 가 우선)"
+     },
+     {
+      "name": "X-Saju-Token",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{32}$"
+      },
+      "description": "등록 때 받은 token. URL 쿼리로는 받지 않음"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "text/html",
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-permission": "self"
+   }
+  },
+  "/t/saju-local/api/bungae": {
+   "get": {
+    "tags": [
+     "saju-local"
+    ],
+    "operationId": "sajuBungaeList",
+    "summary": "나에게 보이는 번개 목록",
+    "description": "시작 3시간 지난 번개 제외. 정렬: 내 것 → 참여 → 점수. 본인 확인: 헤더 X-Saju-Id·X-Saju-Token(POST 는 본문 id·token 도 됨). 포털 계정이 아니라 이 token 으로만 구분(관리자도 token 없이는 못 봄). 틀리면 400 {error:'권한 없음'}(POST 는 '입력 오류: 권한 없음').",
+    "parameters": [
+     {
+      "name": "X-Saju-Id",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{8}$"
+      },
+      "description": "등록 때 받은 id (POST 는 본문 id 가 우선)"
+     },
+     {
+      "name": "X-Saju-Token",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{32}$"
+      },
+      "description": "등록 때 받은 token. URL 쿼리로는 받지 않음"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/SajuBungae"
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-permission": "self",
+    "x-shared-data": true
+   },
+   "post": {
+    "tags": [
+     "saju-local"
+    ],
+    "operationId": "sajuBungaeCreate",
+    "summary": "번개 만들기",
+    "description": "본인 확인: 헤더 X-Saju-Id·X-Saju-Token(POST 는 본문 id·token 도 됨). 포털 계정이 아니라 이 token 으로만 구분(관리자도 token 없이는 못 봄). 틀리면 400 {error:'권한 없음'}(POST 는 '입력 오류: 권한 없음').",
+    "parameters": [
+     {
+      "name": "X-Saju-Id",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{8}$"
+      },
+      "description": "등록 때 받은 id (POST 는 본문 id 가 우선)"
+     },
+     {
+      "name": "X-Saju-Token",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{32}$"
+      },
+      "description": "등록 때 받은 token. URL 쿼리로는 받지 않음"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}$"
+         },
+         "token": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+         },
+         "title": {
+          "type": "string",
+          "maxLength": 40
+         },
+         "place": {
+          "type": "string",
+          "maxLength": 40
+         },
+         "hobby": {
+          "type": "string",
+          "maxLength": 12
+         },
+         "minutes": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 10080,
+          "default": 60,
+          "description": "지금부터 몇 분 뒤"
+         },
+         "cap": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 30,
+          "default": 4
+         }
+        },
+        "required": [
+         "title",
+         "place",
+         "hobby"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "만든 번개 {id,host,title,place,hobby,at,cap,members:[주최자 id]}",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SajuBungae"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-permission": "self",
+    "x-shared-data": true
+   }
+  },
+  "/t/saju-local/api/bungae/join": {
+   "post": {
+    "tags": [
+     "saju-local"
+    ],
+    "operationId": "sajuBungaeJoin",
+    "summary": "번개 참여",
+    "description": "오류: 없는 번개, 조건 불일치, 정원 마감. 본인 확인: 헤더 X-Saju-Id·X-Saju-Token(POST 는 본문 id·token 도 됨). 포털 계정이 아니라 이 token 으로만 구분(관리자도 token 없이는 못 봄). 틀리면 400 {error:'권한 없음'}(POST 는 '입력 오류: 권한 없음').",
+    "parameters": [
+     {
+      "name": "X-Saju-Id",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{8}$"
+      },
+      "description": "등록 때 받은 id (POST 는 본문 id 가 우선)"
+     },
+     {
+      "name": "X-Saju-Token",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{32}$"
+      },
+      "description": "등록 때 받은 token. URL 쿼리로는 받지 않음"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}$"
+         },
+         "token": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+         },
+         "bid": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "bid"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ok"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-permission": "self"
+   }
+  },
+  "/t/saju-local/api/bungae/leave": {
+   "post": {
+    "tags": [
+     "saju-local"
+    ],
+    "operationId": "sajuBungaeLeave",
+    "summary": "번개 나가기(주최자면 번개 삭제)",
+    "description": "본인 확인: 헤더 X-Saju-Id·X-Saju-Token(POST 는 본문 id·token 도 됨). 포털 계정이 아니라 이 token 으로만 구분(관리자도 token 없이는 못 봄). 틀리면 400 {error:'권한 없음'}(POST 는 '입력 오류: 권한 없음').",
+    "parameters": [
+     {
+      "name": "X-Saju-Id",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{8}$"
+      },
+      "description": "등록 때 받은 id (POST 는 본문 id 가 우선)"
+     },
+     {
+      "name": "X-Saju-Token",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{32}$"
+      },
+      "description": "등록 때 받은 token. URL 쿼리로는 받지 않음"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}$"
+         },
+         "token": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+         },
+         "bid": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "bid"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ok"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-permission": "self"
+   }
+  }
+ },
+ "components": {
+  "securitySchemes": {
+   "cookieAuth": {
+    "type": "apiKey",
+    "in": "cookie",
+    "name": "agsid",
+    "description": "POST /api/login 이 주는 세션 쿠키(HttpOnly, SameSite=Lax). 같은 출처 fetch 면 브라우저가 자동으로 붙임. 서버 안(127.0.0.1)에서 쿠키 없이 부르면 서버 주인(관리자)으로 처리."
+   }
+  },
+  "schemas": {
+   "Error": {
+    "type": "object",
+    "required": [
+     "error"
+    ],
+    "properties": {
+     "error": {
+      "type": "string",
+      "description": "사람이 읽을 수 있는 한국어 설명"
+     }
+    }
+   },
+   "Unauthorized": {
+    "type": "object",
+    "required": [
+     "error",
+     "login"
+    ],
+    "properties": {
+     "error": {
+      "type": "string",
+      "examples": [
+       "로그인이 필요합니다"
+      ]
+     },
+     "login": {
+      "type": "string",
+      "const": "/login"
+     }
+    }
+   },
+   "Ok": {
+    "type": "object",
+    "required": [
+     "ok"
+    ],
+    "properties": {
+     "ok": {
+      "type": "boolean"
+     }
+    }
+   },
+   "SajuMeta": {
+    "type": "object",
+    "properties": {
+     "axes": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "labels": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       },
+       "minItems": 2,
+       "maxItems": 2
+      },
+      "description": "[왼쪽(-1) 뜻, 오른쪽(+1) 뜻]"
+     },
+     "hobbies": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    },
+    "required": [
+     "axes",
+     "labels",
+     "hobbies"
+    ]
+   },
+   "SajuStatus": {
+    "type": "object",
+    "properties": {
+     "llm": {
+      "type": "boolean"
+     },
+     "model": {
+      "type": "string"
+     },
+     "model_found": {
+      "type": "boolean"
+     },
+     "error": {
+      "type": "string",
+      "description": "llm=false 일 때 예외 이름"
+     }
+    },
+    "required": [
+     "llm",
+     "model"
+    ]
+   },
+   "SajuPublic": {
+    "type": "object",
+    "additionalProperties": true,
+    "description": "공개 필드(saju.py 결과 일부)",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "alias": {
+      "type": "string"
+     },
+     "dept": {
+      "type": "string"
+     },
+     "age_band": {
+      "type": "string"
+     },
+     "day_master": {
+      "type": "string"
+     },
+     "dm_el": {
+      "type": "string",
+      "enum": [
+       "목",
+       "화",
+       "토",
+       "금",
+       "수"
+      ]
+     },
+     "elements": {
+      "type": "object",
+      "properties": {
+       "목": {
+        "type": "number"
+       },
+       "화": {
+        "type": "number"
+       },
+       "토": {
+        "type": "number"
+       },
+       "금": {
+        "type": "number"
+       },
+       "수": {
+        "type": "number"
+       }
+      },
+      "additionalProperties": false
+     },
+     "ten_gods": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "number"
+      }
+     },
+     "strength": {
+      "type": "string"
+     },
+     "mbti": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "zodiac": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "blood": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "dominant": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "lacking": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "hobbies": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "traits": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "integer",
+       "enum": [
+        -1,
+        0,
+        1
+       ]
+      },
+      "description": "{축: -1/0/1} — 축 이름은 api/meta 의 axes"
+     },
+     "gyeok": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "yong": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "power": {
+      "type": "object",
+      "properties": {
+       "목": {
+        "type": "number"
+       },
+       "화": {
+        "type": "number"
+       },
+       "토": {
+        "type": "number"
+       },
+       "금": {
+        "type": "number"
+       },
+       "수": {
+        "type": "number"
+       }
+      },
+      "additionalProperties": false
+     },
+     "name": {
+      "type": "string",
+      "description": "실명 — 같은 부서 범위(scope=dept, 부서 지도)에서만"
+     }
+    },
+    "required": [
+     "id",
+     "alias",
+     "dept"
+    ]
+   },
+   "SajuRegisterRequest": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "description": "실명(20자에서 자름)"
+     },
+     "dept": {
+      "type": "string",
+      "description": "부서(30자에서 자름)"
+     },
+     "year": {
+      "type": [
+       "integer",
+       "string"
+      ],
+      "description": "1920~올해"
+     },
+     "month": {
+      "type": [
+       "integer",
+       "string"
+      ]
+     },
+     "day": {
+      "type": [
+       "integer",
+       "string"
+      ]
+     },
+     "hour": {
+      "type": [
+       "integer",
+       "string"
+      ],
+      "description": "0~23. 생략·''·'unknown' 이면 시주 없이"
+     },
+     "minute": {
+      "type": "integer",
+      "default": 0
+     },
+     "mbti": {
+      "type": "string",
+      "pattern": "^[EIei][NSns][TFtf][JPjp]$"
+     },
+     "blood": {
+      "type": "string",
+      "enum": [
+       "A",
+       "B",
+       "O",
+       "AB"
+      ]
+     },
+     "gender": {
+      "type": "string",
+      "enum": [
+       "M",
+       "F"
+      ],
+      "description": "대운 계산에만, 저장 안 함"
+     },
+     "consent_global": {
+      "type": "boolean",
+      "default": true,
+      "description": "회사 전체 매칭·팀 맵에 별명으로 보일지"
+     },
+     "hobbies": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "maxLength": 12
+      },
+      "maxItems": 15
+     },
+     "traits": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "integer",
+       "enum": [
+        -1,
+        0,
+        1
+       ]
+      },
+      "description": "{축: -1/0/1} — 축 이름은 api/meta 의 axes"
+     },
+     "wants": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "integer",
+       "enum": [
+        -1,
+        0,
+        1
+       ]
+      },
+      "description": "{축: -1/0/1} — 축 이름은 api/meta 의 axes"
+     }
+    },
+    "required": [
+     "name",
+     "dept",
+     "year",
+     "month",
+     "day"
+    ]
+   },
+   "SajuRegisterResult": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}$"
+     },
+     "token": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$",
+      "description": "다시 받는 API 없음 — 잃으면 재등록"
+     },
+     "alias": {
+      "type": "string"
+     },
+     "pillars": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "minItems": 4,
+      "maxItems": 4
+     },
+     "zodiac": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "profile": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "saju.analyze() 결과 전체 — 필드 많음, 코드(saju.py) 확인 필요"
+     }
+    },
+    "required": [
+     "id",
+     "token",
+     "alias",
+     "pillars",
+     "profile"
+    ]
+   },
+   "SajuMe": {
+    "allOf": [
+     {
+      "$ref": "#/components/schemas/SajuPublic"
+     }
+    ],
+    "description": "공개 필드 + name + 명리 상세(pillars, tens, support_ratio, deukryeong, rooted, gyeok_god, hui, gi, yong_why, johu, gongmang, gongmang_hit, relations, daeun, unseong_day, dm_yin, lmt, hour_known, birth_year 중 있는 것) + wants, consent_global"
+   },
+   "SajuToday": {
+    "type": "object",
+    "additionalProperties": true,
+    "properties": {
+     "date": {
+      "type": "string",
+      "format": "date"
+     },
+     "day": {
+      "type": "string"
+     },
+     "day_god": {
+      "type": "string"
+     },
+     "theme": {
+      "type": "string"
+     },
+     "theme_work": {
+      "type": "string"
+     },
+     "branch_rel": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "unseong": {
+      "type": "string"
+     },
+     "stars": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+     },
+     "day_el": {
+      "type": "string"
+     },
+     "menu": {
+      "type": "string"
+     },
+     "year": {
+      "type": "object",
+      "additionalProperties": true
+     },
+     "month": {
+      "type": "object",
+      "additionalProperties": true
+     },
+     "daeun": {
+      "type": [
+       "object",
+       "null"
+      ],
+      "additionalProperties": true
+     },
+     "text": {
+      "type": "string"
+     },
+     "research": {
+      "type": "string"
+     },
+     "collab": {
+      "type": "string"
+     },
+     "menu_why": {
+      "type": "string"
+     },
+     "llm": {
+      "type": "boolean",
+      "description": "false = 규칙 문장(캐시 안 함)"
+     }
+    },
+    "required": [
+     "date",
+     "llm"
+    ]
+   },
+   "SajuMatch": {
+    "allOf": [
+     {
+      "$ref": "#/components/schemas/SajuPublic"
+     },
+     {
+      "type": "object",
+      "properties": {
+       "score": {
+        "type": "integer"
+       },
+       "why": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       }
+      },
+      "required": [
+       "score",
+       "why"
+      ]
+     }
+    ]
+   },
+   "SajuGraph": {
+    "type": "object",
+    "properties": {
+     "nodes": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/SajuPublic"
+      }
+     },
+     "edges": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "a": {
+         "type": "string"
+        },
+        "b": {
+         "type": "string"
+        },
+        "score": {
+         "type": "integer",
+         "minimum": 0,
+         "maximum": 100
+        },
+        "why": {
+         "type": "array",
+         "items": {
+          "type": "string"
+         }
+        }
+       },
+       "required": [
+        "a",
+        "b",
+        "score",
+        "why"
+       ]
+      }
+     },
+     "balance": {
+      "type": "object",
+      "properties": {
+       "목": {
+        "type": "number"
+       },
+       "화": {
+        "type": "number"
+       },
+       "토": {
+        "type": "number"
+       },
+       "금": {
+        "type": "number"
+       },
+       "수": {
+        "type": "number"
+       }
+      },
+      "additionalProperties": false
+     },
+     "depts": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "고를 수 있는 부서(owner 전체, 본인 자기 부서, 손님 [])"
+     }
+    },
+    "required": [
+     "nodes",
+     "edges",
+     "balance",
+     "depts"
+    ]
+   },
+   "SajuFortune": {
+    "type": "object",
+    "properties": {
+     "ready": {
+      "type": "boolean"
+     },
+     "gender": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "model": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "ts": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "running": {
+      "type": "boolean"
+     },
+     "done": {
+      "type": "integer"
+     },
+     "total": {
+      "type": "integer"
+     },
+     "error": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "guess_gender": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "화면 기본 선택용 추정치"
+     }
+    },
+    "required": [
+     "ready",
+     "running"
+    ]
+   },
+   "SajuMember": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string",
+      "description": "참여했으면 실명, 아니면 별명"
+     },
+     "dept": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "name"
+    ]
+   },
+   "SajuBungae": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "host": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "place": {
+      "type": "string"
+     },
+     "hobby": {
+      "type": "string"
+     },
+     "at": {
+      "type": "string",
+      "description": "KST, 타임존 표기 없음(YYYY-MM-DDTHH:MM)"
+     },
+     "cap": {
+      "type": "integer"
+     },
+     "joined": {
+      "type": "boolean"
+     },
+     "mine": {
+      "type": "boolean"
+     },
+     "score": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "why": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "reach": {
+      "type": [
+       "integer",
+       "null"
+      ],
+      "description": "내가 주최한 번개면 볼 수 있는 사람 수"
+     },
+     "host_name": {
+      "type": "string"
+     },
+     "members": {
+      "type": "array",
+      "items": {
+       "oneOf": [
+        {
+         "$ref": "#/components/schemas/SajuMember"
+        },
+        {
+         "type": "string"
+        }
+       ]
+      },
+      "description": "목록 응답은 {id,name,dept}, 만들기 응답은 id 문자열"
+     }
+    },
+    "required": [
+     "id",
+     "host",
+     "title",
+     "place",
+     "hobby",
+     "at",
+     "cap"
+    ],
+    "additionalProperties": true
+   }
+  },
+  "responses": {
+   "BadRequest": {
+    "description": "입력이 잘못됨(본문이 JSON 객체가 아님, 필수 값 없음 등)",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "Unauthorized": {
+    "description": "로그인 필요 — /login 으로",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Unauthorized"
+      }
+     }
+    }
+   },
+   "Forbidden": {
+    "description": "권한 없음(관리자·부서장·만든 사람 전용)",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "BadGateway": {
+    "description": "도구가 꺼져 있음(응답 없음) → POST /api/start {\"dir\": \"<도구>\"} 로 켠 뒤 다시 시도",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   }
+  }
+ }
+}

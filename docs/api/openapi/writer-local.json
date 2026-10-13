@@ -1,0 +1,786 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "KAERI AI Agent Portal API — writer-local",
+  "version": "2026.10.13",
+  "summary": "Writer — 건배사·경조사·축사·공지문 등 패턴 글쓰기(로컬 LLM). 문서: docs/api/writer-local.md",
+  "description": "© 2026 gggg8657 · 내부 시험용 · 배포용 아님\n\nKAERI AI 에이전트 포털과 도구들의 HTTP API(도구 수는 summary 참고). 근거: `docs/api/README.md` 와 `docs/api/<도구>.md`(문서와 실제 응답이 다르면 응답이 맞음 — 알려 주면 고침).\n\n## 연결 방법 요약\n- **같은 출처 전제** (`servers: [{url: \"/\"}]`). 포털은 CORS 헤더를 내보내지 않고, 로그인 쿠키 `agsid` 는 HttpOnly·SameSite=Lax 입니다.\n  개발할 때는 개발 서버 프록시(Vite `server.proxy`, Next.js `rewrites`)로 `/api`·`/t`·`/logout` 을 포털로 넘기세요 — 예시는 README \"3. 새 화면을 연결하는 방법\".\n- **로그인**: `POST /api/login` → 쿠키 `agsid` 가 붙음. 이후 `fetch(…, {credentials: \"same-origin\"})`(기본값). JS 에서 쿠키를 읽을 수 없음.\n  로그인 안 된 API 요청은 401 `{\"error\": \"로그인이 필요합니다\", \"login\": \"/login\"}`.\n- **도구 경로**: 도구 문서의 `api/xxx` 는 포털에서 `/t/<도구 dir>/api/xxx`. 포털이 `X-Agent-User` 를 붙여 사용자별로 저장(화면이 보낸 `X-Agent-User` 는 지워짐).\n- **도구가 꺼져 있으면 502** → `POST /api/start {\"dir\": \"<도구>\"}` 뒤 다시 시도.\n- **오류 모양**: 대부분 `{\"error\": \"한국어 설명\"}`. 예외(예: tts-local 의 POST 는 OpenAI 모양 `{\"error\": {\"message\", \"type\"}}`)는 해당 operation 에 그대로 적음.\n- **스트리밍**: `text/event-stream`(SSE) 또는 `application/x-ndjson` 응답은 이벤트 목록을 `x-stream-events` 확장에 둠. **도중 오류도 HTTP 200 으로 오고 스트림 안 `error` 이벤트로만 옴.** 포털은 버퍼링 없이 흘림(최대 1시간).\n- **확장 필드**: `x-permission`(admin 관리자 · dept-head 부서장 · creator 만든 사람 · self 본인), `x-shared-data`(여러 사람이 같이 보는 데이터), `x-gpu`·`x-llm`·`x-long-running`(GPU·LLM 사용, 오래 걸림 — 버튼 연타 막기), `x-stream-events`.\n- **도구 태그 확장**(등록용): `x-tool-id`(dir 에서 -local 뺀 것) · `x-name` · `x-description` · `x-kind`(LLM 을 쓰면 agent, 아니면 tool) · `x-category` · `x-entry`(/t/<dir>/) · `x-health-path`(가벼운 GET, 200) · `x-long-running` · `x-docs-input`(text·chunks·file·none) · `x-external-network`(외부 인터넷 호출 여부) · `x-response-style`(sse·json·file·polling). 판단 근거가 애매한 곳은 `x-<항목>-note`.\n- 스키마 description 에 \"코드 확인 필요\" 라고 적힌 곳은 문서·코드로 모양을 확정하지 못한 부분입니다(`additionalProperties: true`).\n\nREADME: `docs/api/README.md` (OpenAPI 절 — 타입 생성 명령).",
+  "contact": {
+   "name": "gggg8657",
+   "url": "https://github.com/gggg8657"
+  },
+  "license": {
+   "name": "All rights reserved (portal) — 도구별 라이선스는 각 도구 저장소 LICENSE",
+   "identifier": "LicenseRef-AllRightsReserved"
+  },
+  "x-tool-id": "writer",
+  "x-name": "Writer",
+  "x-description": "건배사·경조사·축사·공지문 패턴 글쓰기",
+  "x-kind": "agent",
+  "x-category": "문서",
+  "x-entry": "/t/writer-local/",
+  "x-health-path": "/t/writer-local/api/patterns",
+  "x-long-running": false,
+  "x-docs-input": "text",
+  "x-external-network": false,
+  "x-external-network-note": "외부 호출 없음 — LLM 서버(LLM_BASE)·옆 도구(localhost)만",
+  "x-response-style": "sse",
+  "x-response-style-note": "api/generate 는 SSE, api/humanize·api/polish 는 JSON 한 번에",
+  "x-docs-input-note": "패턴 입력 칸 값(values)과 고칠 글(prev) 을 JSON 으로"
+ },
+ "servers": [
+  {
+   "url": "/",
+   "description": "포털과 같은 출처(개발 때는 개발 서버 프록시로)"
+  }
+ ],
+ "security": [
+  {
+   "cookieAuth": []
+  }
+ ],
+ "tags": [
+  {
+   "name": "writer-local",
+   "description": "Writer — 건배사·경조사·축사·공지문 등 패턴 글쓰기(로컬 LLM). 문서: docs/api/writer-local.md",
+   "x-tool-id": "writer",
+   "x-name": "Writer",
+   "x-description": "건배사·경조사·축사·공지문 패턴 글쓰기",
+   "x-kind": "agent",
+   "x-category": "문서",
+   "x-entry": "/t/writer-local/",
+   "x-health-path": "/t/writer-local/api/patterns",
+   "x-long-running": false,
+   "x-docs-input": "text",
+   "x-external-network": false,
+   "x-external-network-note": "외부 호출 없음 — LLM 서버(LLM_BASE)·옆 도구(localhost)만",
+   "x-response-style": "sse",
+   "x-response-style-note": "api/generate 는 SSE, api/humanize·api/polish 는 JSON 한 번에",
+   "x-docs-input-note": "패턴 입력 칸 값(values)과 고칠 글(prev) 을 JSON 으로"
+  }
+ ],
+ "paths": {
+  "/t/writer-local/api/patterns": {
+   "get": {
+    "tags": [
+     "writer-local"
+    ],
+    "operationId": "writerPatterns",
+    "summary": "패턴 목록(입력 칸 정의 포함)",
+    "description": "경로는 정확히 일치해야 함(쿼리를 붙이면 화면 HTML 이 옴).",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/WriterPattern"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/writer-local/api/models": {
+   "get": {
+    "tags": [
+     "writer-local"
+    ],
+    "operationId": "writerModels",
+    "summary": "LLM 모델 이름 목록(임베딩 모델도 섞임)",
+    "description": "서버 기본 모델은 주지 않음(model 을 비워 보내면 기본값).",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/writer-local/api/runs": {
+   "get": {
+    "tags": [
+     "writer-local"
+    ],
+    "operationId": "writerRuns",
+    "summary": "지난 생성 목록(최근 50개)",
+    "description": "사용자별 데이터(X-Agent-User).",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/WriterRunSummary"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/writer-local/api/runs/{run_id}": {
+   "get": {
+    "tags": [
+     "writer-local"
+    ],
+    "operationId": "writerRun",
+    "summary": "지난 생성 하나",
+    "parameters": [
+     {
+      "name": "run_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{4}-\\d{2}-\\d{2}-\\d{6}-[0-9a-f]{2}$"
+      },
+      "description": "YYYY-MM-DD-HHMMSS-xx(16진 2자리)"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WriterResult"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/writer-local/api/generate": {
+   "post": {
+    "tags": [
+     "writer-local"
+    ],
+    "operationId": "writerGenerate",
+    "summary": "패턴으로 글 생성 (SSE)",
+    "description": "LLM 1콜, 수 초~수십 초. 스트림: {stage:'llm',msg,reset:true} → {token}… → {done:{결과}}. 토큰은 여러 안이 ===== 로 이어진 원문 — 안별 결과는 done.variants. 빈 출력이면 1회 자동 재시도(토큰이 다시 흐름). 도중 오류도 HTTP 200 으로 오고 스트림 안 {error} 이벤트로만 옴(패턴 없음·필수 입력 빠짐 포함).",
+    "x-llm": true,
+    "x-long-running": true,
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "pattern": {
+          "type": "string",
+          "description": "패턴 name"
+         },
+         "values": {
+          "type": "object",
+          "additionalProperties": {
+           "type": "string"
+          },
+          "description": "{입력 key: 값}. required 칸이 비면 오류"
+         },
+         "model": {
+          "type": "string",
+          "description": "비우면 서버 기본"
+         },
+         "tweak": {
+          "type": "string",
+          "enum": [
+           "shorter",
+           "formal",
+           "casual"
+          ],
+          "description": "prev 와 함께일 때만 적용"
+         },
+         "prev": {
+          "type": "string",
+          "description": "고칠 직전 결과 글(안 하나)"
+         }
+        },
+        "required": [
+         "pattern"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "SSE 스트림 (data: <JSON>\\n\\n)",
+      "content": {
+       "text/event-stream": {
+        "schema": {
+         "type": "string",
+         "description": "SSE 스트림 (data: <JSON>\\n\\n)"
+        },
+        "x-stream-events": [
+         {
+          "name": "stage",
+          "schema": {
+           "$ref": "#/components/schemas/WriterStageEvent"
+          }
+         },
+         {
+          "name": "token",
+          "schema": {
+           "$ref": "#/components/schemas/WriterTokenEvent"
+          }
+         },
+         {
+          "name": "done",
+          "schema": {
+           "$ref": "#/components/schemas/WriterDoneEvent"
+          }
+         },
+         {
+          "name": "error",
+          "schema": {
+           "$ref": "#/components/schemas/WriterErrorEvent"
+          }
+         }
+        ]
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/writer-local/api/humanize_ok": {
+   "get": {
+    "tags": [
+     "writer-local"
+    ],
+    "operationId": "writerHumanizeOk",
+    "summary": "humanize-kr-local 연결 여부",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WriterAvailable"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/writer-local/api/humanize": {
+   "post": {
+    "tags": [
+     "writer-local"
+    ],
+    "operationId": "writerHumanize",
+    "summary": "humanize-kr-local 로 윤문(한 번에)",
+    "description": "옆 도구 api/humanize 를 끝까지 기다림(수십 초~수 분). 같은 사용자 헤더를 넘기므로 humanize 쪽 기록에도 남음. 실패 시 502 {error}.",
+    "x-llm": true,
+    "x-long-running": true,
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "text": {
+          "type": "string"
+         },
+         "genre": {
+          "type": "string",
+          "default": "essay",
+          "description": "humanize-kr-local 의 genre(essay·column·report·blog·abstract)"
+         }
+        },
+        "required": [
+         "text"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "output": {
+           "type": "string"
+          }
+         },
+         "required": [
+          "output"
+         ]
+        }
+       }
+      }
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    }
+   }
+  },
+  "/t/writer-local/api/polish_ok": {
+   "get": {
+    "tags": [
+     "writer-local"
+    ],
+    "operationId": "writerPolishOk",
+    "summary": "kordoc-local 윤문 연결 여부",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WriterAvailable"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/writer-local/api/polish": {
+   "post": {
+    "tags": [
+     "writer-local"
+    ],
+    "operationId": "writerPolish",
+    "summary": "kordoc-local 로 윤문(한 번에)",
+    "x-llm": true,
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "text": {
+          "type": "string"
+         },
+         "strength": {
+          "type": "string",
+          "enum": [
+           "light",
+           "standard",
+           "strong"
+          ],
+          "default": "standard"
+         }
+        },
+        "required": [
+         "text"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "description": "kordoc-local api/polish_text 응답 그대로(output, changes, rejected, units, …) — kordoc-local 명세 참고"
+        }
+       }
+      }
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "securitySchemes": {
+   "cookieAuth": {
+    "type": "apiKey",
+    "in": "cookie",
+    "name": "agsid",
+    "description": "POST /api/login 이 주는 세션 쿠키(HttpOnly, SameSite=Lax). 같은 출처 fetch 면 브라우저가 자동으로 붙임. 서버 안(127.0.0.1)에서 쿠키 없이 부르면 서버 주인(관리자)으로 처리."
+   }
+  },
+  "schemas": {
+   "Error": {
+    "type": "object",
+    "required": [
+     "error"
+    ],
+    "properties": {
+     "error": {
+      "type": "string",
+      "description": "사람이 읽을 수 있는 한국어 설명"
+     }
+    }
+   },
+   "Unauthorized": {
+    "type": "object",
+    "required": [
+     "error",
+     "login"
+    ],
+    "properties": {
+     "error": {
+      "type": "string",
+      "examples": [
+       "로그인이 필요합니다"
+      ]
+     },
+     "login": {
+      "type": "string",
+      "const": "/login"
+     }
+    }
+   },
+   "WriterPatternInput": {
+    "type": "object",
+    "properties": {
+     "key": {
+      "type": "string"
+     },
+     "label": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "text",
+       "textarea",
+       "select",
+       "number"
+      ]
+     },
+     "required": {
+      "type": "boolean"
+     },
+     "placeholder": {
+      "type": [
+       "string",
+       "number"
+      ],
+      "description": "입력 칸 안내 문구(숫자 칸이면 숫자 예시)"
+     },
+     "options": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "type=select 일 때"
+     }
+    },
+    "required": [
+     "key",
+     "label",
+     "type"
+    ]
+   },
+   "WriterPattern": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "description": "패턴 id(예 apology)"
+     },
+     "title": {
+      "type": "string"
+     },
+     "category": {
+      "type": "string"
+     },
+     "description": {
+      "type": "string"
+     },
+     "outputs": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "만들 안(variant) 수"
+     },
+     "inputs": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/WriterPatternInput"
+      }
+     }
+    },
+    "description": "지시문 본문(prompt)은 빠짐. 서버 patterns/*.md 에서 기동 시 읽음",
+    "required": [
+     "name",
+     "title",
+     "inputs"
+    ]
+   },
+   "WriterRunSummary": {
+    "type": "object",
+    "properties": {
+     "run_id": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}-\\d{6}-[0-9a-f]{2}$"
+     },
+     "title": {
+      "type": "string"
+     },
+     "model": {
+      "type": "string"
+     },
+     "ts": {
+      "type": "string"
+     },
+     "head": {
+      "type": "string",
+      "description": "첫 안 앞 40자"
+     }
+    },
+    "required": [
+     "run_id",
+     "title",
+     "model",
+     "ts",
+     "head"
+    ]
+   },
+   "WriterResult": {
+    "type": "object",
+    "properties": {
+     "run_id": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}-\\d{6}-[0-9a-f]{2}$"
+     },
+     "pattern": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "model": {
+      "type": "string"
+     },
+     "values": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "{입력 key: 값}"
+     },
+     "tweak": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "variants": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "안 배열(최대 outputs 개)"
+     },
+     "raw": {
+      "type": "string",
+      "description": "모델 출력 전체 — 여러 안이면 ===== 줄로 구분"
+     },
+     "ts": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "run_id",
+     "pattern",
+     "title",
+     "model",
+     "variants",
+     "raw",
+     "ts"
+    ]
+   },
+   "WriterStageEvent": {
+    "type": "object",
+    "properties": {
+     "stage": {
+      "type": "string",
+      "enum": [
+       "llm"
+      ]
+     },
+     "msg": {
+      "type": "string"
+     },
+     "reset": {
+      "type": "boolean",
+      "description": "true 면 받은 토큰을 지움(빈 출력 재시도 포함)"
+     }
+    },
+    "required": [
+     "stage",
+     "msg"
+    ]
+   },
+   "WriterTokenEvent": {
+    "type": "object",
+    "properties": {
+     "token": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "token"
+    ]
+   },
+   "WriterDoneEvent": {
+    "type": "object",
+    "properties": {
+     "done": {
+      "$ref": "#/components/schemas/WriterResult"
+     }
+    },
+    "required": [
+     "done"
+    ]
+   },
+   "WriterErrorEvent": {
+    "type": "object",
+    "properties": {
+     "error": {
+      "type": "string",
+      "description": "예: ValueError: 필수 입력: 사과 대상"
+     }
+    },
+    "required": [
+     "error"
+    ]
+   },
+   "WriterAvailable": {
+    "type": "object",
+    "properties": {
+     "ok": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "ok"
+    ]
+   }
+  },
+  "responses": {
+   "Unauthorized": {
+    "description": "로그인 필요 — /login 으로",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Unauthorized"
+      }
+     }
+    }
+   },
+   "NotFound": {
+    "description": "없는 경로·도구·항목",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "ServerError": {
+    "description": "서버 내부 오류",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "BadGateway": {
+    "description": "도구가 꺼져 있음(응답 없음) → POST /api/start {\"dir\": \"<도구>\"} 로 켠 뒤 다시 시도",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   }
+  }
+ }
+}

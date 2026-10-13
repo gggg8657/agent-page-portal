@@ -1,0 +1,1514 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "KAERI AI Agent Portal API — chart-local",
+  "version": "2026.10.13",
+  "summary": "그래프 — 표 → 그래프 후보(SVG) → 편집 가능한 문서 차트(XLSX·PPTX·DOCX·HWPX). 문서: docs/api/chart-local.md",
+  "description": "© 2026 gggg8657 · 내부 시험용 · 배포용 아님\n\nKAERI AI 에이전트 포털과 도구들의 HTTP API(도구 수는 summary 참고). 근거: `docs/api/README.md` 와 `docs/api/<도구>.md`(문서와 실제 응답이 다르면 응답이 맞음 — 알려 주면 고침).\n\n## 연결 방법 요약\n- **같은 출처 전제** (`servers: [{url: \"/\"}]`). 포털은 CORS 헤더를 내보내지 않고, 로그인 쿠키 `agsid` 는 HttpOnly·SameSite=Lax 입니다.\n  개발할 때는 개발 서버 프록시(Vite `server.proxy`, Next.js `rewrites`)로 `/api`·`/t`·`/logout` 을 포털로 넘기세요 — 예시는 README \"3. 새 화면을 연결하는 방법\".\n- **로그인**: `POST /api/login` → 쿠키 `agsid` 가 붙음. 이후 `fetch(…, {credentials: \"same-origin\"})`(기본값). JS 에서 쿠키를 읽을 수 없음.\n  로그인 안 된 API 요청은 401 `{\"error\": \"로그인이 필요합니다\", \"login\": \"/login\"}`.\n- **도구 경로**: 도구 문서의 `api/xxx` 는 포털에서 `/t/<도구 dir>/api/xxx`. 포털이 `X-Agent-User` 를 붙여 사용자별로 저장(화면이 보낸 `X-Agent-User` 는 지워짐).\n- **도구가 꺼져 있으면 502** → `POST /api/start {\"dir\": \"<도구>\"}` 뒤 다시 시도.\n- **오류 모양**: 대부분 `{\"error\": \"한국어 설명\"}`. 예외(예: tts-local 의 POST 는 OpenAI 모양 `{\"error\": {\"message\", \"type\"}}`)는 해당 operation 에 그대로 적음.\n- **스트리밍**: `text/event-stream`(SSE) 또는 `application/x-ndjson` 응답은 이벤트 목록을 `x-stream-events` 확장에 둠. **도중 오류도 HTTP 200 으로 오고 스트림 안 `error` 이벤트로만 옴.** 포털은 버퍼링 없이 흘림(최대 1시간).\n- **확장 필드**: `x-permission`(admin 관리자 · dept-head 부서장 · creator 만든 사람 · self 본인), `x-shared-data`(여러 사람이 같이 보는 데이터), `x-gpu`·`x-llm`·`x-long-running`(GPU·LLM 사용, 오래 걸림 — 버튼 연타 막기), `x-stream-events`.\n- **도구 태그 확장**(등록용): `x-tool-id`(dir 에서 -local 뺀 것) · `x-name` · `x-description` · `x-kind`(LLM 을 쓰면 agent, 아니면 tool) · `x-category` · `x-entry`(/t/<dir>/) · `x-health-path`(가벼운 GET, 200) · `x-long-running` · `x-docs-input`(text·chunks·file·none) · `x-external-network`(외부 인터넷 호출 여부) · `x-response-style`(sse·json·file·polling). 판단 근거가 애매한 곳은 `x-<항목>-note`.\n- 스키마 description 에 \"코드 확인 필요\" 라고 적힌 곳은 문서·코드로 모양을 확정하지 못한 부분입니다(`additionalProperties: true`).\n\nREADME: `docs/api/README.md` (OpenAPI 절 — 타입 생성 명령).",
+  "contact": {
+   "name": "gggg8657",
+   "url": "https://github.com/gggg8657"
+  },
+  "license": {
+   "name": "All rights reserved (portal) — 도구별 라이선스는 각 도구 저장소 LICENSE",
+   "identifier": "LicenseRef-AllRightsReserved"
+  },
+  "x-tool-id": "chart",
+  "x-name": "그래프",
+  "x-description": "표 → 그래프 후보 → 편집 가능한 문서 차트",
+  "x-kind": "agent",
+  "x-category": "데이터",
+  "x-entry": "/t/chart-local/",
+  "x-health-path": "/t/chart-local/api/health",
+  "x-long-running": false,
+  "x-docs-input": "file",
+  "x-external-network": false,
+  "x-response-style": "json",
+  "x-kind-note": "LLM 은 api/describe(제목·설명)에만",
+  "x-docs-input-note": "표 텍스트(text) 또는 파일 base64(file_b64)",
+  "x-response-style-note": "문서는 api/export JSON 의 url 로 파일 받기"
+ },
+ "servers": [
+  {
+   "url": "/",
+   "description": "포털과 같은 출처(개발 때는 개발 서버 프록시로)"
+  }
+ ],
+ "security": [
+  {
+   "cookieAuth": []
+  }
+ ],
+ "tags": [
+  {
+   "name": "chart-local",
+   "description": "그래프 — 표 → 그래프 후보(SVG) → 편집 가능한 문서 차트(XLSX·PPTX·DOCX·HWPX). 문서: docs/api/chart-local.md",
+   "x-tool-id": "chart",
+   "x-name": "그래프",
+   "x-description": "표 → 그래프 후보 → 편집 가능한 문서 차트",
+   "x-kind": "agent",
+   "x-category": "데이터",
+   "x-entry": "/t/chart-local/",
+   "x-health-path": "/t/chart-local/api/health",
+   "x-long-running": false,
+   "x-docs-input": "file",
+   "x-external-network": false,
+   "x-response-style": "json",
+   "x-kind-note": "LLM 은 api/describe(제목·설명)에만",
+   "x-docs-input-note": "표 텍스트(text) 또는 파일 base64(file_b64)",
+   "x-response-style-note": "문서는 api/export JSON 의 url 로 파일 받기"
+  }
+ ],
+ "paths": {
+  "/t/chart-local/api/health": {
+   "get": {
+    "tags": [
+     "chart-local"
+    ],
+    "operationId": "chartHealth",
+    "summary": "살아 있는지",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ok"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/chart-local/api/meta": {
+   "get": {
+    "tags": [
+     "chart-local"
+    ],
+    "operationId": "chartMeta",
+    "summary": "샘플·그래프 종류·내보내기 형식·모델·색",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ChartMeta"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/chart-local/api/models": {
+   "get": {
+    "tags": [
+     "chart-local"
+    ],
+    "operationId": "chartModels",
+    "summary": "LLM 모델 이름 목록(안 되면 [])",
+    "description": "최대 3초. 지금 화면은 부르지 않음.",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/chart-local/api/sample/{id}": {
+   "get": {
+    "tags": [
+     "chart-local"
+    ],
+    "operationId": "chartSample",
+    "summary": "샘플 표 텍스트",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "schema": {
+       "type": "string"
+      },
+      "required": true,
+      "description": "api/meta samples[].id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "text": {
+           "type": "string"
+          },
+          "label": {
+           "type": "string"
+          }
+         },
+         "required": [
+          "text",
+          "label"
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "없음",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-shared-data": true
+   }
+  },
+  "/t/chart-local/api/parse": {
+   "post": {
+    "tags": [
+     "chart-local"
+    ],
+    "operationId": "chartParse",
+    "summary": "텍스트/파일 → 표(열 이름·단위·타입 추론)",
+    "description": "저장 안 함. 업로드는 JSON 안 base64. 디코드 후 20MB, 본문 약 28MB 넘으면 413 {\"error\":\"요청이 너무 큽니다 (파일 20MB 이하)\"}. POST 경로는 쿼리 없이 정확히 일치해야 함.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ChartParseRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ChartParseResult"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/chart-local/api/suggest": {
+   "post": {
+    "tags": [
+     "chart-local"
+    ],
+    "operationId": "chartSuggest",
+    "summary": "표 → 그래프 후보(최대 12, 점수순) + SVG, 이력 저장",
+    "description": "표 검사: 열·행이 비면 400, 최대 5000행 × 60열. 숫자 열이 없으면 400. id 가 있으면 그 이력 갱신, 없으면 새 이력.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "table": {
+          "$ref": "#/components/schemas/ChartTable"
+         },
+         "id": {
+          "type": "string",
+          "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$",
+          "description": "이력 id YYYYMMDD-HHMMSS-xxxx"
+         },
+         "source": {
+          "type": "string",
+          "description": "출처 메모"
+         }
+        },
+        "required": [
+         "table"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "id": {
+           "type": "string",
+           "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$",
+           "description": "이력 id YYYYMMDD-HHMMSS-xxxx"
+          },
+          "candidates": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/ChartCandidate"
+           }
+          }
+         },
+         "required": [
+          "id",
+          "candidates"
+         ]
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/chart-local/api/render": {
+   "post": {
+    "tags": [
+     "chart-local"
+    ],
+    "operationId": "chartRender",
+    "summary": "설정 하나 → SVG(저장 안 함)",
+    "description": "표 검사: 열·행이 비면 400, 최대 5000행 × 60열. kind 가 없거나 모르면 400 '그래프 종류가 없습니다'.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "table": {
+          "$ref": "#/components/schemas/ChartTable"
+         },
+         "spec": {
+          "$ref": "#/components/schemas/ChartSpec"
+         },
+         "w": {
+          "type": "integer",
+          "default": 720
+         },
+         "h": {
+          "type": "integer",
+          "default": 440
+         }
+        },
+        "required": [
+         "table",
+         "spec"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "svg": {
+           "type": "string"
+          },
+          "note": {
+           "type": "string",
+           "description": "범주형에서 데이터를 묶었을 때만, 아니면 ''"
+          }
+         },
+         "required": [
+          "svg",
+          "note"
+         ]
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/chart-local/api/describe": {
+   "post": {
+    "tags": [
+     "chart-local"
+    ],
+    "operationId": "chartDescribe",
+    "summary": "후보마다 제목·한 줄 설명 (LLM)",
+    "description": "표 검사: 열·행이 비면 400, 최대 5000행 × 60열. 스트리밍 없음. 수 초~수십 초(서버 타임아웃 600초). LLM 실패도 400.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "table": {
+          "$ref": "#/components/schemas/ChartTable"
+         },
+         "candidates": {
+          "type": "array",
+          "items": {
+           "$ref": "#/components/schemas/ChartSpec"
+          }
+         },
+         "model": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "table",
+         "candidates"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "items": {
+           "type": "object",
+           "properties": {},
+           "additionalProperties": {
+            "type": "object",
+            "properties": {
+             "title": {
+              "type": "string",
+              "maxLength": 40
+             },
+             "insight": {
+              "type": "string",
+              "maxLength": 90
+             }
+            }
+           },
+           "description": "후보 id → 성공한 것만"
+          },
+          "dropped": {
+           "type": "integer",
+           "description": "표에 없는 숫자가 있어 버린 문장 수"
+          },
+          "model": {
+           "type": "string"
+          }
+         },
+         "required": [
+          "items",
+          "dropped",
+          "model"
+         ]
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-llm": true,
+    "x-long-running": true
+   }
+  },
+  "/t/chart-local/api/export": {
+   "post": {
+    "tags": [
+     "chart-local"
+    ],
+    "operationId": "chartExport",
+    "summary": "고른 그래프들 → 문서 파일 생성 + 구조 검사",
+    "description": "표 검사: 열·행이 비면 400, 최대 5000행 × 60열. 수 초(HWPX 는 Node 실행으로 더). 이력 exports 에 기록. 파일은 응답 url 로 GET.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "table": {
+          "$ref": "#/components/schemas/ChartTable"
+         },
+         "specs": {
+          "type": "array",
+          "items": {
+           "$ref": "#/components/schemas/ChartSpec"
+          },
+          "minItems": 1,
+          "maxItems": 30
+         },
+         "format": {
+          "type": "string",
+          "enum": [
+           "xlsx",
+           "pptx",
+           "docx",
+           "hwpx"
+          ]
+         },
+         "id": {
+          "type": "string",
+          "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$",
+          "description": "이력 id YYYYMMDD-HHMMSS-xxxx"
+         },
+         "title": {
+          "type": "string",
+          "maxLength": 80
+         },
+         "include_table": {
+          "type": "boolean",
+          "default": true
+         }
+        },
+        "required": [
+         "table",
+         "specs",
+         "format"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ChartExportResult"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-long-running": true
+   }
+  },
+  "/t/chart-local/api/history": {
+   "get": {
+    "tags": [
+     "chart-local"
+    ],
+    "operationId": "chartHistory",
+    "summary": "이력 목록(최신순 최대 200)",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/ChartHistoryItem"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/chart-local/api/history/{id}": {
+   "get": {
+    "tags": [
+     "chart-local"
+    ],
+    "operationId": "chartHistoryGet",
+    "summary": "이력 하나",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$",
+       "description": "이력 id YYYYMMDD-HHMMSS-xxxx"
+      },
+      "required": true
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ChartHistoryDetail"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "없음",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/chart-local/api/history/delete": {
+   "post": {
+    "tags": [
+     "chart-local"
+    ],
+    "operationId": "chartHistoryDelete",
+    "summary": "이력과 내보낸 파일 삭제(되돌릴 수 없음)",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string",
+          "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$",
+          "description": "이력 id YYYYMMDD-HHMMSS-xxxx"
+         }
+        },
+        "required": [
+         "id"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "없는 id 여도 ok",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ok"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "잘못된 이력 id",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/chart-local/api/file/{id}/{name}": {
+   "get": {
+    "tags": [
+     "chart-local"
+    ],
+    "operationId": "chartFile",
+    "summary": "내보낸 문서 받기",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$",
+       "description": "이력 id YYYYMMDD-HHMMSS-xxxx"
+      },
+      "required": true
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "schema": {
+       "type": "string"
+      },
+      "required": true,
+      "description": "파일명(URL 인코딩)"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "파일",
+      "content": {
+       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       },
+       "application/vnd.openxmlformats-officedocument.presentationml.presentation": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       },
+       "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       },
+       "application/hwp+zip": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       }
+      },
+      "headers": {
+       "Content-Disposition": {
+        "schema": {
+         "type": "string"
+        },
+        "description": "attachment; filename*=UTF-8''<파일명>"
+       }
+      }
+     },
+     "404": {
+      "description": "없음",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "securitySchemes": {
+   "cookieAuth": {
+    "type": "apiKey",
+    "in": "cookie",
+    "name": "agsid",
+    "description": "POST /api/login 이 주는 세션 쿠키(HttpOnly, SameSite=Lax). 같은 출처 fetch 면 브라우저가 자동으로 붙임. 서버 안(127.0.0.1)에서 쿠키 없이 부르면 서버 주인(관리자)으로 처리."
+   }
+  },
+  "schemas": {
+   "Error": {
+    "type": "object",
+    "required": [
+     "error"
+    ],
+    "properties": {
+     "error": {
+      "type": "string",
+      "description": "사람이 읽을 수 있는 한국어 설명"
+     }
+    }
+   },
+   "Unauthorized": {
+    "type": "object",
+    "required": [
+     "error",
+     "login"
+    ],
+    "properties": {
+     "error": {
+      "type": "string",
+      "examples": [
+       "로그인이 필요합니다"
+      ]
+     },
+     "login": {
+      "type": "string",
+      "const": "/login"
+     }
+    }
+   },
+   "Ok": {
+    "type": "object",
+    "required": [
+     "ok"
+    ],
+    "properties": {
+     "ok": {
+      "type": "boolean"
+     }
+    }
+   },
+   "ChartColumn": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "description": "빈 값이면 서버가 '열'로"
+     },
+     "unit": {
+      "type": "string",
+      "maxLength": 12
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "num",
+       "date",
+       "cat"
+      ],
+      "description": "그 밖의 값은 cat"
+     }
+    },
+    "required": [
+     "name",
+     "unit",
+     "type"
+    ]
+   },
+   "ChartTable": {
+    "type": "object",
+    "properties": {
+     "title": {
+      "type": "string"
+     },
+     "columns": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/ChartColumn"
+      },
+      "maxItems": 60
+     },
+     "rows": {
+      "type": "array",
+      "items": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      },
+      "maxItems": 5000,
+      "description": "셀은 문자열(숫자 해석은 서버)"
+     }
+    },
+    "required": [
+     "columns",
+     "rows"
+    ]
+   },
+   "ChartKind": {
+    "type": "string",
+    "enum": [
+     "col",
+     "bar",
+     "col_group",
+     "bar_group",
+     "col_stack",
+     "col_stack100",
+     "bar_stack",
+     "line",
+     "area",
+     "area_stack",
+     "scatter",
+     "pie",
+     "doughnut",
+     "hist",
+     "box",
+     "heatmap",
+     "panels",
+     "index",
+     "dual"
+    ],
+    "description": "api/meta kinds 키"
+   },
+   "ChartSpec": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "description": "후보 id c1, c2 …"
+     },
+     "kind": {
+      "$ref": "#/components/schemas/ChartKind"
+     },
+     "name": {
+      "type": "string",
+      "description": "종류 한국어 이름(표시용)"
+     },
+     "x": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "x 축 열 이름, null = 행 순서"
+     },
+     "ys": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "group": {
+      "type": "string",
+      "description": "긴 형식 표를 계열로 펼칠 범주 열"
+     },
+     "y2": {
+      "type": "string",
+      "description": "dual 오른쪽 축 열"
+     },
+     "dual_shape": {
+      "type": "string",
+      "description": "예 bar_line"
+     },
+     "panel_shape": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "subtitle": {
+      "type": "string"
+     },
+     "x_title": {
+      "type": "string"
+     },
+     "y_title": {
+      "type": "string"
+     },
+     "y2_title": {
+      "type": "string"
+     },
+     "legend": {
+      "type": "string",
+      "default": "top"
+     },
+     "labels": {
+      "type": "string",
+      "default": "auto"
+     },
+     "hidden": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "hidden_cats": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "숨길 범주 이름(원그래프·도넛에서 사용)"
+     },
+     "sort": {
+      "type": "string",
+      "enum": [
+       "none",
+       "asc",
+       "desc"
+      ]
+     },
+     "top": {
+      "type": "integer"
+     },
+     "agg": {
+      "type": "string",
+      "enum": [
+       "sum",
+       "mean"
+      ],
+      "default": "sum"
+     },
+     "bins": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "trend": {
+      "type": "boolean"
+     },
+     "zero_base": {
+      "type": "boolean",
+      "default": true
+     },
+     "unit": {
+      "type": "string"
+     },
+     "colors": {
+      "description": "계열 색 — 배열(계열 순서, 빈 칸은 기본색) 또는 {\"<계열 번호>\": \"#rrggbb\"}",
+      "anyOf": [
+       {
+        "type": "array",
+        "items": {
+         "type": [
+          "string",
+          "null"
+         ]
+        }
+       },
+       {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": {
+         "type": "string"
+        }
+       }
+      ]
+     },
+     "why": {
+      "type": "string",
+      "description": "추천 이유(추천 결과에만)"
+     },
+     "score": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "kind"
+    ],
+    "description": "그래프 설정(후보 하나). api/render·api/export 로 보낼 때 svg 는 뺌"
+   },
+   "ChartCandidate": {
+    "allOf": [
+     {
+      "$ref": "#/components/schemas/ChartSpec"
+     },
+     {
+      "type": "object",
+      "properties": {
+       "svg": {
+        "type": "string",
+        "description": "720×440 SVG 문자열"
+       }
+      },
+      "required": [
+       "id",
+       "svg"
+      ]
+     }
+    ]
+   },
+   "ChartMeta": {
+    "type": "object",
+    "properties": {
+     "samples": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "label": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "id",
+        "label"
+       ]
+      }
+     },
+     "kinds": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "kind → 한국어 이름"
+     },
+     "formats": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string",
+         "enum": [
+          "xlsx",
+          "pptx",
+          "docx",
+          "hwpx"
+         ]
+        },
+        "label": {
+         "type": "string"
+        },
+        "ok": {
+         "type": "boolean",
+         "description": "hwpx 는 Node+kordoc 있을 때만 true"
+        }
+       },
+       "required": [
+        "id",
+        "label",
+        "ok"
+       ]
+      }
+     },
+     "model": {
+      "type": "string",
+      "description": "api/describe 기본 모델"
+     },
+     "palette": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "pattern": "^#[0-9a-fA-F]{6}$"
+      }
+     }
+    },
+    "required": [
+     "samples",
+     "kinds",
+     "formats",
+     "model",
+     "palette"
+    ]
+   },
+   "ChartExportEntry": {
+    "type": "object",
+    "properties": {
+     "file": {
+      "type": "string"
+     },
+     "format": {
+      "type": "string"
+     },
+     "ts": {
+      "type": "string"
+     },
+     "n": {
+      "type": "integer"
+     },
+     "ok": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "file",
+     "format",
+     "ts"
+    ]
+   },
+   "ChartHistoryItem": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$",
+      "description": "이력 id YYYYMMDD-HHMMSS-xxxx"
+     },
+     "title": {
+      "type": "string"
+     },
+     "ts": {
+      "type": "string"
+     },
+     "rows": {
+      "type": "integer"
+     },
+     "cols": {
+      "type": "integer"
+     },
+     "source": {
+      "type": "string"
+     },
+     "exports": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/ChartExportEntry"
+      },
+      "description": "마지막 4개"
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "ts",
+     "rows",
+     "cols",
+     "exports"
+    ]
+   },
+   "ChartHistoryDetail": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$",
+      "description": "이력 id YYYYMMDD-HHMMSS-xxxx"
+     },
+     "ts": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "source": {
+      "type": "string"
+     },
+     "table": {
+      "$ref": "#/components/schemas/ChartTable"
+     },
+     "candidates": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/ChartSpec"
+      },
+      "description": "svg 없음"
+     },
+     "exports": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/ChartExportEntry"
+      }
+     },
+     "selected": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/ChartSpec"
+      },
+      "description": "마지막 내보내기 specs(내보낸 적 있을 때만)"
+     }
+    },
+    "required": [
+     "id",
+     "ts",
+     "table",
+     "candidates",
+     "exports"
+    ]
+   },
+   "ChartParseRequest": {
+    "type": "object",
+    "properties": {
+     "text": {
+      "type": "string",
+      "description": "붙여넣은 표"
+     },
+     "file_b64": {
+      "type": "string",
+      "contentEncoding": "base64",
+      "description": "파일 내용(디코드 후 20MB 이하). 있으면 text 무시"
+     },
+     "filename": {
+      "type": "string",
+      "description": ".xlsx/.xlsm → 엑셀, .xls → 오류, 그 밖 → CSV"
+     },
+     "sheet": {
+      "type": "string",
+      "description": "엑셀 시트 이름(없으면 첫 시트)"
+     },
+     "transpose": {
+      "type": "boolean",
+      "description": "생략 시 자동 판단"
+     }
+    },
+    "description": "text 또는 file_b64(+filename)"
+   },
+   "ChartParseResult": {
+    "type": "object",
+    "properties": {
+     "table": {
+      "$ref": "#/components/schemas/ChartTable"
+     },
+     "notes": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "sheets": {
+      "type": [
+       "array",
+       "null"
+      ],
+      "items": {
+       "type": "string"
+      }
+     },
+     "sheet": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "required": [
+     "table",
+     "notes",
+     "sheets",
+     "sheet"
+    ]
+   },
+   "ChartExportResult": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$",
+      "description": "이력 id YYYYMMDD-HHMMSS-xxxx"
+     },
+     "file": {
+      "type": "string"
+     },
+     "url": {
+      "type": "string",
+      "description": "상대 경로 api/file/<id>/<파일명>(URL 인코딩) — /t/chart-local/ 기준"
+     },
+     "size": {
+      "type": "integer"
+     },
+     "report": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "n": {
+         "type": "integer"
+        },
+        "title": {
+         "type": "string"
+        },
+        "format": {
+         "type": "string"
+        },
+        "modes": {
+         "type": "array",
+         "items": {
+          "type": "string",
+          "enum": [
+           "native",
+           "table",
+           "image",
+           "hwp-native"
+          ]
+         }
+        },
+        "label": {
+         "type": "string"
+        },
+        "editable": {
+         "type": "boolean"
+        }
+       },
+       "required": [
+        "n",
+        "modes",
+        "editable"
+       ]
+      }
+     },
+     "verify": {
+      "type": "object",
+      "properties": {
+       "format": {
+        "type": "string"
+       },
+       "ok": {
+        "type": "boolean",
+        "description": "false 여도 파일은 받을 수 있음"
+       },
+       "charts": {
+        "type": "integer"
+       },
+       "tables": {
+        "type": "integer"
+       },
+       "images": {
+        "type": "integer"
+       },
+       "checks": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       "errors": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       }
+      },
+      "required": [
+       "ok"
+      ]
+     }
+    },
+    "required": [
+     "id",
+     "file",
+     "url",
+     "size",
+     "report",
+     "verify"
+    ]
+   }
+  },
+  "responses": {
+   "BadRequest": {
+    "description": "입력이 잘못됨(본문이 JSON 객체가 아님, 필수 값 없음 등)",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "Unauthorized": {
+    "description": "로그인 필요 — /login 으로",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Unauthorized"
+      }
+     }
+    }
+   },
+   "PayloadTooLarge": {
+    "description": "요청 본문이 너무 큼 — 상한은 operation description 참고",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "BadGateway": {
+    "description": "도구가 꺼져 있음(응답 없음) → POST /api/start {\"dir\": \"<도구>\"} 로 켠 뒤 다시 시도",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   }
+  }
+ }
+}

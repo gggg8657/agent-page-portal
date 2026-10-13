@@ -1,0 +1,581 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "KAERI AI Agent Portal API — humanize-kr-local",
+  "version": "2026.10.13",
+  "summary": "Humanize KR — AI가 쓴 한글의 번역투·상투구 제거(로컬 LLM 진단→윤문→게이트). 문서: docs/api/humanize-kr-local.md",
+  "description": "© 2026 gggg8657 · 내부 시험용 · 배포용 아님\n\nKAERI AI 에이전트 포털과 도구들의 HTTP API(도구 수는 summary 참고). 근거: `docs/api/README.md` 와 `docs/api/<도구>.md`(문서와 실제 응답이 다르면 응답이 맞음 — 알려 주면 고침).\n\n## 연결 방법 요약\n- **같은 출처 전제** (`servers: [{url: \"/\"}]`). 포털은 CORS 헤더를 내보내지 않고, 로그인 쿠키 `agsid` 는 HttpOnly·SameSite=Lax 입니다.\n  개발할 때는 개발 서버 프록시(Vite `server.proxy`, Next.js `rewrites`)로 `/api`·`/t`·`/logout` 을 포털로 넘기세요 — 예시는 README \"3. 새 화면을 연결하는 방법\".\n- **로그인**: `POST /api/login` → 쿠키 `agsid` 가 붙음. 이후 `fetch(…, {credentials: \"same-origin\"})`(기본값). JS 에서 쿠키를 읽을 수 없음.\n  로그인 안 된 API 요청은 401 `{\"error\": \"로그인이 필요합니다\", \"login\": \"/login\"}`.\n- **도구 경로**: 도구 문서의 `api/xxx` 는 포털에서 `/t/<도구 dir>/api/xxx`. 포털이 `X-Agent-User` 를 붙여 사용자별로 저장(화면이 보낸 `X-Agent-User` 는 지워짐).\n- **도구가 꺼져 있으면 502** → `POST /api/start {\"dir\": \"<도구>\"}` 뒤 다시 시도.\n- **오류 모양**: 대부분 `{\"error\": \"한국어 설명\"}`. 예외(예: tts-local 의 POST 는 OpenAI 모양 `{\"error\": {\"message\", \"type\"}}`)는 해당 operation 에 그대로 적음.\n- **스트리밍**: `text/event-stream`(SSE) 또는 `application/x-ndjson` 응답은 이벤트 목록을 `x-stream-events` 확장에 둠. **도중 오류도 HTTP 200 으로 오고 스트림 안 `error` 이벤트로만 옴.** 포털은 버퍼링 없이 흘림(최대 1시간).\n- **확장 필드**: `x-permission`(admin 관리자 · dept-head 부서장 · creator 만든 사람 · self 본인), `x-shared-data`(여러 사람이 같이 보는 데이터), `x-gpu`·`x-llm`·`x-long-running`(GPU·LLM 사용, 오래 걸림 — 버튼 연타 막기), `x-stream-events`.\n- **도구 태그 확장**(등록용): `x-tool-id`(dir 에서 -local 뺀 것) · `x-name` · `x-description` · `x-kind`(LLM 을 쓰면 agent, 아니면 tool) · `x-category` · `x-entry`(/t/<dir>/) · `x-health-path`(가벼운 GET, 200) · `x-long-running` · `x-docs-input`(text·chunks·file·none) · `x-external-network`(외부 인터넷 호출 여부) · `x-response-style`(sse·json·file·polling). 판단 근거가 애매한 곳은 `x-<항목>-note`.\n- 스키마 description 에 \"코드 확인 필요\" 라고 적힌 곳은 문서·코드로 모양을 확정하지 못한 부분입니다(`additionalProperties: true`).\n\nREADME: `docs/api/README.md` (OpenAPI 절 — 타입 생성 명령).",
+  "contact": {
+   "name": "gggg8657",
+   "url": "https://github.com/gggg8657"
+  },
+  "license": {
+   "name": "All rights reserved (portal) — 도구별 라이선스는 각 도구 저장소 LICENSE",
+   "identifier": "LicenseRef-AllRightsReserved"
+  },
+  "x-tool-id": "humanize-kr",
+  "x-name": "Humanize KR",
+  "x-description": "AI가 쓴 한글의 번역투·상투구 제거",
+  "x-kind": "agent",
+  "x-category": "문서",
+  "x-entry": "/t/humanize-kr-local/",
+  "x-health-path": "/t/humanize-kr-local/api/runs",
+  "x-long-running": true,
+  "x-docs-input": "text",
+  "x-external-network": false,
+  "x-response-style": "sse"
+ },
+ "servers": [
+  {
+   "url": "/",
+   "description": "포털과 같은 출처(개발 때는 개발 서버 프록시로)"
+  }
+ ],
+ "security": [
+  {
+   "cookieAuth": []
+  }
+ ],
+ "tags": [
+  {
+   "name": "humanize-kr-local",
+   "description": "Humanize KR — AI가 쓴 한글의 번역투·상투구 제거(로컬 LLM 진단→윤문→게이트). 문서: docs/api/humanize-kr-local.md",
+   "x-tool-id": "humanize-kr",
+   "x-name": "Humanize KR",
+   "x-description": "AI가 쓴 한글의 번역투·상투구 제거",
+   "x-kind": "agent",
+   "x-category": "문서",
+   "x-entry": "/t/humanize-kr-local/",
+   "x-health-path": "/t/humanize-kr-local/api/runs",
+   "x-long-running": true,
+   "x-docs-input": "text",
+   "x-external-network": false,
+   "x-response-style": "sse"
+  }
+ ],
+ "paths": {
+  "/t/humanize-kr-local/api/models": {
+   "get": {
+    "tags": [
+     "humanize-kr-local"
+    ],
+    "operationId": "humanizeModels",
+    "summary": "LLM 모델 이름 목록(임베딩 모델도 섞임)",
+    "responses": {
+     "200": {
+      "description": "이름",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "string"
+         }
+        },
+        "example": [
+         "gemma4:31b",
+         "qwen3:8b",
+         "bge-m3:latest"
+        ]
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "description": "Ollama 면 /api/tags 의 name, OpenAI 호환이면 /models 의 id. 임베딩 모델도 섞여 나오므로 화면에서 걸러야 함. 서버 기본 모델은 API 로 주지 않음(model 을 비우면 서버 기본). 경로는 정확히 일치해야 함 — 쿼리를 붙이면 화면 HTML 이 돌아옴."
+   }
+  },
+  "/t/humanize-kr-local/api/runs": {
+   "get": {
+    "tags": [
+     "humanize-kr-local"
+    ],
+    "operationId": "humanizeRuns",
+    "summary": "지난 실행 목록(최근 50)",
+    "responses": {
+     "200": {
+      "description": "목록",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/HumanizeRunSummary"
+         }
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "description": "최근 것부터 최대 50개. result.json 이 있는 실행만(도중 실패한 실행은 빠짐). 사용자별(X-Agent-User), 서버 주인(owner)은 예전 기록 전체. 경로는 정확히 일치해야 함 — 쿼리를 붙이면 화면 HTML 이 돌아옴."
+   }
+  },
+  "/t/humanize-kr-local/api/runs/{run_id}": {
+   "get": {
+    "tags": [
+     "humanize-kr-local"
+    ],
+    "operationId": "humanizeRun",
+    "summary": "지난 실행 하나",
+    "parameters": [
+     {
+      "name": "run_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4}$"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "결과",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HumanizeResult"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "description": "run_id 는 YYYY-MM-DD-xxxx(16진 4자리)만. 형식이 다르면 404 가 아니라 화면 HTML 이 돌아옴. 응답은 api/humanize 의 done 객체와 같은 모양."
+   }
+  },
+  "/t/humanize-kr-local/api/humanize": {
+   "post": {
+    "tags": [
+     "humanize-kr-local"
+    ],
+    "operationId": "humanizeHumanize",
+    "summary": "윤문 실행 (SSE)",
+    "description": "윤문 실행. LLM 1~3콜(light 1 · standard 2 · heavy 3, ABORT 롤백 +1), 수십 초~수 분. 진행률 숫자는 없고 단계 이벤트만.\n\nSSE: 각 이벤트는 `data: <JSON>\\n\\n`(이벤트 이름 없음). JSON 모양 4가지:\n- stage `{\"stage\": \"shim|route|diagnose|rewrite|gate|finalize\", \"msg\": string, \"reset\"?: true}` — reset 이 오면 받은 토큰을 지우고 새로 받기\n- token `{\"token\": string}` — 윤문 콜 출력(진단·finalizer 콜은 토큰 없음)\n- done `{\"done\": HumanizeResult}`\n- error `{\"error\": string}`\n\n도중 오류도 HTTP 200 으로 오고 스트림 안 error 이벤트로만 옴. 빈 입력은 스트림 시작 전 400 {\"error\":\"빈 입력\"}. 본문이 JSON 이 아니면 연결이 끊김(예외 처리 없음). 연결을 끊어도 서버 작업은 계속될 수 있음. 1.5만 자 넘는 글은 나눠 넣기 권장.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/HumanizeHumanizeRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "SSE 스트림(stage·token·done·error)",
+      "content": {
+       "text/event-stream": {
+        "schema": {
+         "type": "string",
+         "description": "data: <JSON>\\n\\n 줄의 연속 — x-stream-events 참고"
+        },
+        "x-stream-events": [
+         {
+          "name": "stage",
+          "schema": {
+           "$ref": "#/components/schemas/HumanizeStageEvent"
+          }
+         },
+         {
+          "name": "token",
+          "schema": {
+           "$ref": "#/components/schemas/HumanizeTokenEvent"
+          }
+         },
+         {
+          "name": "done",
+          "schema": {
+           "$ref": "#/components/schemas/HumanizeDoneEvent"
+          }
+         },
+         {
+          "name": "error",
+          "schema": {
+           "$ref": "#/components/schemas/HumanizeErrorEvent"
+          }
+         }
+        ]
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-llm": true,
+    "x-long-running": true
+   }
+  }
+ },
+ "components": {
+  "securitySchemes": {
+   "cookieAuth": {
+    "type": "apiKey",
+    "in": "cookie",
+    "name": "agsid",
+    "description": "POST /api/login 이 주는 세션 쿠키(HttpOnly, SameSite=Lax). 같은 출처 fetch 면 브라우저가 자동으로 붙임. 서버 안(127.0.0.1)에서 쿠키 없이 부르면 서버 주인(관리자)으로 처리."
+   }
+  },
+  "schemas": {
+   "Error": {
+    "type": "object",
+    "required": [
+     "error"
+    ],
+    "properties": {
+     "error": {
+      "type": "string",
+      "description": "사람이 읽을 수 있는 한국어 설명"
+     }
+    }
+   },
+   "Unauthorized": {
+    "type": "object",
+    "required": [
+     "error",
+     "login"
+    ],
+    "properties": {
+     "error": {
+      "type": "string",
+      "examples": [
+       "로그인이 필요합니다"
+      ]
+     },
+     "login": {
+      "type": "string",
+      "const": "/login"
+     }
+    }
+   },
+   "HumanizeGenre": {
+    "type": "string",
+    "enum": [
+     "essay",
+     "column",
+     "report",
+     "blog",
+     "abstract"
+    ]
+   },
+   "HumanizeRoute": {
+    "type": "string",
+    "enum": [
+     "light",
+     "standard",
+     "heavy"
+    ]
+   },
+   "HumanizeHumanizeRequest": {
+    "type": "object",
+    "required": [
+     "text"
+    ],
+    "properties": {
+     "text": {
+      "type": "string",
+      "description": "윤문할 원문. 앞뒤 공백 제거 후 비면 400"
+     },
+     "genre": {
+      "$ref": "#/components/schemas/HumanizeGenre",
+      "description": "기본 essay. 그 밖의 값은 essay 로 처리"
+     },
+     "model": {
+      "type": "string",
+      "description": "비우면 서버 기본(LLM_MODEL)"
+     },
+     "route": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/HumanizeRoute"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "비우거나 다른 값이면 정량 점수 route_hint 로 자동(없으면 standard)"
+     }
+    }
+   },
+   "HumanizeRunSummary": {
+    "type": "object",
+    "required": [
+     "run_id",
+     "route",
+     "model",
+     "gate",
+     "gate_code",
+     "ts",
+     "head"
+    ],
+    "properties": {
+     "run_id": {
+      "type": "string"
+     },
+     "route": {
+      "type": "string"
+     },
+     "model": {
+      "type": "string"
+     },
+     "gate": {
+      "type": "string"
+     },
+     "gate_code": {
+      "type": "integer"
+     },
+     "ts": {
+      "type": "string"
+     },
+     "head": {
+      "type": "string",
+      "description": "입력 앞 40자"
+     }
+    }
+   },
+   "HumanizeResult": {
+    "type": "object",
+    "required": [
+     "run_id",
+     "route",
+     "model",
+     "calls",
+     "input",
+     "output",
+     "gate_code",
+     "gate",
+     "diff_html",
+     "log"
+    ],
+    "properties": {
+     "run_id": {
+      "type": "string"
+     },
+     "route": {
+      "type": "string"
+     },
+     "model": {
+      "type": "string"
+     },
+     "genre": {
+      "type": "string"
+     },
+     "calls": {
+      "type": "integer",
+      "description": "LLM 호출 횟수"
+     },
+     "input": {
+      "type": "string"
+     },
+     "output": {
+      "type": "string",
+      "description": "최종 윤문 본문(요약 블록 뺀 것)"
+     },
+     "summary": {
+      "type": "string",
+      "description": "HUMANIZE-SUMMARY 블록(없으면 빈 문자열)"
+     },
+     "diagnosis": {
+      "type": "string",
+      "description": "진단 마크다운(light 면 빈 문자열)"
+     },
+     "gate_code": {
+      "type": "integer",
+      "enum": [
+       0,
+       1,
+       2,
+       3
+      ]
+     },
+     "gate": {
+      "type": "string",
+      "description": "0 OK · 1 WARN (30%+) · 2 ABORT (50%+) · 3 ERROR"
+     },
+     "gate_report": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "verify_gates.py --json 결과 그대로 — 코드 확인 필요"
+     },
+     "change_rate": {
+      "type": [
+       "number",
+       "null"
+      ],
+      "description": "변경률 0~1"
+     },
+     "rolled_back": {
+      "type": "boolean"
+     },
+     "finalized": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "null · \"corrected\" · \"abort\"(두 번 ABORT → 원문 반환) · \"HOLD_AND_REPORT: 사유\""
+     },
+     "metrics": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "사전 정량 점수 — 키는 코드 확인 필요"
+     },
+     "diff_html": {
+      "type": "string",
+      "description": "<del>·<ins>·<br>, 본문은 이스케이프됨"
+     },
+     "log": {
+      "type": "string"
+     },
+     "ts": {
+      "type": "string",
+      "description": "끝난 시각 ISO"
+     }
+    }
+   },
+   "HumanizeStageEvent": {
+    "type": "object",
+    "required": [
+     "stage",
+     "msg"
+    ],
+    "properties": {
+     "stage": {
+      "type": "string",
+      "enum": [
+       "shim",
+       "route",
+       "diagnose",
+       "rewrite",
+       "gate",
+       "finalize"
+      ]
+     },
+     "msg": {
+      "type": "string"
+     },
+     "reset": {
+      "type": "boolean"
+     }
+    }
+   },
+   "HumanizeTokenEvent": {
+    "type": "object",
+    "required": [
+     "token"
+    ],
+    "properties": {
+     "token": {
+      "type": "string"
+     }
+    }
+   },
+   "HumanizeDoneEvent": {
+    "type": "object",
+    "required": [
+     "done"
+    ],
+    "properties": {
+     "done": {
+      "$ref": "#/components/schemas/HumanizeResult"
+     }
+    }
+   },
+   "HumanizeErrorEvent": {
+    "type": "object",
+    "required": [
+     "error"
+    ],
+    "properties": {
+     "error": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "responses": {
+   "BadRequest": {
+    "description": "입력이 잘못됨(본문이 JSON 객체가 아님, 필수 값 없음 등)",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "Unauthorized": {
+    "description": "로그인 필요 — /login 으로",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Unauthorized"
+      }
+     }
+    }
+   },
+   "NotFound": {
+    "description": "없는 경로·도구·항목",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "ServerError": {
+    "description": "서버 내부 오류",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "BadGateway": {
+    "description": "도구가 꺼져 있음(응답 없음) → POST /api/start {\"dir\": \"<도구>\"} 로 켠 뒤 다시 시도",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   }
+  }
+ }
+}

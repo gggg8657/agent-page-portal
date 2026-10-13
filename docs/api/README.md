@@ -200,3 +200,31 @@ Web Worker(무거운 계산 분리), WebGPU, WebAssembly, 브라우저 안 AI �
 - 문서와 실제 응답이 다르면 응답이 맞습니다 — 알려 주시면 문서를 고칩니다.
 - 사진·그림·그래프·문서 미리보기의 색은 내용이므로 바꾸지 마세요.
 - 저작자 표기와 "내부 시험용 · 배포용 아님" 표기는 남겨 주세요.
+
+## 8. OpenAPI
+
+위 문서와 도구별 문서를 **OpenAPI 3.1** 로 옮긴 파일이 [`openapi/`](openapi/) 에 있습니다. 경로는 모두 포털 기준(`/api/…`, `/t/<도구>/api/…`), `servers: [{"url": "/"}]` — 같은 출처 전제(3절).
+
+| 파일 | 내용 |
+|---|---|
+| `openapi/openapi.json` | 포털 + 도구 24개 전체(저장소용) |
+| `openapi/openapi.handoff.json` | 외부 전달용 합본 — 개인용 도구(saju-local) 제외 |
+| `openapi/portal.json` | 포털 자체 API(로그인·도구 목록·계정·승인·관리) |
+| `openapi/<도구 dir>.json` | 도구 하나씩(공통 components 포함, 단독으로 쓸 수 있음) |
+
+타입 생성 예:
+
+```bash
+npx openapi-typescript docs/api/openapi/openapi.json -o src/api/schema.d.ts      # 타입만 (openapi-fetch 와 같이)
+npx orval --input docs/api/openapi/openapi.json --output src/api/client.ts        # 클라이언트 함수까지
+npx @redocly/cli lint docs/api/openapi/openapi.json                               # 검사
+```
+
+읽는 법:
+- **보안**: `cookieAuth`(쿠키 `agsid`)가 전역. 로그인 전에 열린 경로(`/api/login`·`/api/signup`·`/api/depts`·`/login`·`/logout`)만 `security: []`.
+- **오류**: 공통 `Error` = `{"error": "…"}`, 공통 응답 `BadRequest`(400)·`Unauthorized`(401, `login` 포함)·`Forbidden`(403)·`NotFound`(404)·`Conflict`(409)·`PayloadTooLarge`(413)·`ServerError`(500)·`BadGateway`(502 = 도구 꺼짐 → `POST /api/start`). 도구 경로에는 401·502 가 모두 붙어 있습니다. 모양이 다른 곳(tts-local POST 의 `{"error": {"message", "type"}}` = `OpenAIError`)은 그대로 적었습니다.
+- **스트리밍**: `text/event-stream`(SSE)·`application/x-ndjson` 응답은 스키마가 문자열이고, 이벤트별 JSON 모양은 미디어 타입의 **`x-stream-events`** 목록(`[{name, schema}]`)과 operation description 에 있습니다. 생성기는 이 확장을 무시하므로, 이벤트 타입은 `components["schemas"]["<도구>…Event"]` 를 직접 가져다 쓰세요. **도중 오류도 HTTP 200 으로 오고 스트림 안 `error` 이벤트로만 옵니다.**
+- **파일**: 업로드는 대부분 JSON 안 base64(`contentEncoding: base64`), 상한을 넘으면 413 — 상한은 각 operation description. 내려받기는 실제 `Content-Type`(`format: binary`) + `Content-Disposition` 헤더.
+- **확장 필드**: `x-permission`(`admin` 관리자 · `dept-head` 부서장 · `creator` 만든 사람 · `self` 본인), `x-shared-data`(여러 사람이 같이 보는 데이터), `x-gpu`·`x-llm`·`x-long-running`(버튼 연타 막기). 도구 태그(와 도구별 파일의 `info`)에는 등록용 `x-tool-id`·`x-name`·`x-kind`(agent/tool)·`x-category`·`x-entry`·`x-health-path`·`x-docs-input`·`x-external-network`·`x-response-style` 이 있습니다.
+- description 에 **"코드 확인 필요"** 라고 적힌 스키마는 문서·코드로 모양을 확정하지 못한 곳(`additionalProperties: true`)입니다. 실제 응답이 다르면 알려 주세요.
+- 화면 HTML(그 밖의 GET → `ui.html`)과 정적 파일은 넣지 않았습니다.

@@ -1,0 +1,890 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "KAERI AI Agent Portal API — sql-local",
+  "version": "2026.10.13",
+  "summary": "SQL (demoDB) — 자연어 → SQL(조회만) → 표·서버 SVG 차트·CSV. 스키마 설명·DB 는 공유. 문서: docs/api/sql-local.md",
+  "description": "© 2026 gggg8657 · 내부 시험용 · 배포용 아님\n\nKAERI AI 에이전트 포털과 도구들의 HTTP API(도구 수는 summary 참고). 근거: `docs/api/README.md` 와 `docs/api/<도구>.md`(문서와 실제 응답이 다르면 응답이 맞음 — 알려 주면 고침).\n\n## 연결 방법 요약\n- **같은 출처 전제** (`servers: [{url: \"/\"}]`). 포털은 CORS 헤더를 내보내지 않고, 로그인 쿠키 `agsid` 는 HttpOnly·SameSite=Lax 입니다.\n  개발할 때는 개발 서버 프록시(Vite `server.proxy`, Next.js `rewrites`)로 `/api`·`/t`·`/logout` 을 포털로 넘기세요 — 예시는 README \"3. 새 화면을 연결하는 방법\".\n- **로그인**: `POST /api/login` → 쿠키 `agsid` 가 붙음. 이후 `fetch(…, {credentials: \"same-origin\"})`(기본값). JS 에서 쿠키를 읽을 수 없음.\n  로그인 안 된 API 요청은 401 `{\"error\": \"로그인이 필요합니다\", \"login\": \"/login\"}`.\n- **도구 경로**: 도구 문서의 `api/xxx` 는 포털에서 `/t/<도구 dir>/api/xxx`. 포털이 `X-Agent-User` 를 붙여 사용자별로 저장(화면이 보낸 `X-Agent-User` 는 지워짐).\n- **도구가 꺼져 있으면 502** → `POST /api/start {\"dir\": \"<도구>\"}` 뒤 다시 시도.\n- **오류 모양**: 대부분 `{\"error\": \"한국어 설명\"}`. 예외(예: tts-local 의 POST 는 OpenAI 모양 `{\"error\": {\"message\", \"type\"}}`)는 해당 operation 에 그대로 적음.\n- **스트리밍**: `text/event-stream`(SSE) 또는 `application/x-ndjson` 응답은 이벤트 목록을 `x-stream-events` 확장에 둠. **도중 오류도 HTTP 200 으로 오고 스트림 안 `error` 이벤트로만 옴.** 포털은 버퍼링 없이 흘림(최대 1시간).\n- **확장 필드**: `x-permission`(admin 관리자 · dept-head 부서장 · creator 만든 사람 · self 본인), `x-shared-data`(여러 사람이 같이 보는 데이터), `x-gpu`·`x-llm`·`x-long-running`(GPU·LLM 사용, 오래 걸림 — 버튼 연타 막기), `x-stream-events`.\n- **도구 태그 확장**(등록용): `x-tool-id`(dir 에서 -local 뺀 것) · `x-name` · `x-description` · `x-kind`(LLM 을 쓰면 agent, 아니면 tool) · `x-category` · `x-entry`(/t/<dir>/) · `x-health-path`(가벼운 GET, 200) · `x-long-running` · `x-docs-input`(text·chunks·file·none) · `x-external-network`(외부 인터넷 호출 여부) · `x-response-style`(sse·json·file·polling). 판단 근거가 애매한 곳은 `x-<항목>-note`.\n- 스키마 description 에 \"코드 확인 필요\" 라고 적힌 곳은 문서·코드로 모양을 확정하지 못한 부분입니다(`additionalProperties: true`).\n\nREADME: `docs/api/README.md` (OpenAPI 절 — 타입 생성 명령).",
+  "contact": {
+   "name": "gggg8657",
+   "url": "https://github.com/gggg8657"
+  },
+  "license": {
+   "name": "All rights reserved (portal) — 도구별 라이선스는 각 도구 저장소 LICENSE",
+   "identifier": "LicenseRef-AllRightsReserved"
+  },
+  "x-tool-id": "sql",
+  "x-name": "SQL (demoDB)",
+  "x-description": "자연어 → SQL → 표·차트",
+  "x-kind": "agent",
+  "x-category": "데이터",
+  "x-entry": "/t/sql-local/",
+  "x-health-path": "/t/sql-local/api/runs",
+  "x-long-running": false,
+  "x-docs-input": "none",
+  "x-external-network": false,
+  "x-response-style": "sse",
+  "x-long-running-note": "LLM 1~2회 수 초~수십 초, 쿼리 최대 10초",
+  "x-response-style-note": "api/rerun 은 json, CSV 는 file"
+ },
+ "servers": [
+  {
+   "url": "/",
+   "description": "포털과 같은 출처(개발 때는 개발 서버 프록시로)"
+  }
+ ],
+ "security": [
+  {
+   "cookieAuth": []
+  }
+ ],
+ "tags": [
+  {
+   "name": "sql-local",
+   "description": "SQL (demoDB) — 자연어 → SQL(조회만) → 표·서버 SVG 차트·CSV. 스키마 설명·DB 는 공유. 문서: docs/api/sql-local.md",
+   "x-tool-id": "sql",
+   "x-name": "SQL (demoDB)",
+   "x-description": "자연어 → SQL → 표·차트",
+   "x-kind": "agent",
+   "x-category": "데이터",
+   "x-entry": "/t/sql-local/",
+   "x-health-path": "/t/sql-local/api/runs",
+   "x-long-running": false,
+   "x-docs-input": "none",
+   "x-external-network": false,
+   "x-response-style": "sse",
+   "x-long-running-note": "LLM 1~2회 수 초~수십 초, 쿼리 최대 10초",
+   "x-response-style-note": "api/rerun 은 json, CSV 는 file"
+  }
+ ],
+ "paths": {
+  "/t/sql-local/api/models": {
+   "get": {
+    "tags": [
+     "sql-local"
+    ],
+    "operationId": "sqlModels",
+    "summary": "LLM 모델 이름",
+    "responses": {
+     "200": {
+      "description": "이름",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "description": "LLM 서버 모델 이름 그대로. 서버 기본 모델은 API 로 주지 않음(model 을 비우면 서버 기본). 경로는 정확히 일치해야 함 — GET 에 쿼리를 붙이면 화면 HTML 이 돌아옴."
+   }
+  },
+  "/t/sql-local/api/schema": {
+   "get": {
+    "tags": [
+     "sql-local"
+    ],
+    "operationId": "sqlSchema",
+    "summary": "테이블·열·FK + 스키마 설명",
+    "responses": {
+     "200": {
+      "description": "스키마",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SqlSchema"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-shared-data": true,
+    "description": "연결된 DB 의 테이블·열·FK + 스키마 설명(모든 사용자 공유). db 는 DB 이름만(접속 문자열·비밀번호 없음). locked = 이 사용자가 고칠 수 없는 테이블(owner 는 항상 빈 배열). DB 파일이 없으면 404, 드라이버 없음 등 500. 경로는 정확히 일치해야 함 — GET 에 쿼리를 붙이면 화면 HTML 이 돌아옴."
+   }
+  },
+  "/t/sql-local/api/notes": {
+   "post": {
+    "tags": [
+     "sql-local"
+    ],
+    "operationId": "sqlNotes",
+    "summary": "스키마 설명 저장(notes 객체 전체)",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SqlNotes"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "저장",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "ok"
+         ],
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-shared-data": true,
+    "x-permission": "creator",
+    "description": "스키마 설명 저장. 본문 = notes 객체 전체. 서버는 저장된 것과 테이블 단위로 비교해 바뀐(추가·수정·삭제) 테이블만 권한 검사 후 통째로 저장 — 남의 테이블 설명은 받은 그대로 다시 보내면 됨. 테이블 설명을 처음 쓴 계정이 주인, 주인 또는 owner 만 고치거나 지움(기록 없는 예전 설명은 owner 만) → 아니면 403 {\"error\": \"'논문' 설명은 만든 사람이나 관리자만 고칠 수 있습니다\"}. 서버는 Content-Type 헤더를 보지 않음. 다음 질문부터 LLM 프롬프트에 주석으로 붙음."
+   }
+  },
+  "/t/sql-local/api/ask": {
+   "post": {
+    "tags": [
+     "sql-local"
+    ],
+    "operationId": "sqlAsk",
+    "summary": "질문 → SQL 생성·실행 (SSE)",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SqlAskRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "SSE 스트림(stage·token·done·error)",
+      "content": {
+       "text/event-stream": {
+        "schema": {
+         "type": "string"
+        },
+        "x-stream-events": [
+         {
+          "name": "stage",
+          "schema": {
+           "$ref": "#/components/schemas/SqlStageEvent"
+          }
+         },
+         {
+          "name": "token",
+          "schema": {
+           "$ref": "#/components/schemas/SqlTokenEvent"
+          }
+         },
+         {
+          "name": "done",
+          "schema": {
+           "$ref": "#/components/schemas/SqlDoneEvent"
+          }
+         },
+         {
+          "name": "error",
+          "schema": {
+           "$ref": "#/components/schemas/SqlErrorEvent"
+          }
+         }
+        ]
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-llm": true,
+    "x-long-running": true,
+    "description": "자연어 질문 → LLM 이 SQL 생성(1~2회, 수 초~수십 초) → 안전 필터(SELECT/WITH 한 문장만, 금지어, LIMIT 500) → 읽기 전용 실행(최대 10초). 결과는 성공·실패 모두 사용자 기록에 저장.\n\nSSE: `data: <JSON>\\n\\n`(이벤트 이름 없음).\n- stage `{\"stage\": \"llm|run|repair\", \"msg\": string}` — repair 는 실패했을 때만\n- token `{\"token\": string}` — LLM 원문 조각(JSON 텍스트)\n- done `{\"done\": SqlRun}` — SQL 실패·답할 수 없는 질문도 done 으로 오며 run.error 에 사유\n- error `{\"error\": string}` — LLM 연결 실패, LLM 이 JSON 을 안 냄 등 파이프라인 자체 실패\n\n도중 오류도 HTTP 200 으로 오고 스트림 안 error 이벤트(또는 done.error)로만 옴. 빈 질문은 스트림 시작 전 400 {\"error\": \"질문이 비어 있음\"}, 깨진 JSON 400."
+   }
+  },
+  "/t/sql-local/api/rerun": {
+   "post": {
+    "tags": [
+     "sql-local"
+    ],
+    "operationId": "sqlRerun",
+    "summary": "고친 SQL 직접 실행(LLM 없음, 새 run_id)",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "sql"
+        ],
+        "properties": {
+         "sql": {
+          "type": "string"
+         },
+         "chart": {
+          "$ref": "#/components/schemas/SqlChart"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "결과",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SqlRun"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "description": "고친 SQL 직접 실행(LLM 없음, 쿼리 최대 10초), 새 run_id 로 저장. 차트 종류·축만 바꿀 때도 이것(쿼리를 다시 실행). 안전 필터 위반·JSON 깨짐 → 400 {\"error\": \"ValueError: SELECT/WITH 로 시작하는 조회만 허용\"} 식, SQL 오류·시간 초과 → 500. 오류 문장의 접속 정보·경로는 *** 로 가려짐. 결과의 model 은 null, question 은 \"(수동 SQL)\"."
+   }
+  },
+  "/t/sql-local/api/runs": {
+   "get": {
+    "tags": [
+     "sql-local"
+    ],
+    "operationId": "sqlRuns",
+    "summary": "내 최근 기록 50",
+    "responses": {
+     "200": {
+      "description": "목록",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/SqlRunSummary"
+         }
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "description": "내 최근 기록(파일명 역순 = 대략 최신 먼저, 최대 50). n = 결과 행 수. 삭제 API 는 없음. 경로는 정확히 일치해야 함 — GET 에 쿼리를 붙이면 화면 HTML 이 돌아옴."
+   }
+  },
+  "/t/sql-local/api/runs/{run_id}": {
+   "get": {
+    "tags": [
+     "sql-local"
+    ],
+    "operationId": "sqlRun",
+    "summary": "기록 하나(표·SVG 포함)",
+    "parameters": [
+     {
+      "name": "run_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[\\w-]+$",
+       "description": "보통 YYYY-MM-DD-xxxx"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "결과",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SqlRun"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "description": "결과(run) JSON. 없으면 404 {\"error\": \"없음\"}."
+   }
+  },
+  "/t/sql-local/api/runs/{run_id}.csv": {
+   "get": {
+    "tags": [
+     "sql-local"
+    ],
+    "operationId": "sqlRunCsv",
+    "summary": "기록 결과 CSV(UTF-8 BOM, attachment)",
+    "parameters": [
+     {
+      "name": "run_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[\\w-]+$",
+       "description": "보통 YYYY-MM-DD-xxxx"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "CSV",
+      "headers": {
+       "Content-Disposition": {
+        "schema": {
+         "type": "string"
+        },
+        "description": "attachment; filename*=UTF-8''<run_id>.csv"
+       }
+      },
+      "content": {
+       "text/csv": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "description": "결과 CSV 내려받기. UTF-8 BOM 포함(엑셀 한글), 첫 줄은 열 이름. 없으면 404."
+   }
+  }
+ },
+ "components": {
+  "securitySchemes": {
+   "cookieAuth": {
+    "type": "apiKey",
+    "in": "cookie",
+    "name": "agsid",
+    "description": "POST /api/login 이 주는 세션 쿠키(HttpOnly, SameSite=Lax). 같은 출처 fetch 면 브라우저가 자동으로 붙임. 서버 안(127.0.0.1)에서 쿠키 없이 부르면 서버 주인(관리자)으로 처리."
+   }
+  },
+  "schemas": {
+   "Error": {
+    "type": "object",
+    "required": [
+     "error"
+    ],
+    "properties": {
+     "error": {
+      "type": "string",
+      "description": "사람이 읽을 수 있는 한국어 설명"
+     }
+    }
+   },
+   "Unauthorized": {
+    "type": "object",
+    "required": [
+     "error",
+     "login"
+    ],
+    "properties": {
+     "error": {
+      "type": "string",
+      "examples": [
+       "로그인이 필요합니다"
+      ]
+     },
+     "login": {
+      "type": "string",
+      "const": "/login"
+     }
+    }
+   },
+   "SqlChartType": {
+    "type": "string",
+    "description": "bar·line·pie 면 차트, 그 밖·없음 = 표만(LLM 이 고른 값이라 다른 문자열이 올 수 있음)",
+    "examples": [
+     "bar",
+     "line",
+     "pie",
+     "table"
+    ]
+   },
+   "SqlChart": {
+    "type": "object",
+    "properties": {
+     "type": {
+      "$ref": "#/components/schemas/SqlChartType"
+     },
+     "x": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "y": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    },
+    "description": "LLM 이 고른 차트 {type, x, y}. 키가 없을 수도 있음"
+   },
+   "SqlCell": {
+    "type": [
+     "string",
+     "number",
+     "boolean",
+     "null"
+    ]
+   },
+   "SqlRun": {
+    "type": "object",
+    "required": [
+     "run_id",
+     "question",
+     "columns",
+     "rows",
+     "ts"
+    ],
+    "properties": {
+     "run_id": {
+      "type": "string"
+     },
+     "question": {
+      "type": "string",
+      "description": "api/rerun 결과는 \"(수동 SQL)\""
+     },
+     "model": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "api/rerun 결과는 null"
+     },
+     "explanation": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "chart": {
+      "$ref": "#/components/schemas/SqlChart"
+     },
+     "sql": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "실제 실행한 SQL(LIMIT 500 덧붙음 가능). 실패 시 LLM 이 쓴 원래 SQL, LLM 이 SQL 을 못 냈으면 null"
+     },
+     "error": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "실패 사유 또는 null — SQL 실행 실패도 HTTP 오류가 아니라 이 필드로 옴"
+     },
+     "repaired": {
+      "type": "boolean",
+      "description": "첫 SQL 이 실패해 1회 재생성했는지"
+     },
+     "columns": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "rows": {
+      "type": "array",
+      "items": {
+       "type": "array",
+       "items": {
+        "$ref": "#/components/schemas/SqlCell"
+       }
+      },
+      "description": "최대 500행. 값은 DB 자료형 그대로(JSON 으로 못 바꾸는 값은 문자열)"
+     },
+     "truncated": {
+      "type": "boolean",
+      "description": "500행에 닿으면 true(정확히 500행이어도)"
+     },
+     "svg": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "서버가 만든 차트 SVG(720×340 viewBox, 최대 40개 점). x·y 열이 없거나 y 가 숫자가 아니면 null"
+     },
+     "ts": {
+      "type": "string"
+     }
+    }
+   },
+   "SqlRunSummary": {
+    "type": "object",
+    "required": [
+     "run_id",
+     "question",
+     "ts",
+     "n"
+    ],
+    "properties": {
+     "run_id": {
+      "type": "string"
+     },
+     "question": {
+      "type": "string"
+     },
+     "ts": {
+      "type": "string"
+     },
+     "error": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "n": {
+      "type": "integer"
+     }
+    }
+   },
+   "SqlHistoryItem": {
+    "type": "object",
+    "required": [
+     "question",
+     "sql"
+    ],
+    "properties": {
+     "question": {
+      "type": "string"
+     },
+     "sql": {
+      "type": "string"
+     },
+     "head": {
+      "type": "string"
+     }
+    }
+   },
+   "SqlAskRequest": {
+    "type": "object",
+    "required": [
+     "question"
+    ],
+    "properties": {
+     "question": {
+      "type": "string"
+     },
+     "model": {
+      "type": "string"
+     },
+     "history": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/SqlHistoryItem"
+      },
+      "description": "서버는 마지막 3개만 씀"
+     }
+    }
+   },
+   "SqlNotes": {
+    "type": "object",
+    "additionalProperties": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "string"
+     }
+    },
+    "description": "{테이블: {\"_\": 테이블 설명, <열>: 열 설명}}"
+   },
+   "SqlTable": {
+    "type": "object",
+    "required": [
+     "name",
+     "cols",
+     "fks"
+    ],
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "cols": {
+      "type": "array",
+      "items": {
+       "type": "array",
+       "prefixItems": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "string"
+        }
+       ],
+       "minItems": 2,
+       "maxItems": 2
+      },
+      "description": "[열 이름, 자료형] 쌍"
+     },
+     "fks": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "\"열 → 테이블.열\"(sqlite 만, 나머지는 빈 배열)"
+     }
+    }
+   },
+   "SqlSchema": {
+    "type": "object",
+    "required": [
+     "db",
+     "demo",
+     "kind",
+     "tables",
+     "notes",
+     "locked"
+    ],
+    "properties": {
+     "db": {
+      "type": "string",
+      "description": "sqlite 는 파일 이름, PostgreSQL/MySQL 은 DB 이름"
+     },
+     "demo": {
+      "type": "boolean",
+      "description": "동봉 가상 샘플 DB 면 true"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "sqlite",
+       "postgresql",
+       "mysql"
+      ]
+     },
+     "tables": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/SqlTable"
+      }
+     },
+     "notes": {
+      "$ref": "#/components/schemas/SqlNotes"
+     },
+     "locked": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "이 사용자가 고칠 수 없는 테이블 이름. 화면은 입력칸을 잠금"
+     }
+    }
+   },
+   "SqlStageEvent": {
+    "type": "object",
+    "required": [
+     "stage",
+     "msg"
+    ],
+    "properties": {
+     "stage": {
+      "type": "string",
+      "enum": [
+       "llm",
+       "run",
+       "repair"
+      ]
+     },
+     "msg": {
+      "type": "string"
+     }
+    }
+   },
+   "SqlTokenEvent": {
+    "type": "object",
+    "required": [
+     "token"
+    ],
+    "properties": {
+     "token": {
+      "type": "string"
+     }
+    }
+   },
+   "SqlDoneEvent": {
+    "type": "object",
+    "required": [
+     "done"
+    ],
+    "properties": {
+     "done": {
+      "$ref": "#/components/schemas/SqlRun"
+     }
+    }
+   },
+   "SqlErrorEvent": {
+    "type": "object",
+    "required": [
+     "error"
+    ],
+    "properties": {
+     "error": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "responses": {
+   "BadRequest": {
+    "description": "입력이 잘못됨(본문이 JSON 객체가 아님, 필수 값 없음 등)",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "Unauthorized": {
+    "description": "로그인 필요 — /login 으로",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Unauthorized"
+      }
+     }
+    }
+   },
+   "Forbidden": {
+    "description": "권한 없음(관리자·부서장·만든 사람 전용)",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "NotFound": {
+    "description": "없는 경로·도구·항목",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "ServerError": {
+    "description": "서버 내부 오류",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "BadGateway": {
+    "description": "도구가 꺼져 있음(응답 없음) → POST /api/start {\"dir\": \"<도구>\"} 로 켠 뒤 다시 시도",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   }
+  }
+ }
+}

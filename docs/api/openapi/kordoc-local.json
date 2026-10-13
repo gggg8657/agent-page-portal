@@ -1,0 +1,1195 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "KAERI AI Agent Portal API — kordoc-local",
+  "version": "2026.10.13",
+  "summary": "kordoc — HWP·HWPX·PDF·DOCX 요약·질문·공문서 초안(HWPX)·윤문(로컬 LLM). 양식(api/forms)은 공유. 문서: docs/api/kordoc-local.md",
+  "description": "© 2026 gggg8657 · 내부 시험용 · 배포용 아님\n\nKAERI AI 에이전트 포털과 도구들의 HTTP API(도구 수는 summary 참고). 근거: `docs/api/README.md` 와 `docs/api/<도구>.md`(문서와 실제 응답이 다르면 응답이 맞음 — 알려 주면 고침).\n\n## 연결 방법 요약\n- **같은 출처 전제** (`servers: [{url: \"/\"}]`). 포털은 CORS 헤더를 내보내지 않고, 로그인 쿠키 `agsid` 는 HttpOnly·SameSite=Lax 입니다.\n  개발할 때는 개발 서버 프록시(Vite `server.proxy`, Next.js `rewrites`)로 `/api`·`/t`·`/logout` 을 포털로 넘기세요 — 예시는 README \"3. 새 화면을 연결하는 방법\".\n- **로그인**: `POST /api/login` → 쿠키 `agsid` 가 붙음. 이후 `fetch(…, {credentials: \"same-origin\"})`(기본값). JS 에서 쿠키를 읽을 수 없음.\n  로그인 안 된 API 요청은 401 `{\"error\": \"로그인이 필요합니다\", \"login\": \"/login\"}`.\n- **도구 경로**: 도구 문서의 `api/xxx` 는 포털에서 `/t/<도구 dir>/api/xxx`. 포털이 `X-Agent-User` 를 붙여 사용자별로 저장(화면이 보낸 `X-Agent-User` 는 지워짐).\n- **도구가 꺼져 있으면 502** → `POST /api/start {\"dir\": \"<도구>\"}` 뒤 다시 시도.\n- **오류 모양**: 대부분 `{\"error\": \"한국어 설명\"}`. 예외(예: tts-local 의 POST 는 OpenAI 모양 `{\"error\": {\"message\", \"type\"}}`)는 해당 operation 에 그대로 적음.\n- **스트리밍**: `text/event-stream`(SSE) 또는 `application/x-ndjson` 응답은 이벤트 목록을 `x-stream-events` 확장에 둠. **도중 오류도 HTTP 200 으로 오고 스트림 안 `error` 이벤트로만 옴.** 포털은 버퍼링 없이 흘림(최대 1시간).\n- **확장 필드**: `x-permission`(admin 관리자 · dept-head 부서장 · creator 만든 사람 · self 본인), `x-shared-data`(여러 사람이 같이 보는 데이터), `x-gpu`·`x-llm`·`x-long-running`(GPU·LLM 사용, 오래 걸림 — 버튼 연타 막기), `x-stream-events`.\n- **도구 태그 확장**(등록용): `x-tool-id`(dir 에서 -local 뺀 것) · `x-name` · `x-description` · `x-kind`(LLM 을 쓰면 agent, 아니면 tool) · `x-category` · `x-entry`(/t/<dir>/) · `x-health-path`(가벼운 GET, 200) · `x-long-running` · `x-docs-input`(text·chunks·file·none) · `x-external-network`(외부 인터넷 호출 여부) · `x-response-style`(sse·json·file·polling). 판단 근거가 애매한 곳은 `x-<항목>-note`.\n- 스키마 description 에 \"코드 확인 필요\" 라고 적힌 곳은 문서·코드로 모양을 확정하지 못한 부분입니다(`additionalProperties: true`).\n\nREADME: `docs/api/README.md` (OpenAPI 절 — 타입 생성 명령).",
+  "contact": {
+   "name": "gggg8657",
+   "url": "https://github.com/gggg8657"
+  },
+  "license": {
+   "name": "All rights reserved (portal) — 도구별 라이선스는 각 도구 저장소 LICENSE",
+   "identifier": "LicenseRef-AllRightsReserved"
+  },
+  "x-tool-id": "kordoc",
+  "x-name": "kordoc",
+  "x-description": "HWP·PDF 요약·질문·공문서 초안 HWPX",
+  "x-kind": "agent",
+  "x-category": "문서",
+  "x-entry": "/t/kordoc-local/",
+  "x-health-path": "/t/kordoc-local/api/forms",
+  "x-long-running": true,
+  "x-docs-input": "file",
+  "x-external-network": false,
+  "x-response-style": "sse",
+  "x-docs-input-note": "주로 파일(file_b64), 글만 윤문하는 api/polish_text 는 text",
+  "x-response-style-note": "결과 파일은 api/runs/<id>/<파일> 다운로드(file), polish_text 는 json"
+ },
+ "servers": [
+  {
+   "url": "/",
+   "description": "포털과 같은 출처(개발 때는 개발 서버 프록시로)"
+  }
+ ],
+ "security": [
+  {
+   "cookieAuth": []
+  }
+ ],
+ "tags": [
+  {
+   "name": "kordoc-local",
+   "description": "kordoc — HWP·HWPX·PDF·DOCX 요약·질문·공문서 초안(HWPX)·윤문(로컬 LLM). 양식(api/forms)은 공유. 문서: docs/api/kordoc-local.md",
+   "x-tool-id": "kordoc",
+   "x-name": "kordoc",
+   "x-description": "HWP·PDF 요약·질문·공문서 초안 HWPX",
+   "x-kind": "agent",
+   "x-category": "문서",
+   "x-entry": "/t/kordoc-local/",
+   "x-health-path": "/t/kordoc-local/api/forms",
+   "x-long-running": true,
+   "x-docs-input": "file",
+   "x-external-network": false,
+   "x-response-style": "sse",
+   "x-docs-input-note": "주로 파일(file_b64), 글만 윤문하는 api/polish_text 는 text",
+   "x-response-style-note": "결과 파일은 api/runs/<id>/<파일> 다운로드(file), polish_text 는 json"
+  }
+ ],
+ "paths": {
+  "/t/kordoc-local/api/models": {
+   "get": {
+    "tags": [
+     "kordoc-local"
+    ],
+    "operationId": "kordocModels",
+    "summary": "LLM 모델 이름",
+    "responses": {
+     "200": {
+      "description": "이름",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "description": "임베딩 모델도 섞여 있음. 서버 기본 모델은 API 로 주지 않음(model 을 비우면 서버 기본). 경로는 정확히 일치해야 함 — 쿼리를 붙이면 화면 HTML 이 돌아옴."
+   }
+  },
+  "/t/kordoc-local/api/runs": {
+   "get": {
+    "tags": [
+     "kordoc-local"
+    ],
+    "operationId": "kordocRuns",
+    "summary": "지난 실행(최근 50)",
+    "responses": {
+     "200": {
+      "description": "목록",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/KordocRunSummary"
+         }
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "description": "최근 것부터 최대 50개. 사용자별(X-Agent-User). 경로는 정확히 일치해야 함 — 쿼리를 붙이면 화면 HTML 이 돌아옴."
+   }
+  },
+  "/t/kordoc-local/api/runs/{run_id}": {
+   "get": {
+    "tags": [
+     "kordoc-local"
+    ],
+    "operationId": "kordocRun",
+    "summary": "지난 실행 결과",
+    "parameters": [
+     {
+      "name": "run_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4}$"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "결과",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/KordocResult"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "description": "응답은 api/run 의 done 객체와 같음. 없으면 404 {\"error\": \"없음\"}."
+   }
+  },
+  "/t/kordoc-local/api/runs/{run_id}/{file}": {
+   "get": {
+    "tags": [
+     "kordoc-local"
+    ],
+    "operationId": "kordocRunFile",
+    "summary": "결과 파일 내려받기(<a href> 로 바로)",
+    "parameters": [
+     {
+      "name": "run_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4}$"
+      }
+     },
+     {
+      "name": "file",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "enum": [
+        "03_result.hwpx",
+        "03_result.hwp",
+        "02_answer.md",
+        "02_polished.md",
+        "01_source.md"
+       ]
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "파일 바이트",
+      "headers": {
+       "Content-Disposition": {
+        "schema": {
+         "type": "string"
+        },
+        "description": "attachment; filename*=UTF-8''<이름>"
+       }
+      },
+      "content": {
+       "application/octet-stream": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "description": "결과 파일 내려받기. <a href> 로 바로 가능 — 결과 JSON 의 hwpx 값을 그대로 붙이면 됨. 03_result.* 파일 이름: <원본이름>_윤문.hwpx · <원본이름>_<프리셋>.hwpx · <프리셋>.hwpx 식, 나머지: <run_id>_<파일>."
+   }
+  },
+  "/t/kordoc-local/api/run": {
+   "post": {
+    "tags": [
+     "kordoc-local"
+    ],
+    "operationId": "kordocRunTask",
+    "summary": "요약·질문·초안·윤문 실행 (SSE)",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/KordocRunRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "SSE 스트림(stage·token·done·error)",
+      "content": {
+       "text/event-stream": {
+        "schema": {
+         "type": "string"
+        },
+        "x-stream-events": [
+         {
+          "name": "stage",
+          "schema": {
+           "$ref": "#/components/schemas/KordocStageEvent"
+          }
+         },
+         {
+          "name": "token",
+          "schema": {
+           "$ref": "#/components/schemas/KordocTokenEvent"
+          }
+         },
+         {
+          "name": "done",
+          "schema": {
+           "$ref": "#/components/schemas/KordocDoneEvent"
+          }
+         },
+         {
+          "name": "error",
+          "schema": {
+           "$ref": "#/components/schemas/KordocErrorEvent"
+          }
+         }
+        ]
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-llm": true,
+    "x-long-running": true,
+    "description": "문서(JSON 안 base64)를 읽어 summary·qa·draft·polish 실행. 요약·질문 LLM 1콜(수십 초~수 분), 초안은 + lint·generate·validate, 윤문은 2,500자 묶음마다 1콜(2개 병렬). 업로드 상한: 파일 하나(문서·양식 각각) 50MB(서버 MAX_UPLOAD_MB), 요청 본문 150MB(그 3배). 넘으면 413 {\"error\": \"요청이 너무 큽니다(파일 하나 최대 50MB)\"} / \"… 크기가 너무 큽니다(최대 50MB)\".\n\nSSE: `data: <JSON>\\n\\n`(이벤트 이름 없음).\n- stage `{\"stage\": \"form|parse|split|llm|lint|generate|patch|fill|build\", \"msg\": string, \"reset\"?: true}` — reset 이면 받은 토큰 비우기. polish 는 토큰 없이 llm 단계(`윤문 3/7 묶음`)로만 진행 표시\n- token `{\"token\": string}` — summary·qa·draft 의 LLM 출력\n- done `{\"done\": KordocResult}`\n- error `{\"error\": \"ValueError: ...\"}`\n\n도중 오류(모르는 task 포함)도 HTTP 200 으로 오고 스트림 안 error 이벤트로만 옴. 스트림 시작 전 오류(400/413 JSON): 문서와 요청 둘 다 없음, file_b64·from_run 동시, 양식이 HWPX 아님, from_run 결과 없음, 깨진 JSON. 이 경우 올린 파일은 서버에 남지 않음."
+   }
+  },
+  "/t/kordoc-local/api/polish_text": {
+   "post": {
+    "tags": [
+     "kordoc-local"
+    ],
+    "operationId": "kordocPolishText",
+    "summary": "글(마크다운)만 윤문, 한 번에(저장 안 함)",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "text"
+        ],
+        "properties": {
+         "text": {
+          "type": "string"
+         },
+         "model": {
+          "type": "string"
+         },
+         "strength": {
+          "$ref": "#/components/schemas/KordocStrength"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "결과",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "output",
+          "changes",
+          "rejected",
+          "units",
+          "strength",
+          "model"
+         ],
+         "properties": {
+          "output": {
+           "type": "string"
+          },
+          "changes": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/KordocChange"
+           }
+          },
+          "rejected": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/KordocRejected"
+           }
+          },
+          "units": {
+           "type": "integer"
+          },
+          "strength": {
+           "type": "string"
+          },
+          "model": {
+           "type": "string"
+          },
+          "log": {
+           "type": "string"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-llm": true,
+    "x-long-running": true,
+    "description": "다른 도구(writer·notebook·meeting)가 부르는 글 윤문. 파일·기록 없음, 스트리밍 없음. 글 길이에 따라 수십 초 이상. 제목(#)·표 구분선·코드·HTML·10자 미만 조각은 건드리지 않음. 빈 글 → 400 {\"error\": \"빈 글\"}. 본문 150MB 넘으면 413."
+   }
+  },
+  "/t/kordoc-local/api/forms": {
+   "get": {
+    "tags": [
+     "kordoc-local"
+    ],
+    "operationId": "kordocForms",
+    "summary": "등록된 HWPX 양식(공유)",
+    "responses": {
+     "200": {
+      "description": "양식",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/KordocForm"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-shared-data": true,
+    "description": "등록된 HWPX 양식 — 모든 사용자 공유. can_edit = 이 사용자가 지우거나 종류를 바꿀 수 있는지(만든 계정 또는 owner). 만든 계정 자체는 내보내지 않음. 경로는 정확히 일치해야 함 — 쿼리를 붙이면 화면 HTML 이 돌아옴."
+   },
+   "post": {
+    "tags": [
+     "kordoc-local"
+    ],
+    "operationId": "kordocFormAdd",
+    "summary": "양식 등록(분석, LLM 없음). 올린 계정이 주인",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "file_name",
+         "file_b64"
+        ],
+        "properties": {
+         "name": {
+          "type": "string",
+          "maxLength": 60
+         },
+         "file_name": {
+          "type": "string"
+         },
+         "file_b64": {
+          "type": "string",
+          "contentEncoding": "base64"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "새 양식",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/KordocForm"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-shared-data": true,
+    "description": "양식 등록(kordoc 분석, LLM 없음). 올린 계정이 주인. file_name 은 .hwpx 로 끝나야 함(아니면 400). 분석 실패하면 올린 파일은 지워짐. 업로드 상한: 파일 하나(문서·양식 각각) 50MB(서버 MAX_UPLOAD_MB), 요청 본문 150MB(그 3배). 넘으면 413 {\"error\": \"요청이 너무 큽니다(파일 하나 최대 50MB)\"} / \"… 크기가 너무 큽니다(최대 50MB)\"."
+   }
+  },
+  "/t/kordoc-local/api/forms/delete": {
+   "post": {
+    "tags": [
+     "kordoc-local"
+    ],
+    "operationId": "kordocFormDelete",
+    "summary": "양식 삭제(만든 사람·owner)",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id"
+        ],
+        "properties": {
+         "id": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "삭제",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "ok"
+         ],
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-permission": "creator",
+    "x-shared-data": true,
+    "description": "양식 삭제 — 만든 계정 또는 owner 만(만든 사람 기록이 없는 예전 양식은 owner 만). 아니면 403 {\"error\": \"이 양식은 만든 사람이나 관리자만 지울 수 있습니다\"}. 잘못된 id·kind → 400."
+   }
+  },
+  "/t/kordoc-local/api/forms/kind": {
+   "post": {
+    "tags": [
+     "kordoc-local"
+    ],
+    "operationId": "kordocFormKind",
+    "summary": "양식 종류 바꾸기(만든 사람·owner)",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id",
+         "kind"
+        ],
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "kind": {
+          "$ref": "#/components/schemas/KordocFormKind"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "바뀐 메타",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/KordocForm"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-permission": "creator",
+    "x-shared-data": true,
+    "description": "양식 종류 바꾸기 — 만든 계정 또는 owner 만(만든 사람 기록이 없는 예전 양식은 owner 만). 아니면 403 {\"error\": \"이 양식은 만든 사람이나 관리자만 지울 수 있습니다\"}. 잘못된 id·kind → 400."
+   }
+  }
+ },
+ "components": {
+  "securitySchemes": {
+   "cookieAuth": {
+    "type": "apiKey",
+    "in": "cookie",
+    "name": "agsid",
+    "description": "POST /api/login 이 주는 세션 쿠키(HttpOnly, SameSite=Lax). 같은 출처 fetch 면 브라우저가 자동으로 붙임. 서버 안(127.0.0.1)에서 쿠키 없이 부르면 서버 주인(관리자)으로 처리."
+   }
+  },
+  "schemas": {
+   "Error": {
+    "type": "object",
+    "required": [
+     "error"
+    ],
+    "properties": {
+     "error": {
+      "type": "string",
+      "description": "사람이 읽을 수 있는 한국어 설명"
+     }
+    }
+   },
+   "Unauthorized": {
+    "type": "object",
+    "required": [
+     "error",
+     "login"
+    ],
+    "properties": {
+     "error": {
+      "type": "string",
+      "examples": [
+       "로그인이 필요합니다"
+      ]
+     },
+     "login": {
+      "type": "string",
+      "const": "/login"
+     }
+    }
+   },
+   "KordocTask": {
+    "type": "string",
+    "enum": [
+     "summary",
+     "qa",
+     "draft",
+     "polish"
+    ]
+   },
+   "KordocStrength": {
+    "type": "string",
+    "enum": [
+     "light",
+     "standard",
+     "strong"
+    ]
+   },
+   "KordocFormKind": {
+    "type": "string",
+    "enum": [
+     "fill",
+     "body"
+    ]
+   },
+   "KordocRunRequest": {
+    "type": "object",
+    "properties": {
+     "task": {
+      "$ref": "#/components/schemas/KordocTask",
+      "description": "기본 summary. 그 밖의 값은 SSE error 로 끝남"
+     },
+     "question": {
+      "type": "string",
+      "description": "요청 문장. 파일·from_run 이 없으면 필수(모두 없으면 400). polish 에선 안 씀"
+     },
+     "file_name": {
+      "type": "string",
+      "description": "올린 문서 이름(확장자로 형식 판단: .hwp .hwpx .hml .pdf .docx .xlsx .xls .png .jpg .jpeg .webp .md .txt)"
+     },
+     "file_b64": {
+      "type": "string",
+      "contentEncoding": "base64",
+      "description": "문서 내용 base64(data: 접두어 없이). 50MB 상한"
+     },
+     "from_run": {
+      "type": "string",
+      "description": "이전 실행 id(윤문하기). file_b64 와 같이 보내면 400"
+     },
+     "model": {
+      "type": "string",
+      "description": "비우면 서버 기본"
+     },
+     "preset": {
+      "type": "string",
+      "description": "보고서·기안문·간이기안문·계획서·통지·회의록·개조식·업무보고·서울방침·보도자료 또는 form:<양식id>. 기본 보고서, 모르는 값도 보고서"
+     },
+     "strength": {
+      "$ref": "#/components/schemas/KordocStrength",
+      "description": "polish 강도, 기본 standard"
+     },
+     "form_name": {
+      "type": "string",
+      "description": "draft 에서 바로 쓸 HWPX 양식 이름(.hwpx 로 끝나야 함). 넣으면 preset 이 이 양식으로 바뀜"
+     },
+     "form_b64": {
+      "type": "string",
+      "contentEncoding": "base64",
+      "description": "양식 base64, 50MB 상한"
+     },
+     "form_save": {
+      "type": "boolean",
+      "description": "true 면 양식을 양식 목록에 남김(아니면 실행 끝나고 지움)"
+     }
+    }
+   },
+   "KordocRunSummary": {
+    "type": "object",
+    "required": [
+     "run_id",
+     "task",
+     "model",
+     "ts",
+     "head"
+    ],
+    "properties": {
+     "run_id": {
+      "type": "string"
+     },
+     "task": {
+      "type": "string"
+     },
+     "model": {
+      "type": "string"
+     },
+     "file": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "hwpx": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "결과 파일 이름(03_result.hwpx|03_result.hwp) 또는 null"
+     },
+     "ts": {
+      "type": "string"
+     },
+     "head": {
+      "type": "string"
+     }
+    }
+   },
+   "KordocChange": {
+    "type": "object",
+    "required": [
+     "n",
+     "before",
+     "after"
+    ],
+    "properties": {
+     "n": {
+      "type": "integer"
+     },
+     "before": {
+      "type": "string"
+     },
+     "after": {
+      "type": "string"
+     },
+     "ratio": {
+      "type": "number"
+     },
+     "applied": {
+      "type": "boolean"
+     }
+    }
+   },
+   "KordocRejected": {
+    "type": "object",
+    "required": [
+     "n",
+     "before",
+     "after",
+     "reason"
+    ],
+    "properties": {
+     "n": {
+      "type": "integer"
+     },
+     "before": {
+      "type": "string"
+     },
+     "after": {
+      "type": "string"
+     },
+     "reason": {
+      "type": "string"
+     }
+    }
+   },
+   "KordocLintSummary": {
+    "type": "object",
+    "properties": {
+     "errors": {
+      "type": "integer"
+     }
+    },
+    "additionalProperties": true
+   },
+   "KordocLint": {
+    "type": "object",
+    "properties": {
+     "summary": {
+      "$ref": "#/components/schemas/KordocLintSummary"
+     },
+     "raw": {
+      "type": "string"
+     }
+    },
+    "additionalProperties": true
+   },
+   "KordocResult": {
+    "type": "object",
+    "required": [
+     "run_id",
+     "task",
+     "model",
+     "output"
+    ],
+    "properties": {
+     "run_id": {
+      "type": "string"
+     },
+     "task": {
+      "$ref": "#/components/schemas/KordocTask"
+     },
+     "model": {
+      "type": "string"
+     },
+     "question": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "file": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "truncated": {
+      "type": "boolean",
+      "description": "문서가 MAX_CHARS=12000자에서 잘렸는지"
+     },
+     "output": {
+      "type": "string",
+      "description": "답/초안 마크다운, polish 는 윤문된 마크다운"
+     },
+     "source": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "파싱한 원문 마크다운"
+     },
+     "hwpx": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "내려받을 결과 파일 이름 → api/runs/<run_id>/<hwpx>"
+     },
+     "valid": {
+      "type": [
+       "boolean",
+       "null"
+      ],
+      "description": "kordoc validate 통과 여부"
+     },
+     "lint": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/KordocLint"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "표기법 검수 JSON(실패 시 {raw}) — 내부 키 코드 확인 필요"
+     },
+     "preset": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "log": {
+      "type": "string"
+     },
+     "ts": {
+      "type": "string"
+     },
+     "fields": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "draft 기안문·간이기안문·양식: 채운 칸 값"
+     },
+     "form": {
+      "type": "string",
+      "description": "양식 id(양식 draft 일 때)"
+     },
+     "changes": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/KordocChange"
+      }
+     },
+     "rejected": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/KordocRejected"
+      }
+     },
+     "units": {
+      "type": "integer"
+     },
+     "strength": {
+      "type": "string"
+     },
+     "mode": {
+      "type": "string",
+      "enum": [
+       "patch",
+       "generate"
+      ],
+      "description": "polish: patch=HWP/HWPX 원본 서식 유지, generate=새 HWPX"
+     },
+     "applied": {
+      "type": [
+       "integer",
+       "null"
+      ],
+      "description": "patch 일 때 실제 반영 개수"
+     }
+    }
+   },
+   "KordocForm": {
+    "type": "object",
+    "required": [
+     "id",
+     "name",
+     "kind",
+     "roles",
+     "front",
+     "fields",
+     "boxes"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "kind": {
+      "$ref": "#/components/schemas/KordocFormKind",
+      "description": "fill 칸 채우기형 / body 본문 작성형(□○- 단계 기호 3개 이상)"
+     },
+     "roles": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "integer"
+      }
+     },
+     "front": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "i": {
+         "type": "integer"
+        },
+        "text": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "fields": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "label": {
+         "type": "string"
+        },
+        "hint": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "boxes": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "blocks": {
+      "type": "integer"
+     },
+     "can_edit": {
+      "type": "boolean",
+      "description": "false 면 삭제 버튼 숨김·종류 칸 잠금"
+     }
+    }
+   },
+   "KordocStageEvent": {
+    "type": "object",
+    "required": [
+     "stage",
+     "msg"
+    ],
+    "properties": {
+     "stage": {
+      "type": "string",
+      "enum": [
+       "form",
+       "parse",
+       "split",
+       "llm",
+       "lint",
+       "generate",
+       "patch",
+       "fill",
+       "build"
+      ]
+     },
+     "msg": {
+      "type": "string"
+     },
+     "reset": {
+      "type": "boolean"
+     }
+    }
+   },
+   "KordocTokenEvent": {
+    "type": "object",
+    "required": [
+     "token"
+    ],
+    "properties": {
+     "token": {
+      "type": "string"
+     }
+    }
+   },
+   "KordocDoneEvent": {
+    "type": "object",
+    "required": [
+     "done"
+    ],
+    "properties": {
+     "done": {
+      "$ref": "#/components/schemas/KordocResult"
+     }
+    }
+   },
+   "KordocErrorEvent": {
+    "type": "object",
+    "required": [
+     "error"
+    ],
+    "properties": {
+     "error": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "responses": {
+   "BadRequest": {
+    "description": "입력이 잘못됨(본문이 JSON 객체가 아님, 필수 값 없음 등)",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "Unauthorized": {
+    "description": "로그인 필요 — /login 으로",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Unauthorized"
+      }
+     }
+    }
+   },
+   "Forbidden": {
+    "description": "권한 없음(관리자·부서장·만든 사람 전용)",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "NotFound": {
+    "description": "없는 경로·도구·항목",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "PayloadTooLarge": {
+    "description": "요청 본문이 너무 큼 — 상한은 operation description 참고",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "ServerError": {
+    "description": "서버 내부 오류",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "BadGateway": {
+    "description": "도구가 꺼져 있음(응답 없음) → POST /api/start {\"dir\": \"<도구>\"} 로 켠 뒤 다시 시도",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   }
+  }
+ }
+}
