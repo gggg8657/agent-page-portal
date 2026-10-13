@@ -2,7 +2,7 @@
    - 바탕(background·border): 밝은 색 → 어두운 표면(--ag-surface 기준), 이미 어두운 색은 그대로
    - 글자(color·fill): 어두운 색 → 밝은 글자(--ag-ink 기준), 이미 밝은 글자(흰 글씨 버튼 등)는 그대로
    - 변수(--x): 값으로 판단 — 진한 색(강조색)은 명도만 가운데로, 나머지는 바탕/글자
-   그림·캔버스·영상·SVG 속성은 건드리지 않는다. 테마를 밝게 바꾸면 원래 값으로 되돌린다. */
+   그림·캔버스·영상·SVG 속성은 건드리지 않는다. 문서 미리보기 '종이'는 도구가 data-ag-paper 표시를 붙이면 건너뛴다(<style data-ag-paper> 규칙 전체, [data-ag-paper] 요소 안 style=""). 테마를 밝게 바꾸면 원래 값으로 되돌린다. */
 (function () {
   if (window.__agDark) return;
   var D = document.documentElement, undo = [], seenSheets = new WeakSet(), inlineDone = new WeakMap(), ACTIVE = false, NATIVE = false;
@@ -92,9 +92,10 @@
       if (r.cssRules) walk(r.cssRules);
     }
   }
-  function sheetOk(sh) {  // 테마 자체 CSS·SVG 안 <style>(Mermaid 등 그림 내용)은 건너뜀
+  var PAPER = "[data-ag-paper]";  // 도구가 붙이는 '흰 종이' 표시 — 그 안은 문서 색 그대로
+  function sheetOk(sh) {  // 테마 자체 CSS·SVG 안 <style>(Mermaid 등 그림 내용)·종이 <style data-ag-paper> 는 건너뜀
     var n = sh.ownerNode;
-    return !(sh.href && /\/theme\//.test(sh.href)) && !(n && n.id && /^ag-th-/.test(n.id)) && !(n && n.closest && n.closest("svg"));
+    return !(sh.href && /\/theme\//.test(sh.href)) && !(n && n.id && /^ag-th-/.test(n.id)) && !(n && n.closest && (n.closest("svg") || n.closest(PAPER)));
   }
   function hasNative(sh) {
     try { return Array.prototype.some.call(sh.cssRules, function (r) { return /\[data-theme=["']?dark/.test(r.selectorText || "") || (r.cssRules && hasNative({ cssRules: r.cssRules })); }); } catch (e) { return false; }
@@ -106,7 +107,7 @@
   }
   function doInline(el) {
     if (!el.style || !el.style.length || inlineDone.get(el) === el.getAttribute("style")) return;
-    if (el.closest && el.closest("svg")) return;
+    if (el.closest && (el.closest("svg") || el.closest(PAPER))) return;
     fixStyle(el.style, ""); inlineDone.set(el, el.getAttribute("style"));
   }
   function run() {

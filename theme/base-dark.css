@@ -13,9 +13,11 @@ html:root[data-ag-theme="classic-dark"]:not([data-ag-native]){
 html[data-ag-theme$="dark"] ::selection{background:color-mix(in srgb,var(--ag-accent) 45%,transparent)}
 html[data-ag-theme$="dark"] :is(input,select,textarea)::placeholder{color:var(--ag-ink-3);opacity:1}
 html[data-ag-theme$="dark"] :is(input[type=checkbox],input[type=radio],input[type=range],progress){accent-color:var(--ag-accent)}
-html[data-ag-theme$="dark"] a:not([class]){color:var(--ag-accent-ink)}
-html[data-ag-theme$="dark"] hr{border-color:var(--ag-line)}
-html[data-ag-theme$="dark"] mark{background:var(--ag-warn-soft);color:var(--ag-ink)}
+html[data-ag-theme$="dark"] a:not([class]):where(:not([data-ag-paper] *)){color:var(--ag-accent-ink)}
+html[data-ag-theme$="dark"] hr:where(:not([data-ag-paper] *)){border-color:var(--ag-line)}
+html[data-ag-theme$="dark"] mark:where(:not([data-ag-paper] *)){background:var(--ag-warn-soft);color:var(--ag-ink)}
+/* 문서 미리보기 '종이'(도구가 [data-ag-paper] 표시) — 흰 종이·문서 색 그대로 */
+html[data-ag-theme$="dark"] [data-ag-paper]{color-scheme:light}
 html[data-ag-theme$="dark"],html[data-ag-theme$="dark"] *{scrollbar-color:var(--ag-scroll) transparent}
 /* 저작권 줄 */
 html[data-ag-theme$="dark"] [data-sig]{color:var(--ag-ink-3)!important}

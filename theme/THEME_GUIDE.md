@@ -67,6 +67,7 @@
 - `color: var(--acc)` 처럼 강조색을 글자로 쓴 곳 → 밝은 강조색
 - `@media (prefers-color-scheme: dark)` 안·`print` 규칙은 안 건드림
 - **그림·캔버스·영상·SVG(속성과 SVG 안 `<style>` — Mermaid 등) 은 절대 안 바꿈**(반전 금지 — 색이 곧 내용)
+- **문서 미리보기 '종이'**(내려받을 문서 모양 그대로 보여 주는 흰 종이)는 도구가 표시를 붙이면 안 바꿈: 종이 틀 요소에 `data-ag-paper`(그 안 `style=""` 건너뜀), 종이용 CSS 는 `<style data-ag-paper>` 로 따로(그 규칙 전체 건너뜀). base-dark 의 `mark`·`a`·`hr` 도 종이 안에선 안 붙고 `color-scheme:light`. 예: weekly-local `.preview`
 - 도구에 자체 어둡게 모드(`[data-theme=dark]` 선택자)가 있으면 dark.js 는 손대지 않고 `html[data-ag-native]` 를 붙이고,
   boot.js 가 `html[data-theme=dark|light]` 를 붙여서 도구 것이 켜집니다(chart-local, battery-local 등). classic-light 일 때는 `data-theme` 를 안 붙임.
 
