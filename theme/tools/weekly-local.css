@@ -1,7 +1,7 @@
 /* weekly-local — 이 도구만의 테마 손질 (THEME_GUIDE.md). CSS 만, html[data-ag-theme...] 로 시작하는 선택자만. 비어 있으면 공통(base-trendy·base-dark·dark.js)만 적용 */
 
 /* 항목·가져오기·점검 상자 — 트렌디 둥글기 (배치 그대로) */
-html[data-ag-theme^="trendy"] :is(.it,.rp,.dept,.impf,.pbar,.mtop){border-radius:var(--ag-r-md)}
+html[data-ag-theme^="trendy"] :is(.it,.rp,.dept,.impf,.pbar,.mtop,.mdis){border-radius:var(--ag-r-md)}
 html[data-ag-theme^="trendy"] .it{border-color:var(--ag-line);box-shadow:var(--ag-shadow-1)}
 html[data-ag-theme^="trendy"] .it.over{border-color:var(--ag-accent);box-shadow:0 0 0 3px var(--ag-ring)}
 html[data-ag-theme^="trendy"] .checks div.c{border-radius:var(--ag-r-sm)}
@@ -52,6 +52,8 @@ html[data-ag-theme^="v2"] .tag:not(.ok,.bad,.warn){background:var(--ag-surface-2
 html[data-ag-theme^="v2"] .checks div.c:not(.warn,.bad,.ask){background:var(--ag-surface-2)}
 html[data-ag-theme^="v2"] .checks div.c.ask{background:var(--ag-surface)}
 html[data-ag-theme^="v2"] .mtop{border-radius:var(--ag-r-md)}
+html[data-ag-theme^="v2"] .mdis{border-radius:var(--ag-r-md);border-color:var(--ag-line);background:var(--ag-surface-2)}
+html[data-ag-theme^="v2"] .mdis .mdr{border-top-color:var(--ag-line)}
 html[data-ag-theme^="v2"] .est{border-radius:var(--ag-r-xs);background:var(--ag-surface-3)}
 html[data-ag-theme^="v2"] :is(.impt td,.impt th,table.gl td,table.gl th){border-bottom-color:var(--ag-line)}
 html[data-ag-theme^="v2"] .chi{border-bottom-color:var(--ag-line)}
