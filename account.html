@@ -115,16 +115,16 @@ async function viewAdmin() {
     <div class="box wide"><h3>계정 <small>${j.users.length}개 · 관리자: ${j.owners.map(E).join(', ')} (AGENT_OWNERS)</small></h3><div class="tbl"><table>
       <tr><th>아이디</th><th>이름</th><th>부서</th><th>역할</th><th>가입</th><th>마지막 접속</th><th></th></tr>` + j.users.map(u => `<tr>
       <td>${E(u.id)}</td><td>${E(u.name)}</td><td>${E(u.dept) || '<span style="color:var(--faint)">-</span>'}</td><td>${tag(u.role)}${u.disabled ? ' ' + tag('정지', 'off') : ''}</td><td>${T(u.ts)}</td><td>${T(u.seen)}</td>
-      <td><div class="row">${u.dept && !u.heads.includes(u.dept) ? `<button class="btn ghost sm" onclick="head('grant','${E(u.dept)}','${E(u.id)}')">부서장 지정</button>` : ''}
+      <td><div class="row">${u.dept && !u.heads.includes(u.dept) ? `<button class="btn ghost sm" onclick="setHead('grant','${E(u.dept)}','${E(u.id)}')">부서장 지정</button>` : ''}
         <button class="btn ghost sm" onclick="resetPin('${E(u.id)}')">PIN 초기화</button>${u.role === '관리자' ? '' : `<button class="btn red sm" onclick="disable('${E(u.id)}',${!u.disabled})">${u.disabled ? '정지 해제' : '정지'}</button>`}</div></td></tr>`).join('') + `</table></div><p class="msg" id="userMsg"></p></div>
     <div class="box"><h3>부서 <small>가입·변경 목록</small></h3><div class="tbl"><table><tr><th>부서</th><th>인원</th><th>부서장</th><th></th></tr>` + j.depts.map(d => `<tr>
-      <td>${E(d.name)} ${d.hidden ? tag('숨김', 'off') : ''}</td><td>${d.members}</td><td style="white-space:nowrap">${d.heads.map(h => `${E(h)} <button class="btn ghost sm" title="부서장 회수" onclick="head('revoke','${E(d.name)}','${E(h)}')">×</button>`).join(' ') || '-'}</td>
+      <td>${E(d.name)} ${d.hidden ? tag('숨김', 'off') : ''}</td><td>${d.members}</td><td style="white-space:nowrap">${d.heads.map(h => `${E(h)} <button class="btn ghost sm" title="부서장 회수" onclick="setHead('revoke','${E(d.name)}','${E(h)}')">×</button>`).join(' ') || '-'}</td>
       <td><div class="row"><button class="btn ghost sm" onclick="renameDept('${E(d.name)}')">이름 바꾸기</button><button class="btn ghost sm" onclick="dept('${d.hidden ? 'show' : 'hide'}','${E(d.name)}')">${d.hidden ? '보이기' : '숨기기'}</button></div></td></tr>`).join('') + `</table></div>
       <form onsubmit="return addDept(event)" style="margin-top:10px"><div class="row"><input name="name" placeholder="새 부서 이름" maxlength="40" required><button class="btn">추가</button></div><p class="msg"></p></form></div>
     <div class="box wide"><h3>감사 기록 <small>최근 60개</small></h3><div class="tbl" style="max-height:420px;overflow:auto"><table><tr><th>시각</th><th>누가</th><th>무엇</th><th>대상</th><th>내용</th></tr>` +
       (j.audit.map(a => `<tr><td>${T(a.ts)}</td><td>${E(a.actor)}</td><td>${E(a.action)}</td><td>${E(a.target)}</td><td>${E(a.detail)}</td></tr>`).join('') || '<tr><td colspan=5 class="empty">없음</td></tr>') + '</table></div></div>';
 }
-async function head(op, d, uid) { if (op === 'revoke' && !confirm(`${uid} 의 ${d} 부서장 권한을 회수할까요?`)) return; const j = await api('/api/admin/head', { op, dept: d, uid }); if (j.error) alert(j.error); render(); }
+async function setHead(op, d, uid) { if (op === 'revoke' && !confirm(`${uid} 의 ${d} 부서장 권한을 회수할까요?`)) return; const j = await api('/api/admin/head', { op, dept: d, uid }); if (j.error) alert(j.error); render(); }
 async function resetPin(uid) { if (!confirm(`${uid} 의 PIN 을 무작위 6자리로 초기화할까요? (그 계정의 로그인은 모두 풀립니다)`)) return;
   const j = await api('/api/admin/reset', { uid }); const m = document.getElementById('userMsg');
   if (msg(m, j, '')) m.innerHTML = `${E(uid)} 새 PIN: <span class="pin">${E(j.pin)}</span> — 지금 한 번만 보입니다. 본인에게 전하고 계정 설정에서 바꾸게 하세요.`; }
