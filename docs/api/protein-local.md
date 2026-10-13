@@ -48,12 +48,12 @@
  "max_res": 1500, "max_chains": 10, "max_samples": 5, "timeout": 3600,
  "examples": [{"name": "Trp-cage (20aa)", "note": "...", "fasta": ">TrpCage_TC5b\nNLYIQWLKDGGPSSGRPPPS"}],
  "gpus": [{"index": "0", "name": "NVIDIA H100 NVL", "used": 1267, "free": 94064, "total": 95830}],
- "model": "<LLM 모델>", "llm": "<LLM 주소>", "queue": 0, "running": []}
+ "model": "<LLM 모델>", "queue": 0, "running_n": 0, "running": []}
 ```
 - `engines`: 실제로 돌릴 수 있는 엔진만(가중치가 있어야 나옴). `affinity` 가 true 인 엔진에서만 친화도 가능.
 - `mpnn`: ProteinMPNN(서열 설계) 사용 가능 여부.
 - `max_res`: 토큰 한도(잔기 수 + 리간드 무거운 원자 수). `timeout`: 작업 하나 최대 초.
-- `queue`: 전체 대기 작업 수(모든 사용자 공통 GPU 줄). `running`: 실행 중 작업 id 목록.
+- `queue`: 전체 대기 작업 수(모든 사용자 공통 GPU 줄). `running_n`: 지금 실행 중인 작업 수(모든 사용자). `running`: 그중 **내** 작업 id 목록 — 다른 사용자의 작업 id 는 주지 않음. LLM 서버 주소는 주지 않음(모델 이름 `model` 만).
 - 화면은 15초마다 다시 불러 GPU 줄을 갱신함.
 
 ### GET api/models
@@ -190,10 +190,10 @@
 - 메모: GPU 1장에 작업 1개씩, **모든 사용자가 한 줄**로 대기. 작은 단백질 30초 안팎, 수백 잔기 1–3분, 친화도는 리간드당 30초 안팎, 최대 `timeout`(기본 3600초). 서버 재시작 시 실행 중 작업은 `error`, 대기 작업은 다시 줄 섬.
 
 ### POST api/job/&lt;id&gt;/cancel
-- 본문 `{}`. 대기 중이면 즉시 `canceled`, 실행 중이면 프로세스 종료 후 `canceled`. 응답: 작업 객체(실행 중 취소면 반영 전 상태일 수 있으니 다시 폴링).
+- 본문 `{}`. 대기 중이면 즉시 `canceled`, 실행 중이면 프로세스 종료 후 `canceled`. 응답: 작업 객체(실행 중 취소면 반영 전 상태일 수 있으니 다시 폴링). 내 작업이 아니거나 없는 id → 404.
 
 ### POST api/job/&lt;id&gt;/delete
-- 본문 `{}`. 응답 `{"ok": true}`. 실행 중이면 400 `{"error":"실행 중인 작업은 먼저 취소하세요"}`.
+- 본문 `{}`. 응답 `{"ok": true}`. 실행 중이면 400 `{"error":"실행 중인 작업은 먼저 취소하세요"}`. 내 작업이 아니거나 없는 id → 404.
 
 ### POST api/job/&lt;id&gt;/explain
 - 요청: `{"k": 0, "model": "<선택: LLM 모델 이름>"}` (`k` = 해설할 샘플, fold 만 의미 있음)
@@ -204,7 +204,7 @@
 - 설계 작업의 서열을 구조 예측(fold) 작업으로 다시 등록해 원구조와 RMSD 비교.
 - 요청: `{"designs": [3, 5], "native": true, "mode": "standard"}` (`designs` 최대 20개, `native:true` 면 원서열(번호 0)도 추가)
 - 응답: 새로 만든 fold 작업 객체 배열. 진행은 `api/job/<설계id>/validations` 로 확인.
-- 오류: 고른 것이 없으면 400.
+- 오류: 고른 것이 없으면 400. 고른 서열 중 하나라도 검사에 걸리면 아무것도 등록하지 않고 400(`설계 N: …`). 등록 도중 실패하면 이미 넣은 작업을 대기열·폴더에서 지운 뒤 오류를 돌려줌(반쯤 등록된 작업이 남지 않음).
 
 ## 흐름 예
 
@@ -251,6 +251,6 @@ const vals = await api(`api/job/${d.id}/validations`);            // rmsd 확인
 - 작업 링크: 화면은 주소 끝 `#<작업id>` 로 작업을 엶. 이 도구 자체에는 공유 기능이 없음(작업은 사용자별 폴더라 다른 계정은 404).
 - 입력 폼 내용은 화면이 브라우저 `localStorage`(`protein-form`)에 저장 — 서버에 저장되지 않음.
 - 설계 탭에서 "예측 결과에서 고르기"는 화면이 `api/jobs` 를 걸러(완료된 fold) 목록을 만들고, `api/job/<id>` 의 `chains` 로 사슬을 보여 줌.
-- **사용자별 데이터**: 포털이 넣는 `X-Agent-User` 헤더로 작업 폴더가 나뉨. 남의 작업 id 는 404. 서버 주인(owner)은 예전 공용 폴더를 봄. GPU 큐와 `api/meta` 의 `queue`·`running` 은 모든 사용자 공통.
+- **사용자별 데이터**: 포털이 넣는 `X-Agent-User` 헤더로 작업 폴더가 나뉨. 남의 작업 id 는 404. 서버 주인(owner)은 예전 공용 폴더를 봄. GPU 큐는 모든 사용자 공통이고 `api/meta` 는 전체 개수(`queue`·`running_n`)와 내 실행 중 작업(`running`)만 줌. 작업 로그·오류 문구 속 서버 폴더 경로는 지우고 파일 이름만 남김.
 - 권한 구분(owner 만 되는 API)은 없음.
 - 모든 POST 본문은 JSON 이며 크기 제한은 서버에 따로 없음(설계 구조만 8MB 검사).

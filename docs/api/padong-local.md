@@ -15,6 +15,7 @@ KAERI 캐릭터 '파동이' 3D·2D 리그. 말(자연어)을 로컬 LLM 이 **�
 | GET | `api/gpu` | 서버 GPU 사용률·온도 | 30초 캐시 | - |
 | GET | `api/poll?since=<id>` | 바깥에서 넣은 명령 가져오기 | - | 예 (사용자별 큐) |
 | GET | `static/<파일>` | 화면용 JS(three.js·플러그인·펫 스크립트) | - | - |
+| GET | `ref/<파일>` | 화면 '원본 자료' 창의 그림(정해진 31개 이름만, 그 밖은 404) | - | - |
 | POST | `api/command` | 자연어 → steps | LLM, 약 5~15초 | - |
 | POST | `api/pet` | 포털 펫의 대답·혼잣말 → steps (+도구 추천) | LLM | - (상태는 클라이언트가 보냄) |
 | POST | `api/push` | 명령을 큐에 넣기(열린 화면이 실행) | `text` 면 LLM | 예 (사용자별 큐) |
@@ -23,7 +24,7 @@ KAERI 캐릭터 '파동이' 3D·2D 리그. 말(자연어)을 로컬 LLM 이 **�
 ## 공통
 - 응답은 모두 `application/json; ensure_ascii=False`(한글 그대로), `Cache-Control: no-store`. 단 `static/` 의 three.js 계열 파일은 `max-age=86400`.
 - 요청 본문은 JSON(`Content-Type: application/json`). 본문이 비면 `{}` 로 봅니다.
-- 오류: 없는 경로 `404 {"error":"not found"}`. POST 처리 중 예외(LLM 꺼짐, TTS 꺼짐, JSON 형식 오류 포함)는 모두 `502 {"error":"<예외이름>: <메시지>"}`.
+- 오류: 없는 경로 `404 {"error":"not found"}`. POST 본문이 JSON 이 아니거나 객체가 아니면 `400 {"error":"잘못된 요청 (…)"}`, 필드 형식이 틀리면(`text`·`voice` 가 문자열 아님, `history` 가 객체 배열 아님, `speed`·`context.hour`·`context.aff` 가 숫자 아님 등) `400 {"error":"잘못된 요청: <사유>"}`. LLM·TTS 쪽 실패만 `502 {"error":"<예외이름>: <메시지>"}`.
 - 사용자 구분: 포털이 붙여 주는 `X-Agent-User` 헤더(없으면 `owner`). `api/push`·`api/poll` 큐만 이 값으로 나뉩니다. 큐는 메모리에만 있어 서버를 다시 켜면 비워집니다.
 - 인증·권한 구분 없음(포털 로그인을 통과했으면 누구나 모든 엔드포인트 사용).
 
@@ -53,9 +54,9 @@ KAERI 캐릭터 '파동이' 3D·2D 리그. 말(자연어)을 로컬 LLM 이 **�
 {"actions": {"idle": "가만히 숨쉬기", "wave": "손 흔들기(Hello!)", "...": "..."},
  "plays": {"curtain": "커튼 뒤로 사라졌다 짠 하고 다시 등장", "nap": "...", "hwacance": "...", "exit_return": "...", "minimi": "..."},
  "exprs": ["smile", "basic", "happy", "wink", "excited", "closed", "sad", "surprised", "angry", "curious", "love", "sleepy", "shock", "focus", "workout"],
- "model": "<LLM 모델 이름>", "tts": "<TTS 서버 주소>"}
+ "model": "<LLM 모델 이름>"}
 ```
-- 메모: `actions`/`plays` 는 **기본 목록만**입니다. 플러그인이 더하는 동작·장면은 여기 없지만 서버의 steps 검사·LLM 프롬프트에는 들어갑니다(아래 `api/plugins`). 포털 펫은 이 주소가 응답하는지로 "도구가 켜져 있는지"를 판단합니다.
+- 메모: `actions`/`plays` 는 **기본 목록만**입니다. 플러그인이 더하는 동작·장면은 여기 없지만 서버의 steps 검사·LLM 프롬프트에는 들어갑니다(아래 `api/plugins`). 포털 펫은 이 주소가 응답하는지로 "도구가 켜져 있는지"를 판단합니다. 내부 TTS 서버 주소는 주지 않습니다.
 
 ### GET api/versions
 - 응답: `{"versions": ["0.0", "0.1", "0.2", ...]}` — 각 값 `v` 에 대해 `GET v<v>` 로 그 버전 화면이 열립니다(없으면 404).
@@ -168,4 +169,5 @@ setInterval(async () => {
 - 기념일 옷 고르기, 낱말 규칙(LLM 없을 때), 립싱크(TTS 음량으로 입 움직임), 브라우저 음성(Web Speech) 대체, .glb·PNG·표정 시트 내보내기는 전부 브라우저에서 계산합니다(API 없음).
 - 브라우저 콘솔 API(화면 안): `padong.do('wave',2)`, `padong.say('안녕')`, `padong.expr('wink')`, `padong.command('춤춰')`, `padong.play(id)`, `padong.run(steps)`, `padong.stop()`.
 - **포털 펫**: 포털 페이지가 `static/pet.js` 를 넣고, 그 스크립트가 `?pet=1` 화면을 iframe 으로 띄워 `postMessage({padong:1, cmd:...})`(`run`·`play`·`stop`·`expr`·`look`·`mode`·`sound`·`outfit` 등)로 조종합니다. iframe 은 `{padong:1, ev:...}`(`ready`·`move`·`bubble`·`done`·`click`·`dblclick`·`drag`·`menu`·`script`·`stage` 등)로 알립니다. 같은 출처(origin)끼리만 받습니다. 펫은 `walk`/`run`/`fly` 를 `jump` 로 바꿔 실행하고(이동은 바깥 페이지가 담당), 날씨·GPU 는 `api/weather`·`api/gpu` 로, 긴 작업 완료 알림은 포털의 `/api/events` 로 받습니다. 펫 상태(켜짐·이름·위치·친밀도·대화)는 브라우저 localStorage 에만 있습니다.
+- `ref/<파일>`: 화면 '원본 자료' 창이 부르는 `cha_padong_{intro,full01,turn,pose01,full02,pose02,pic01,pic02,pic03,credit}.jpg`·`cha_padong_turn.gif`·`wall_01.jpg`~`wall_20.jpg` 만 내줍니다(서버의 허용 목록 `REF_FILES`). 폴더에 다른 파일을 넣어도 나가지 않고, `../` 같은 경로는 404.
 - 공유 데이터: `api/weather`·`api/gpu`·포털 도구 목록 캐시는 모든 사용자가 같이 씁니다. 사용자별로 나뉘는 건 push/poll 큐뿐입니다.

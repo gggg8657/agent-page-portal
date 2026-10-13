@@ -26,7 +26,7 @@
 
 ### 오류 규칙 (코드 기준)
 - GET: 없는 이력·잘못된 id·없는 핵종·보고서 불가 → **404** `{"error": "없음"}` (구체 사유는 안 줌). 그 밖의 예외 → 500 `{"error": "<예외이름>: <메시지>"}`.
-- POST(`calc`·`other`·`history/delete`): 입력 오류(`ValueError`) → **400** `{"error": "<한국어 사유>"}`, 그 밖의 예외 → 500. 본문이 JSON 이 아니면 400 `{"error": "잘못된 요청"}`. 없는 POST 경로 → 404 `{"error": "없는 경로"}`.
+- POST(`calc`·`other`·`history/delete`): 입력 오류(`ValueError`) → **400** `{"error": "<한국어 사유>"}`, 그 밖의 예외 → 500. 본문이 JSON 객체가 아니면 400 `{"error": "잘못된 요청"}`. 없는 POST 경로 → 404 `{"error": "없는 경로"}`.
 - `api/ask` 는 항상 200 으로 SSE 를 열고, 오류는 스트림 안 `{"error": ...}` 이벤트로 옵니다.
 
 ## 공통 값 형식
@@ -166,6 +166,8 @@
 | `amount` | `{value, unit}` | 예 | unit: `n/s`, `ug`/`mg`/`g`(Cf-252 만), 방사능 단위(`Bq`·`Ci` 등) |
 | `distance` | `{value, unit}` | 아니오 | 기본 100 cm |
 | `time` | `{value, unit}` | 아니오 | 누적선량 |
+
+- 오류: `amount` 가 없거나 `{value, unit}` 객체가 아니거나 값이 양수가 아니면 → 400 `중성자 선원 양(amount: {value, unit})을 양수로 넣어 주세요`. 모르는 선원·단위 → 400.
 
 ```json
 {"id": "...", "mode": "neutron", "source": "Cf-252", "r_cm": 100.0,

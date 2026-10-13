@@ -10,11 +10,11 @@
 
 1. **발급**: `POST api/register` 가 성공하면 응답에 `id`(16진 8자, `secrets.token_hex(4)`)와 `token`(16진 32자, `secrets.token_hex(16)`)을 돌려준다. 서버는 이 token 을 사람 기록 안에 평문으로 저장한다. **token 을 다시 받는 API 는 없다** — 잃어버리면 그 기록에 다시 접근할 방법이 없다(새로 등록해야 함).
 2. **보관(지금 화면)**: `localStorage.tbm` 에 `{id, token, name, dept, alias, ...}` JSON 으로 저장한다. 다른 브라우저로 옮길 때는 `?id=<id>&token=<token>&name=..&dept=..&alias=..` 쿼리로 페이지를 열면 화면이 이를 `localStorage.tbm` 에 저장하고 주소창에서 쿼리를 지운다(`history.replaceState`).
-3. **사용**: 본인 데이터가 필요한 호출은 GET 이면 쿼리 `id`·`token`, POST 이면 JSON 본문 `id`·`token` 으로 매번 보낸다. 서버는 `id` 로 사람을 찾고 저장된 token 과 **문자열이 정확히 같은지** 비교한다(쿠키·세션·헤더 없음).
+3. **사용**: 본인 데이터가 필요한 호출은 헤더 `X-Saju-Id: <id>`·`X-Saju-Token: <token>` 으로 보낸다(POST 는 JSON 본문 `id`·`token` 도 됨, 본문이 헤더보다 먼저). **URL 쿼리의 `id`·`token` 은 받지 않는다**(무시 → 권한 없음). 서버는 `id` 로 사람을 찾고 저장된 token 과 정확히 같은지 비교한다(`compare_digest`, 쿠키·세션 없음).
 4. **불일치**: 사람이 없거나 token 이 다르면 `400 {"error": "권한 없음"}` (POST 는 `400 {"error": "입력 오류: 권한 없음"}`). 화면은 시작할 때 `api/me` 가 실패하면 `localStorage.tbm` 을 지우고 미등록 상태로 돌아간다.
 5. **필요한 곳**: `api/me`, `api/today`, `api/reading`, `api/match`, `api/bungae`(GET/POST), `api/bungae/join`, `api/bungae/leave`, `api/fortune`(GET/POST), `api/prefs`, `api/delete`, `report`.
-   **필요 없는 곳**: `api/meta`, `api/status`, `api/register`, `api/graph`.
-6. **주의**: token 이 URL 쿼리(GET)에 실리므로 서버·프록시 접근 기록, 브라우저 기록, `report` 링크 공유로 새어 나갈 수 있다. 새 화면에서도 token 을 남에게 보이는 곳(공유 링크 등)에 넣지 말 것. 관리자 owner 도 token 없이는 남의 본인 전용 API 를 못 부른다.
+   **필요 없는 곳**: `api/meta`, `api/status`, `api/register`. `api/graph` 는 회사 전체(`dept` 없음)면 필요 없고, 부서 지도(`dept=`)는 필요(아래).
+6. **주의**: token 은 헤더·본문으로만 다니므로 접근 기록·브라우저 기록에 남지 않는다. 새 화면에서도 token 을 주소(쿼리)·공유 링크에 넣지 말 것 — 리포트도 `POST report` 폼으로 연다. 관리자 owner 도 token 없이는 남의 본인 전용 API 를 못 부른다(부서 지도만 owner 예외).
 
 ## 요약 표
 | 메서드 | 경로 | 하는 일 | 오래 걸림/GPU·LLM | 사용자별 데이터 |
@@ -28,10 +28,10 @@
 | GET | `api/today` | 오늘의 운(테마·별점·점심 등) | 첫 호출 시 LLM(최대 90초), 이후 날짜별 캐시 | id+token |
 | GET | `api/reading` | 일하는 스타일 + 명리 해설 | 첫 호출 시 LLM 2회(각 최대 120초), 이후 저장 | id+token |
 | GET | `api/match` | 궁합 상위 10명 | - | id+token |
-| GET | `api/graph` | 팀 맵(노드·엣지·오행 균형) | - | **인증 없음**(공유) |
+| GET | `api/graph` | 팀 맵(노드·엣지·오행 균형) | - | 전체 지도는 인증 없음, 부서 지도는 그 부서 본인 id+token 또는 owner |
 | GET | `api/fortune` | 사주 풀이 리포트 작업 상태 | - | id+token |
 | POST | `api/fortune` | 사주 풀이 리포트 작성 시작 | LLM 15개 섹션, 2~3분(백그라운드) | id+token |
-| GET | `report` | 리포트 HTML(보기/다운로드) | - | id+token |
+| POST | `report` | 리포트 HTML(보기/다운로드, 폼 본문) | - | id+token |
 | GET | `api/bungae` | 나에게 보이는 번개 목록 | - | id+token |
 | POST | `api/bungae` | 번개 만들기 | - | id+token |
 | POST | `api/bungae/join` | 번개 참여 | - | id+token |
@@ -39,8 +39,8 @@
 | GET | (그 밖의 모든 경로) | 화면 `ui.html` | - | - |
 
 ## 공통 오류
-- GET: 입력/권한 오류 `400 {"error": "<메시지>"}`, 그 밖 `500 {"error": "<예외이름>: <메시지>"}`.
-- POST: 입력/권한/필수 키 누락 `400 {"error": "입력 오류: <메시지>"}` (필수 키 누락이면 메시지가 키 이름, 예 `'year'`), 그 밖 `500`, 없는 경로 `404 {"error": "no route"}`.
+- GET: 입력/권한 오류 `400 {"error": "<메시지>"}`, 부서 지도 거절 `403`, 그 밖 `500 {"error": "<예외이름>: <메시지>"}`.
+- POST: 본문이 JSON 객체가 아니면 `400 {"error": "잘못된 요청 (…)"}`. 입력/권한/필수 키 누락 `400 {"error": "입력 오류: <메시지>"}` (필수 키 누락이면 메시지가 키 이름, 예 `'year'`), 그 밖 `500`, 없는 경로 `404 {"error": "no route"}`.
 - 정상 응답은 모두 200. 화면의 `api()` 도우미는 응답에 `error` 가 있으면 예외로 처리한다.
 
 ## 엔드포인트
@@ -87,7 +87,7 @@
   - 생년월일시 원본·성별은 저장하지 않는다(4주 8자·분석 결과·출생 연도만 저장).
 - 오류(400, `입력 오류: ...`): `이름·부서는 필수`, `연도 범위`, `시각 범위`, `MBTI 형식`, `혈액형`, `성별`, 필수 키 누락.
 
-### GET api/me?id=&token=
+### GET api/me
 - 응답: 공개 필드(`id, alias, dept, age_band, day_master, dm_el, elements, ten_gods, strength, mbti, zodiac, blood, dominant, lacking, hobbies, traits, gyeok, yong, power`) + `name` + 명리 상세(`pillars, tens, support_ratio, deukryeong, rooted, gyeok_god, hui, gi, yong_why, johu, gongmang, gongmang_hit, relations, daeun, unseong_day, dm_yin, lmt, hour_known, birth_year` 중 있는 것) + `wants`, `consent_global`.
 - 화면은 시작 시 이 호출로 저장된 token 이 아직 유효한지 확인한다.
 
@@ -97,9 +97,9 @@
 
 ### POST api/delete
 - 요청: `{"id", "token"}`
-- 응답: `{"ok": true}`. 사람 기록, 사주 풀이 캐시, 내가 주최한 번개를 지우고 다른 번개 참여자 목록에서도 뺀다. (`today-<날짜>.json` 의 오늘의 운 캐시 항목은 남는다.)
+- 응답: `{"ok": true}`. 사람 기록, 사주 풀이 캐시(`fortune/<id>.json`)와 진행 기록, 모든 날짜의 오늘의 운 캐시(`today-<날짜>.json`)의 내 항목, 내가 주최한 번개를 지우고 다른 번개 참여자 목록에서도 뺀다.
 
-### GET api/today?id=&token=
+### GET api/today
 - 응답(규칙 계산 + 문장):
 ```json
 {"date": "2026-10-13", "day": "갑자", "day_god": "편재", "theme": "재성", "theme_work": "실행·성과",
@@ -110,11 +110,11 @@
 ```
 - 메모: 하루 중 첫 호출에 LLM 을 부른다(최대 90초). LLM 결과만 `today-<날짜>.json` 에 캐시하고, LLM 실패 시 규칙 문장(`llm: false`)을 주며 캐시하지 않는다(다음 호출에 다시 시도).
 
-### GET api/reading?id=&token=
+### GET api/reading
 - 응답: `{"reading": "<일하는 스타일>\n\n§\n\n<명리 해설>"}` — 화면은 `"\n\n§\n\n"` 로 나눠 두 카드로 보여 준다.
 - 메모: 처음 한 번 LLM 2회(각 최대 120초) 후 사람 기록에 저장. LLM 이 없으면 한 줄 규칙 문장(구분자 없음)을 주고 저장하지 않는다.
 
-### GET api/match?id=&token=&scope=&age_band=&dept=&mbti=&dm_el=&blood=
+### GET api/match?scope=&age_band=&dept=&mbti=&dm_el=&blood=
 - `scope`: `dept`(내 부서, 실명 공개) 또는 그 외/생략(`all`, 전체 공개 동의자만, 별명만). 나머지 필터는 값이 같은 사람만 남김(빈 값은 무시).
 - 응답: 점수 내림차순 최대 10명
 ```json
@@ -124,11 +124,12 @@
 - 오류(400): 전체 범위에서 후보가 3명 미만 → `조건에 맞는 사람이 3명 미만이라 익명 보호를 위해 결과를 보여주지 않습니다`, 후보 0명 → `아직 등록된 팀원이 없습니다`.
 
 ### GET api/graph?dept=
-- 인증 없음.
-- `dept` 있음: 그 부서 전원(동의 무관), 노드에 `name`(실명) 포함. `dept` 없음/빈 값: 전체 공개 동의자만, 실명 없음.
+- `dept` 없음/빈 값: 인증 없음. 전체 공개 동의자(`consent_global`)만, 별명만(실명 없음).
+- `dept` 있음: 그 부서에 등록한 **본인**(헤더 `X-Saju-Id`·`X-Saju-Token` 이 맞고 그 사람의 `dept` 가 요청 `dept` 와 같음)이나 포털 관리자(owner)만. 그 부서 전원(동의 무관), 노드에 `name`(실명) 포함. 그 밖은 `403 {"error": "이 부서 지도는 그 부서에 등록한 본인이나 관리자만 볼 수 있습니다"}`. 토큰이 틀리면 손님으로 봄(전체 지도만 가능).
+- `depts`: 고를 수 있는 부서만 — owner 는 전체, 등록한 본인은 자기 부서 하나, 손님은 `[]`.
 - 응답: `{"nodes": [공개 필드...], "edges": [{"a": id, "b": id, "score": 0~100, "why": [...]}], "balance": {"목": n, "화": n, "토": n, "금": n, "수": n}, "depts": ["부서", ...]}` — 엣지는 모든 쌍(n²/2).
 
-### GET api/fortune?id=&token=
+### GET api/fortune
 - 응답:
 ```json
 {"ready": false, "gender": null, "model": null, "ts": null,
@@ -141,11 +142,11 @@
 - 응답: `GET api/fortune` 과 같은 상태 객체(즉시 반환).
 - 메모: 백그라운드 스레드로 15개 섹션을 LLM 으로 작성(대략 2~3분). 이미 실행 중이거나, 같은 성별 리포트가 있고 `regen` 이 거짓이면 새로 시작하지 않는다. 진행은 `GET api/fortune` 을 폴링(화면은 몇 초 간격). 완료 시 사용자별 캐시 파일에 저장.
 
-### GET report?id=&token=[&download=1]
+### POST report (폼 본문 `id`·`token`[·`download=1`])
 - 응답: `text/html` 리포트 페이지(같은 부서 사람 정보 포함, 풀이 글이 없으면 글 없이 구성). `download=1` 이면 `Content-Disposition: attachment; filename*=UTF-8''사주리포트_<실명>.html`.
-- 화면은 `window.open('report?id=..&token=..')` 로 새 탭에 연다. 오류는 JSON(`400 {"error": "권한 없음"}`).
+- 본문은 `application/x-www-form-urlencoded`(일반 HTML 폼). 화면은 숨은 `<form method=POST action=report target=_blank>` 로 새 탭에 연다(저장은 `download=1`, 같은 창). 헤더 `X-Saju-Id`·`X-Saju-Token` 을 붙인 `GET report` 도 되지만 새 창으로는 헤더를 못 붙이므로 화면은 폼을 쓴다. 오류는 JSON(`400 {"error": "권한 없음"}`).
 
-### GET api/bungae?id=&token=
+### GET api/bungae
 - 응답: 배열. 시작 3시간이 지난 번개는 빠짐. 내가 참여하지 않은 번개는 **취미 태그가 내 취미에 있고, 양방향 성향 조건이 맞고, 정원이 남은 것만** 보인다.
 ```json
 [{"id": "a1b2c3", "host": "<주최자 id>", "title": "..", "place": "..", "hobby": "볼링",
@@ -170,7 +171,9 @@
 공통 도우미(지금 화면과 같음):
 ```js
 const api = async (u, b) => {
-  const r = await fetch('/t/saju-local/' + u, b ? {method: 'POST', body: JSON.stringify(b)} : {});
+  const me = JSON.parse(localStorage.tbm || 'null');
+  const h = me ? {'X-Saju-Id': me.id, 'X-Saju-Token': me.token} : {};   // 토큰은 헤더로 (쿼리 안 됨)
+  const r = await fetch('/t/saju-local/' + u, b ? {method: 'POST', headers: h, body: JSON.stringify(b)} : {headers: h});
   const j = await r.json(); if (j.error) throw new Error(j.error); return j;
 };
 ```
@@ -181,21 +184,26 @@ const r = await api('api/register', {name: '홍길동', dept: '개발팀', year:
                                     hour: 'unknown', mbti: 'INTJ', consent_global: true});
 localStorage.tbm = JSON.stringify({id: r.id, token: r.token, alias: r.alias});
 const me = JSON.parse(localStorage.tbm);
-const t = await api(`api/today?id=${me.id}&token=${me.token}`);   // 첫 호출은 LLM 때문에 수십 초 걸릴 수 있음
+const t = await api('api/today');   // 첫 호출은 LLM 때문에 수십 초 걸릴 수 있음
 ```
 
 2) 사주 풀이 리포트 작성 → 폴링 → 열기
 ```js
 await api('api/fortune', {id: me.id, token: me.token, gender: 'F'});
 let s; do { await new Promise(z => setTimeout(z, 3000));
-  s = await api(`api/fortune?id=${me.id}&token=${me.token}`);   // done/total 로 진행 표시
+  s = await api('api/fortune');   // done/total 로 진행 표시
 } while (s.running);
-if (s.ready) window.open(`/t/saju-local/report?id=${me.id}&token=${me.token}`);
+if (s.ready) {  // 토큰이 주소에 남지 않게 POST 폼으로 새 창
+  const f = Object.assign(document.createElement('form'), {method: 'POST', action: '/t/saju-local/report', target: '_blank'});
+  for (const [k, v] of Object.entries({id: me.id, token: me.token})) f.append(Object.assign(document.createElement('input'), {type: 'hidden', name: k, value: v}));
+  document.body.append(f); f.submit(); f.remove();
+}
 ```
 
 ## 화면만의 것 / 주의
 - 레이더(오각형) 그림, 별점 표시, 번개 시간 "n분 뒤" 표시, 오행 색 등은 화면이 계산한다.
-- `localStorage.tbm` 관리(저장·복구·삭제)와 `?id=&token=` 쿼리 가져오기는 화면 몫이다.
-- 데이터는 포털 사용자와 무관하게 **모두 공유**된다(같은 부서엔 실명·성향, 전체엔 동의자만 별명). 본인 전용은 8자·풀이 글·오늘의 운·리포트뿐이며 token 으로만 보호된다.
+- `localStorage.tbm` 관리(저장·복구·삭제)와 `?id=&token=` 화면 주소 가져오기(읽자마자 localStorage 로 옮기고 `history.replaceState` 로 주소에서 지움, `#탭` 은 유지)는 화면 몫이다. API 는 쿼리 토큰을 받지 않는다.
+- 팀 지도: 볼 수 없는 부서를 고르면 화면은 회사 전체 지도로 돌아가고 거절 사유를 보여 준다.
+- 데이터는 포털 사용자와 무관하게 **모두 공유**된다(같은 부서엔 실명·성향, 전체엔 동의자만 별명). 본인 전용은 8자·풀이 글·오늘의 운·리포트뿐이며 token 으로만 보호된다. 부서 실명 지도는 그 부서 본인과 owner 만.
 - 화면(`ui.html`)은 서버가 내보낼 때 저작권 표기를 덧붙인다. 정적 파일 경로(`/static/…`) 없음. 알 수 없는 GET 경로는 404 가 아니라 화면 HTML 을 돌려준다.
 - 모든 응답에 `X-Author` 헤더가 붙는다.

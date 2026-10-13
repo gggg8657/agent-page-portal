@@ -74,7 +74,7 @@
 | 단계 메시지 | `{"stage":"prompt","msg":"요청을 그림 프롬프트로 다듬는 중"}` | `stage`: `worker`(GPU 프로세스 켜는 중)·`prompt`·`draw`·`load` |
 | 그리기 시작 | `{"stage":"draw","msg":"그리는 중 (2장, 보통)","run_id":"…","final_prompt":"…"}` | 여기서 `run_id`·`final_prompt` 확정 |
 | 진행 | `{"step":12,"total":30,"image":0,"run_id":"…"}` | `image` 는 0부터 몇 번째 장인지. 전체 진행률 = `(image + step/total) / n` |
-| 한 장 저장 | `{"saved":0,"path":"…","run_id":"…"}` | `api/runs/<run_id>/img_<saved>.png` 로 바로 보여 줄 수 있음. `path` 는 서버 내부 경로라 쓰지 말 것 |
+| 한 장 저장 | `{"saved":0,"path":"img_0.png","run_id":"…"}` | `api/runs/<run_id>/<path>` 로 바로 보여 줄 수 있음. `path` 는 파일 이름만(서버 경로 없음) |
 | 완료 | `{"done": {…메타…}}` | `api/runs` 항목과 같은 모양(`images` 포함) |
 | 오류 | `{"error":"ValueError: 무엇을 그릴지 써 주세요"}` | 스트림 끝. 실패한 묶음 폴더는 지워짐 |
 
@@ -145,7 +145,7 @@ await fetch(BASE + 'api/edit', { method: 'POST', headers: { 'Content-Type': 'app
 - 화면은 고치기 원본을 3장까지만 받고 png·jpeg·webp 만 거른다(서버도 3장 제한·확장자 검사).
 - `api/runs/…` 에서 파일 이름 형식이 틀린 경로, 그리고 모르는 GET 경로는 404 가 아니라 화면 HTML(200)이 돌아온다. 응답 `Content-Type` 으로 구분할 것.
 - `api/generate`·`api/edit` 는 실패해도 HTTP 200 이고 오류는 스트림 안 `error` 이벤트로만 온다.
-- 모르는 POST 경로는 `404 {"error": "not found"}`. 본문이 JSON 이 아니면 서버가 응답 없이 연결을 끊을 수 있다.
-- `saved` 이벤트의 `path` 에는 서버 내부 절대 경로가 들어 있다 — 화면에 표시하지 말 것.
+- 모르는 POST 경로는 `404 {"error": "not found"}`. 본문이 JSON 객체가 아니면 `400 {"error": "잘못된 요청"}`.
+- 진행 이벤트·`error` 문구에는 서버 폴더 경로가 들어가지 않는다(`saved` 의 `path` 는 파일 이름만).
 - 그림 모델과 고치기 모델은 GPU 에 하나만 올라가므로 번갈아 부르면 바꿀 때마다 30초~1분 더 걸린다. 동시에 여러 요청이 오면 GPU 작업 프로세스가 잠금으로 한 번에 하나씩 처리한다 — 기다리는 동안은 `draw` 단계 메시지 뒤로 이벤트가 오지 않는다(대기 순번 알림 없음).
 - 공유 데이터 없음, owner 전용 API 없음. 정적 파일 경로(`/static/…`) 없음 — 화면은 HTML 한 장.
