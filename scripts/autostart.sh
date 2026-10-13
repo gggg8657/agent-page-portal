@@ -1,7 +1,9 @@
 #!/bin/bash
-# 컨테이너 재시작(재부팅) 후 첫 로그인 셸에서 한 번: Ollama + 포털 + tools.json 의 모든 도구(숨김 포함).
+# 컨테이너 재시작(재부팅) 후 첫 로그인 셸에서 한 번: LLM 감시(vLLM·Ollama) + 포털 + tools.json 의 모든 도구(숨김 포함).
 # ~/.zshrc 끝에서 백그라운드로 부른다. 이미 떠 있으면 아무것도 안 함, 셸이 여러 개 떠도 잠금으로 한 번만.
 cd "$(dirname "$0")/../.."   # agent-page-portal/scripts → 상위 폴더
+# LLM 감시(vLLM :11440 + Ollama :11436): 꺼져 있으면 띄우고 1분마다 확인 — 자기 잠금으로 하나만 돌므로 로그인마다 불러도 됨. 로그 llm-watchdog.log
+setsid nohup agent-page-portal/scripts/llm-watchdog.sh >/dev/null 2>&1 < /dev/null &
 exec 9>/tmp/agent-page-autostart.lock; flock -n 9 || exit 0
 curl -s -m 2 localhost:8700/api/tools >/dev/null && exit 0
 export CUDA_VISIBLE_DEVICES="${AGENT_GPUS:-0,1,2,3}" CUDA_DEVICE_ORDER=PCI_BUS_ID PATH="$HOME/.local/bin:$PATH"

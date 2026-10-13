@@ -9,7 +9,7 @@
 cd "$(dirname "$0")/../.."   # agent-page-portal/scripts → 상위 폴더
 OLLAMA_PORT="${OLLAMA_PORT:-11436}"
 VLLM_PORT="${VLLM_PORT:-11440}"
-# vLLM 은 자동으로 띄우지 않음(GPU 메모리를 미리 잡고 뜨는 데 1~3분) — 꺼져 있으면 경고만. 띄우는 법(예): ~/.local/vllm/start.sh
+# vLLM 은 여기서 띄우지 않음(GPU 메모리를 미리 잡고 뜨는 데 1~3분) — 꺼져 있으면 경고만. 자동 기동·감시는 scripts/llm-watchdog.sh(autostart.sh 가 부름), 손으로는 ~/.local/vllm/start.sh
 #   vllm serve <Gemma 4 31B-it FP8> --served-model-name gemma4:31b --host 127.0.0.1 --port 11440 --max-model-len 32768 --enable-prefix-caching
 curl -s -m 3 127.0.0.1:$VLLM_PORT/v1/models >/dev/null || echo "경고: vLLM(:$VLLM_PORT) 이 응답하지 않음 — LLM 을 쓰는 도구가 실패함" >&2
 curl -s -m 2 127.0.0.1:$OLLAMA_PORT/api/version >/dev/null || { [ -x ~/.local/ollama-gpu/start.sh ] && OLLAMA_GPUS="${OLLAMA_GPUS:-0,1,2}" ~/.local/ollama-gpu/start.sh; }  # Ollama(임베딩·되돌리기용)가 꺼져 있으면 띄움(자기 환경에 맞게)
