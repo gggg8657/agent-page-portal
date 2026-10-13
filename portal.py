@@ -1023,7 +1023,9 @@ class H(BaseHTTPRequestHandler):
                 if self.path == "/api/post_like":
                     c.execute("INSERT OR IGNORE INTO post_likes(post,user) VALUES(?,?)", (int(req["id"]), self.user))
                     return self._send({"ok": True})
-                if self.path == "/api/tool_add":
+                if self.path == "/api/tool_add":  # 개발자 앱 등록(tools.json) — 모든 사람 화면에 카드가 생기므로 관리자만
+                    if not self.is_owner:
+                        return self._send({"error": "앱 등록은 관리자만 할 수 있습니다"}, code=403)
                     return self._send(add_tool(req))
                 t = tool(req.get("dir"))
                 if not t:
