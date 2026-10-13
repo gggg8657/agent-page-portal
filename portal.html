@@ -47,7 +47,8 @@
 <div class="top"><span class="logo">KAERI AI Agent Portal<small>내부망 로컬 LLM 에이전트</small></span><span class="sp"></span><button class="gd" type="button" data-ag-theme-btn title="화면 테마 고르기">🎨 테마</button><a class="gd" href="/guide/" target="_blank">📘 사용 설명서</a><span class="user" id="user"></span></div>
 <div class="wrap">
   <aside class="side">
-    <button class="mk" onclick="addTool.showModal()">+ 내 에이전트 만들기</button>
+    <button class="mk" onclick="location.href='/t/agent-builder-local/'">+ 내 에이전트 만들기</button>
+    <button class="mk mk-dev" onclick="addTool.showModal()" style="display:none">+ 개발자 앱 등록</button>
     <div class="menu" id="menu"><div data-v="home" class="on">홈</div><div data-v="all">전체 에이전트</div><div data-v="fav">즐겨찾기</div><div data-v="recent">최근 사용</div></div>
     <div class="box"><h4>현황</h4><table id="counts"></table></div>
     <div class="box"><h4>사용자 랭킹 (최근 30일)</h4><table id="rank"></table></div>
@@ -114,7 +115,7 @@ function like(d){fetch('/api/like',{method:'POST',body:JSON.stringify({dir:d})})
 function fav(d){const f=LS('fav');save('fav',f.includes(d)?f.filter(x=>x!==d):[...f,d]);render()}
 async function act(a,d){await fetch('/api/'+a,{method:'POST',body:JSON.stringify({dir:d})});setTimeout(load,4000);setTimeout(load,15000)}
 async function howto(d,title){dlgT.textContent=title;dlgB.textContent=d?await fetch('/api/readme/'+d).then(r=>r.text()):'새 에이전트 추가 방법\n\n1. agent_page/ 아래 <이름>-local/ 폴더를 만든다 (app.py · ui.html · setup.sh · selftest.py · README.md)\n2. LLM 연결은 환경변수 LLM_API / LLM_BASE_URL / LLM_MODEL 규약을 따른다\n3. portal/tools.json 에 한 줄 추가 (dir, port, title, desc, group, tags, dept, author, added)\n4. 포털 새로고침';dlg.showModal()}
-async function load(){const j=await fetch('/api/tools').then(r=>r.json());TOOLS=j.tools;FEED=j.posts;RANK=j.rank;document.querySelectorAll('.mk').forEach(b=>b.style.display=j.me.owner?'':'none');document.getElementById('user').innerHTML=`<b style="color:var(--fg);font-weight:600">${esc(j.me.name)}</b>${j.me.role!=='일반'?' · '+j.me.role:''}${j.me.approvals?` · <a href="/approvals" style="background:var(--red);color:#fff;border-radius:999px;padding:1px 8px;text-decoration:none;font-weight:600">요청 ${j.me.approvals}</a>`:''} · <a href="/account" style="color:inherit">계정 설정</a>${j.me.owner?' · <a href="/admin" style="color:inherit">관리</a>':''} · <a href="/logout" style="color:inherit">로그아웃</a>`;render()}
+async function load(){const j=await fetch('/api/tools').then(r=>r.json());TOOLS=j.tools;FEED=j.posts;RANK=j.rank;document.querySelectorAll('.mk-dev').forEach(b=>b.style.display=j.me.owner?'':'none');document.getElementById('user').innerHTML=`<b style="color:var(--fg);font-weight:600">${esc(j.me.name)}</b>${j.me.role!=='일반'?' · '+j.me.role:''}${j.me.approvals?` · <a href="/approvals" style="background:var(--red);color:#fff;border-radius:999px;padding:1px 8px;text-decoration:none;font-weight:600">요청 ${j.me.approvals}</a>`:''} · <a href="/account" style="color:inherit">계정 설정</a>${j.me.owner?' · <a href="/admin" style="color:inherit">관리</a>':''} · <a href="/logout" style="color:inherit">로그아웃</a>`;render()}
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function postJSON(u,b){const r=await fetch(u,{method:'POST',body:JSON.stringify(b)}).then(r=>r.json());if(r.error)alert(r.error);return r}
 function postLike(id){postJSON('/api/post_like',{id}).then(load)}

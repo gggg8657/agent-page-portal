@@ -17,7 +17,8 @@
   <a class="v2-brand" href="/"><span class="v2-mark" aria-hidden="true"></span><span class="v2-bt"><b>KAERI AI Agent Portal</b><small>내부망 로컬 LLM 에이전트</small></span></a>
   <button class="v2-cmd" type="button" data-v2-cmd><svg><use href="#i-search"/></svg><span>검색·이동</span><kbd>Ctrl K</kbd></button>
   <nav class="menu" id="menu"><div data-v="home" class="on"><svg><use href="#i-home"/></svg>홈</div><div data-v="all"><svg><use href="#i-grid"/></svg>전체 에이전트</div><div data-v="fav"><svg><use href="#i-star"/></svg>즐겨찾기</div><div data-v="recent"><svg><use href="#i-clock"/></svg>최근 사용</div></nav>
-  <button class="mk" type="button" onclick="addTool.showModal()"><svg><use href="#i-plus"/></svg>내 에이전트 만들기</button>
+  <button class="mk" type="button" onclick="location.href='/t/agent-builder-local/'"><svg><use href="#i-plus"/></svg>내 에이전트 만들기</button>
+  <button class="mk mk-dev" type="button" onclick="addTool.showModal()" style="display:none"><svg><use href="#i-plus"/></svg>개발자 앱 등록</button>
   <div class="box v2-rank"><h4>사용자 랭킹 <small>최근 30일</small></h4><table id="rank"></table></div>
   <div class="v2-sp"></div>
   <div class="v2-user" id="user"></div>
