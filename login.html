@@ -34,6 +34,7 @@
   .lp-flag{font-size:12px;color:var(--l-ink2);border:1px solid var(--l-line2);border-radius:4px;padding:1px 7px;white-space:nowrap}
   .lp-sp{flex:1}
   html body .lp-nav{font-size:14px;color:var(--l-ink2);text-decoration:none;padding:10px 12px;border-radius:var(--l-rc);min-height:44px;display:inline-flex;align-items:center}
+  html body .lp-navx{font-size:12px;margin-left:2px;color:var(--l-ink2)}
   html body .lp-nav:hover{background:var(--l-sf2);color:var(--l-ink)}
 
   /* 버튼 */
@@ -136,7 +137,7 @@
   <a class="lp-logo" href="/login"><span class="lp-mark" aria-hidden="true"></span>KAERI AI Agent Portal</a>
   <span class="lp-flag">내부 시험용 · 배포용 아님</span>
   <span class="lp-sp"></span>
-  <a class="lp-nav" href="/guide/">사용 설명서</a>
+  <a class="lp-nav" href="/login?next=/guide/#login" title="설명서는 로그인한 사람만 볼 수 있습니다">사용 설명서<span class="lp-navx">(로그인 후)</span></a>
   <a class="lp-btn sm" href="#login" data-go="in">로그인</a>
 </div></header>
 <main>
@@ -186,7 +187,7 @@
   </ol>
 </div></section>
 </main>
-<footer class="lp-foot"><div class="lp-in">%SIG%<a href="/guide/agent-portal.pdf">사용 설명서 (PDF)</a><a href="/guide/#licenses">출처·라이선스</a></div></footer>
+<footer class="lp-foot"><div class="lp-in">%SIG%<a href="/login?next=/guide/agent-portal.pdf#login" title="설명서는 로그인한 사람만 볼 수 있습니다">사용 설명서 PDF(로그인 후)</a><a href="/guide/#licenses">출처·라이선스</a></div></footer>
 <script>
 const q = new URLSearchParams(location.search), raw = q.get('next') || '/';
 const next = /^\/(?![\/\\])/.test(raw) ? raw : '/';   // 같은 사이트 안으로만 (서버 portal.py safe_next 와 같은 규칙)
