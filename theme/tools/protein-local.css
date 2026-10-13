@@ -1,5 +1,5 @@
 /* protein-local — 이 도구만의 테마 손질 (THEME_GUIDE.md). CSS 만, html[data-ag-theme...] 로 시작하는 선택자만.
-   3D 뷰어(3Dmol, WebGL)·PAE 그림은 손대지 않는다 — 뷰어 바탕은 도구가 흰색으로 그린다. */
+   3D 뷰어(3Dmol, WebGL)·PAE 그림은 손대지 않는다 — 뷰어 바탕·라벨은 도구 JS 가 테마(--ag-surface)로 칠한다(PNG 저장은 흰 바탕). */
 
 /* ── 트렌디: 머리띠를 표면색 막대로, 탭은 세그먼트, 카드·타일·안내 상자 둥글게 ── */
 html[data-ag-theme^="trendy"] header{background:color-mix(in srgb,var(--ag-surface) 86%,transparent);color:var(--ag-ink);
@@ -29,8 +29,7 @@ html[data-ag-theme^="trendy"] #viewer{border-radius:var(--ag-r-md);overflow:hidd
 html[data-ag-theme^="trendy"] pre.log{border-radius:var(--ag-r-md)}
 
 /* ── 어둡게: 의미 색 살리기 ── */
-/* pLDDT 막대그래프는 투명 캔버스에 #333 글자·축을 그리므로 흰 종이 위에 둔다(색이 곧 내용) */
-html[data-ag-theme$="dark"] canvas#plddt{background:#fff;border-radius:var(--ag-r-sm)}
+/* pLDDT 막대그래프 축 글자·사슬 경계선은 도구 JS 가 테마 토큰으로 그린다 */
 /* 범례 칸(style="background:…")은 dark.js 가 어둡게 바꾸므로 pLDDT·사슬 색을 원래대로 */
 html[data-ag-theme$="dark"] #legend:has(>b) span:nth-of-type(1) i{background:#0053d6!important}
 html[data-ag-theme$="dark"] #legend:has(>b) span:nth-of-type(2) i{background:#65cbf3!important}
