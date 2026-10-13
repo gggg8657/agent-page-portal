@@ -19,5 +19,8 @@ html[data-ag-theme^="trendy"] .preview th{color:inherit}
    미리보기(.preview)는 양식 색 그대로 */
 html[data-ag-theme="trendy-light"]{--orange:#c24e00;--blue:#1d1df0}
 html[data-ag-theme="trendy-light"] .preview{--orange:#FF6600;--blue:#0000FF}
+/* 미리보기 '종이'의 주황(#FF6600, 흰 바탕 2.9:1)은 화면에서만 같은 색상 계열로 진하게 — 내려받는 HWPX·DOCX·PPTX·HTML 은 양식 색 그대로.
+   data-c 는 render.py 가 화면 미리보기에만 붙임. 어두운 테마는 dark.js 가 인라인 색을 밝혀 이미 4.5:1 이상 */
+html[data-ag-theme="trendy-light"] .preview [data-c="core"]{color:#c24e00!important}
 html[data-ag-theme$="dark"]{--orange:#ff8f47!important;--blue:#8f9bff!important}
 html[data-ag-theme$="dark"] mark.wk-unk{background:var(--ag-warn-soft);color:var(--ag-bad)}
