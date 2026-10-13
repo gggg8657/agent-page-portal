@@ -19,7 +19,7 @@ TOOLS_FILE = os.path.join(ROOT, "tools.json")
 GUIDE_DIR = os.path.join(ROOT, "guide")  # 사용 설명서 (/guide)
 THEME_DIR = os.path.join(ROOT, "theme")  # 화면 테마 (/theme) — theme/THEME_GUIDE.md
 THEMES = {f"{a}-{b}" for a in ("classic", "trendy", "v2") for b in ("light", "dark", "auto")}  # classic-light = 예전 그대로(CSS 안 붙임)
-LANDING_IMG = ("/landing/home.png", os.path.join(ROOT, "docs", "img", "home.png"))  # 랜딩 홈 캡처 = 공개 README 그림 그대로(개인 자료 없음)
+LANDING_IMG = ("/landing/home.png", os.path.join(ROOT, "docs", "img", "landing-home.png"))  # 랜딩 홈 캡처 — v2 밝게, 서버 주인 화면(개인 이름·게시글 없음)
 V2_DIR = os.path.join(ROOT, "v2")  # v2 테마 포털 화면 배치(홈·계정 — 로그인 랜딩은 모든 테마 login.html 하나) — 같은 JS, 다른 마크업. v2_page()
 
 
