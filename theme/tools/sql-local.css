@@ -18,3 +18,29 @@ html[data-ag-theme^="trendy"] #runs li{border-radius:var(--ag-r-xs);padding:2px 
 html[data-ag-theme^="trendy"] #runs li:hover{background:var(--ag-hover);color:var(--ag-accent-ink)}
 html[data-ag-theme^="trendy"] .badge{border-radius:var(--ag-r-full)}
 html[data-ag-theme^="trendy"] #csv{color:var(--ag-accent-ink)}
+
+/* v2 — 작업대: 왼쪽 스키마는 한 단계 흐린 바탕, 1px 선·작은 둥글기, 강조는 청록 토큰 하나. 차트 색은 도구(themeChart) 그대로 */
+html[data-ag-theme^="v2"] aside{background:var(--ag-side);border-right-color:var(--ag-line)}
+html[data-ag-theme^="v2"] aside .t>div[style*="#999"]{color:var(--ag-ink-3)!important}
+html[data-ag-theme^="v2"] aside .c{color:var(--ag-ink-2)}
+html[data-ag-theme^="v2"] aside input{border-radius:var(--ag-r-xs);border-color:var(--ag-line-2)}
+html[data-ag-theme^="v2"] #q{border-radius:var(--ag-r-lg);border-color:var(--ag-line-2)}
+html[data-ag-theme^="v2"] .tbl{border-radius:var(--ag-r-lg);border-color:var(--ag-line)}
+html[data-ag-theme^="v2"] .tbl :is(th,td){border-color:var(--ag-line)}
+html[data-ag-theme^="v2"] .tbl th{background:var(--ag-surface-2)}
+html[data-ag-theme^="v2"] #chart svg{border-radius:var(--ag-r-lg);border-color:var(--ag-line)}
+html[data-ag-theme="v2-dark"] #chart svg{border-color:var(--ag-line-2)}
+html[data-ag-theme^="v2"] :is(pre,.sql){background:var(--ag-surface-2);border-radius:var(--ag-r-md)}
+html[data-ag-theme^="v2"] textarea.sql{border-color:var(--ag-line-2)}
+html[data-ag-theme^="v2"] .badge{border-radius:var(--ag-r-xs)}
+html[data-ag-theme^="v2"] .badge.ok{background:var(--ag-ok-soft);color:var(--ag-ok)}
+html[data-ag-theme^="v2"] .badge.warn{background:var(--ag-warn-soft);color:var(--ag-warn)}
+html[data-ag-theme^="v2"] .badge.bad{background:var(--ag-bad-soft);color:var(--ag-bad)}
+html[data-ag-theme^="v2"] .demo{border-radius:var(--ag-r-xs)}
+html[data-ag-theme^="v2"] #csv{color:var(--ag-accent-ink)}
+html[data-ag-theme^="v2"] #runs li{border-radius:var(--ag-r-xs);padding:2px 6px}
+html[data-ag-theme^="v2"] #runs li:hover{background:var(--ag-hover);color:var(--ag-accent-ink)}
+html[data-ag-theme^="v2"] summary{color:var(--ag-ink-2);font-weight:600}
+html[data-ag-theme^="v2"] main .bar{font-size:var(--ag-fs-md)}
+html[data-ag-theme^="v2"] main .bar :is(button,select){padding:4px 10px}
+html[data-ag-theme^="v2"] main .bar button.primary{padding:4px 20px}

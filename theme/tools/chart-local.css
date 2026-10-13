@@ -45,3 +45,36 @@ html[data-ag-theme^="trendy"] .res{border-radius:var(--ag-r-md);border-color:var
 html[data-ag-theme^="trendy"] .hist li{border-bottom-color:var(--ag-line);border-radius:var(--ag-r-sm);padding:10px 8px}
 html[data-ag-theme^="trendy"] .hist li:hover{background:var(--ag-hover)}
 html[data-ag-theme^="trendy"] :is(#tip,.toast){border-radius:var(--ag-r-md);box-shadow:var(--ag-shadow-3)}
+
+/* v2 — 작업대: 1px 선·작은 둥글기(8px 이하)·사각 칩·세그먼트, 강조는 청록 토큰 하나.
+   그래프 미리보기 색·열 타입 분류색(t-num·t-date·t-cat)·계열 색은 그대로 */
+html:root[data-ag-theme^="v2"]{--ok:var(--ag-ok);--okb:var(--ag-ok-soft);--warn:var(--ag-warn);--warnb:var(--ag-warn-soft)}
+html[data-ag-theme^="v2"] .panel{border-color:var(--ag-line);border-radius:var(--ag-r-lg)}
+html[data-ag-theme^="v2"] .panel h3 .n{border-radius:var(--ag-r-sm);background:var(--ag-accent);color:var(--ag-on-accent,#fff)}
+html[data-ag-theme^="v2"] .tabs{border-bottom-color:var(--ag-line)}
+html[data-ag-theme^="v2"] .tabs button{color:var(--ag-ink-3)}
+html[data-ag-theme^="v2"] .tabs button.on{color:var(--ag-ink);border-bottom-color:var(--ag-accent)}
+html[data-ag-theme^="v2"] button:not(.primary):not(:disabled):hover{border-color:var(--ag-ink-3)}
+html[data-ag-theme^="v2"] .priv{border-radius:var(--ag-r-sm);font-weight:600}
+html[data-ag-theme^="v2"] .tblwrap{border-radius:var(--ag-r-md);border-color:var(--ag-line)}
+html[data-ag-theme^="v2"] table.prev :is(th,td){border-bottom-color:var(--ag-line)}
+html[data-ag-theme^="v2"] .card{border-radius:var(--ag-r-lg);border-color:var(--ag-line);box-shadow:none}
+html[data-ag-theme^="v2"] .card:hover{border-color:var(--ag-line-2)}
+html[data-ag-theme^="v2"] .card.sel{border-color:var(--ag-accent);box-shadow:0 0 0 2px var(--ag-ring)}
+html[data-ag-theme="v2-dark"] .card.sel{border-color:var(--ag-accent-ink)}
+html[data-ag-theme^="v2"] .card .pv{border-bottom-color:var(--ag-line)}
+html[data-ag-theme^="v2"] .chip{border-radius:var(--ag-r-xs);background:var(--ag-surface-2);color:var(--ag-ink-2)}
+html[data-ag-theme^="v2"] .bigpv{border-radius:var(--ag-r-lg);border-color:var(--ag-line)}
+html[data-ag-theme^="v2"] .seg button{border-radius:var(--ag-r-sm);border-color:var(--ag-line-2);color:var(--ag-ink-2)}
+html[data-ag-theme^="v2"] .seg button.on{background:var(--ag-accent-soft);border-color:color-mix(in srgb,var(--ag-accent) 40%,transparent);color:var(--ag-accent-ink)}
+html[data-ag-theme^="v2"] .pill{border-radius:var(--ag-r-xs)}
+html[data-ag-theme^="v2"] .pill.t{color:var(--ag-accent-ink)}
+html[data-ag-theme^="v2"] .notes span{border-radius:var(--ag-r-xs)}
+html[data-ag-theme^="v2"] .fmt button{border-radius:var(--ag-r-lg);background:var(--ag-surface)}
+html[data-ag-theme^="v2"] .fmt button:hover{border-color:var(--ag-accent);filter:none}
+html[data-ag-theme^="v2"] .res{border-radius:var(--ag-r-md);border-color:var(--ag-line)}
+html[data-ag-theme^="v2"] .res :is(td,th){border-bottom-color:var(--ag-line)}
+html[data-ag-theme^="v2"] .ng{color:var(--ag-bad)}
+html[data-ag-theme^="v2"] .hist li{border-bottom-color:var(--ag-line);padding:7px 6px}
+html[data-ag-theme^="v2"] .hist li:hover{background:var(--ag-hover)}
+html[data-ag-theme^="v2"] :is(#tip,.toast){background:var(--ag-ink);color:var(--ag-surface);border-radius:var(--ag-r-md);box-shadow:var(--ag-shadow-3)}

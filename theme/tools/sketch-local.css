@@ -28,3 +28,22 @@ html[data-ag-theme^="trendy"] details summary{color:var(--ag-ink-2);font-weight:
 html[data-ag-theme^="trendy"] #runs{padding-left:4px}
 html[data-ag-theme^="trendy"] #runs li{padding:5px 8px;border-radius:var(--ag-r-sm);color:var(--ag-ink-2)}
 html[data-ag-theme^="trendy"] #runs li:hover{background:var(--ag-hover);color:var(--ag-accent-ink)}
+
+/* v2 — 작업대: 1px 선·작은 둥글기·촘촘한 툴바, 강조는 청록 토큰 하나. 올린 사진·Mermaid 그림(흰 종이)은 그대로 */
+html[data-ag-theme^="v2"] body>.bar{font-size:var(--ag-fs-md)}
+html[data-ag-theme^="v2"] body>.bar :is(button,select){padding:4px 10px}
+html[data-ag-theme^="v2"] .box{border-color:var(--ag-line);border-radius:var(--ag-r-lg);box-shadow:none}
+html[data-ag-theme^="v2"] #img{border-radius:var(--ag-r-md)}
+html[data-ag-theme^="v2"] textarea{border-color:var(--ag-line-2)}
+html[data-ag-theme^="v2"] :is(#src,#tikz,#elems,#edges){background:var(--ag-surface-2)}
+html[data-ag-theme^="v2"] .msg{border-radius:var(--ag-r-md);font-size:13.5px}
+html[data-ag-theme^="v2"] .msg.user{background:var(--ag-accent-soft);color:var(--ag-ink)}
+html[data-ag-theme^="v2"] .msg.assistant{background:var(--ag-surface-2);color:var(--ag-ink)}
+html[data-ag-theme^="v2"] button.mode{border-color:var(--ag-line-2);border-radius:var(--ag-r-md)}
+html[data-ag-theme^="v2"] button.mode:hover{border-color:var(--ag-accent);background:var(--ag-accent-soft);filter:none}
+html[data-ag-theme^="v2"] .lbl{color:var(--ag-ink-3)}
+html[data-ag-theme^="v2"] details summary{color:var(--ag-ink-2);font-weight:600;padding:2px 4px}
+html[data-ag-theme^="v2"] #runs{padding-left:0;margin:4px 0}
+html[data-ag-theme^="v2"] #runs li{padding:4px 8px;border-radius:var(--ag-r-sm);color:var(--ag-ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html[data-ag-theme^="v2"] #runs li:hover{background:var(--ag-hover);color:var(--ag-accent-ink)}
+html[data-ag-theme^="v2"] #err{color:var(--ag-bad)}
