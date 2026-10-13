@@ -1,0 +1,381 @@
+#!/usr/bin/env python3
+"""vllm-switch — vLLM 모델(가중치) 바꾸기·기동. 설정 파일 하나(models.json)에 이름표별 모델·옵션을 적어 두고 이름표로 고른다.
+
+  vllm-switch --list                 # 이름표 목록(* = 지금 선택), 가중치 있음/없음
+  vllm-switch --current              # 지금 선택·떠 있는 프로세스·응답 여부
+  vllm-switch <이름표> --dry-run     # 사전 확인만(가중치·디스크·GPU 메모리) — 아무것도 끄거나 켜지 않음
+  vllm-switch <이름표>               # 전환: 사전 확인 → 지금 vLLM(정확한 PID) 종료 → 새 설정으로 기동 → 건강 확인
+                                     #   (/v1/models · 짧은 대화 · json_object · 이미지 입력) → 실패하면 이전 설정으로 자동 롤백
+  vllm-switch <지금 이름표>          # 같은 모델 재기동(설정 옵션을 바꾼 뒤 반영할 때)
+  vllm-switch <이름표> --served-name NAME   # 도구에 보이는 모델 이름까지 바꿈(기본은 설정의 served_name 고정 = 도구 재시작 불필요)
+  vllm-switch --start                # 지금 선택으로 띄우기만(기다리지 않음) — start.sh·감시(llm-watchdog.sh)가 부름
+
+가중치는 자동으로 받지 않는다 — 없으면 받는 명령을 안내하고 끝낸다.
+전환 중에는 $VLLM_DIR/DISABLED 를 만들어 감시(llm-watchdog.sh)가 끼어들지 않게 하고 끝나면 원래대로 둔다.
+
+env(다른 서버에 옮겨 쓸 때): VLLM_DIR(~/.local/vllm — models.json·vllm.pid·serve.log) VLLM_CONF($VLLM_DIR/models.json)
+  VLLM_BIN(~/.local/vllm-venv/bin/vllm) VLLM_HOST(127.0.0.1) VLLM_PORT(11440) VLLM_GPUS(3) VLLM_START_TIMEOUT(900초)
+  VLLM_MIN_FREE_GB(20, 디스크 여유 하한)
+"""
+import argparse, base64, fcntl, json, os, shutil, signal, struct, subprocess, sys, time, urllib.request, zlib
+
+H = os.path.expanduser
+VDIR = H(os.environ.get("VLLM_DIR", "~/.local/vllm"))
+CONF = H(os.environ.get("VLLM_CONF", os.path.join(VDIR, "models.json")))
+VBIN = H(os.environ.get("VLLM_BIN", "~/.local/vllm-venv/bin/vllm"))
+HOST = os.environ.get("VLLM_HOST", "127.0.0.1")
+PORT = int(os.environ.get("VLLM_PORT", "11440"))
+GPUS = os.environ.get("VLLM_GPUS", "3")
+START_TIMEOUT = int(os.environ.get("VLLM_START_TIMEOUT", "900"))
+MIN_FREE_GB = float(os.environ.get("VLLM_MIN_FREE_GB", "20"))
+PIDF, LOGF, DISABLED = os.path.join(VDIR, "vllm.pid"), os.path.join(VDIR, "serve.log"), os.path.join(VDIR, "DISABLED")
+URL = f"http://{HOST}:{PORT}"
+
+
+def say(*a):
+    print(*a, flush=True)
+
+
+def die(msg):
+    say("오류:", msg)
+    sys.exit(1)
+
+
+def load():
+    try:
+        return json.load(open(CONF, encoding="utf-8"))
+    except FileNotFoundError:
+        die(f"설정 파일이 없음: {CONF} — scripts/vllm-models.example.json 을 복사해 고치세요")
+
+
+def save(c):
+    tmp = CONF + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(c, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    os.replace(tmp, CONF)
+
+
+def entry(c, name):
+    m = c.get("models", {}).get(name)
+    if not m:
+        die(f"이름표 '{name}' 없음 — 있는 것: {', '.join(c.get('models', {}))}")
+    return m
+
+
+def weights_ok(m):
+    p = H(m["path"])
+    if not os.path.isfile(os.path.join(p, "config.json")):
+        return False, 0
+    size = sum(os.path.getsize(os.path.join(p, f)) for f in os.listdir(p) if f.endswith((".safetensors", ".bin", ".pt")))
+    return size > 0, size
+
+
+# ── 프로세스 ────────────────────────────────────────────────────────────
+def cmdline(pid):
+    try:
+        return open(f"/proc/{pid}/cmdline", "rb").read().replace(b"\0", b" ").decode(errors="replace")
+    except OSError:
+        return ""
+
+
+def our_pid():
+    """pid 파일의 PID 가 살아 있고 명령줄이 'vllm serve … --port <PORT>' 일 때만"""
+    try:
+        pid = int(open(PIDF).read().strip())
+    except (OSError, ValueError):
+        return None
+    c = cmdline(pid)
+    return pid if "vllm serve" in c and f"--port {PORT}" in c else None
+
+
+def descendants(root):
+    par = {}
+    for p in os.listdir("/proc"):
+        if p.isdigit():
+            try:
+                par[int(p)] = int(open(f"/proc/{p}/stat").read().rsplit(")", 1)[1].split()[1])
+            except (OSError, ValueError, IndexError):
+                pass
+    out = []
+    for p in par:
+        x = p
+        while x in par and x > 1 and x != root:
+            x = par[x]
+        if x == root and p != root:
+            out.append(p)
+    return out
+
+
+def stop(pid):
+    kids = descendants(pid)
+    say(f"vLLM 종료: pid {pid} (자식 {len(kids)}개)")
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    for _ in range(60):
+        if not os.path.exists(f"/proc/{pid}"):
+            break
+        time.sleep(1)
+    for k in [pid] + kids:
+        if os.path.exists(f"/proc/{k}"):
+            try:
+                os.kill(k, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+    time.sleep(3)
+
+
+def jit_env(c, m, nojit=False):
+    """CUDA 툴킷(nvcc)이 있으면 DeepGEMM·FlashInfer 샘플러 JIT 를 켬. 모델 항목에 "jit": false 면 끔."""
+    tk = H(c.get("cuda_home") or "")
+    hdr = lambda f: any(os.path.exists(os.path.join(tk, d, f)) for d in ("include", "targets/x86_64-linux/include"))
+    # JIT 가 실제로 쓰는 헤더까지 있어야 켬(2026-10-13: cublasLt.h 가 없어 FlashInfer JIT 가 실패 → 기동 실패한 적 있음)
+    if not nojit and m.get("jit", True) and tk and os.access(os.path.join(tk, "bin", "nvcc"), os.X_OK) and all(map(hdr, ("cublasLt.h", "curand.h", "cuda_runtime.h"))):
+        return {"CUDA_HOME": tk, "PATH": f"{tk}/bin:{os.path.dirname(VBIN)}:{os.environ.get('PATH', '')}",
+                "VLLM_USE_DEEP_GEMM": "1", "VLLM_USE_FLASHINFER_SAMPLER": "1"}
+    return {"VLLM_USE_DEEP_GEMM": "0", "VLLM_USE_FLASHINFER_SAMPLER": "0"}
+
+
+def command(c, name, served=None, nojit=False):
+    m = entry(c, name)
+    served = served or m.get("served_name") or c.get("served_name") or name
+    argv = [VBIN, "serve", H(m["path"]), "--served-model-name", served, "--host", HOST, "--port", str(PORT)] + [str(a) for a in m.get("args", [])]
+    env = {**os.environ, "CUDA_VISIBLE_DEVICES": GPUS, "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+           "VLLM_NO_USAGE_STATS": "1", "DO_NOT_TRACK": "1", "HF_HUB_OFFLINE": "1",
+           **jit_env(c, m, nojit), **{k: H(str(v)) for k, v in c.get("env", {}).items()}, **{k: H(str(v)) for k, v in m.get("env", {}).items()}}
+    if env.get("TMPDIR"):
+        os.makedirs(env["TMPDIR"], exist_ok=True)
+    return argv, env, served
+
+
+def start(c, name, served=None, nojit=False):
+    argv, env, served = command(c, name, served, nojit)
+    with open(LOGF, "ab") as log:
+        log.write(f"\n==== {time.strftime('%F %T')} vllm-switch start '{name}' (served {served}) ====\n".encode())
+        p = subprocess.Popen(argv, cwd=VDIR, env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+    open(PIDF, "w").write(f"{p.pid}\n")
+    say(f"vllm pid {p.pid} — '{name}' → {URL} (served {served}, 로그 {LOGF})")
+    return p
+
+
+# ── 사전 확인 ────────────────────────────────────────────────────────────
+def gpu_info():
+    try:
+        out = subprocess.run(["nvidia-smi", "--query-gpu=index,memory.used,memory.total", "--format=csv,noheader,nounits"],
+                             capture_output=True, text=True, timeout=15).stdout
+        return {int(i): (int(u), int(t)) for i, u, t in (l.split(", ") for l in out.strip().splitlines())}
+    except Exception:
+        return {}
+
+
+def util_of(args):
+    a = [str(x) for x in args]
+    return float(a[a.index("--gpu-memory-utilization") + 1]) if "--gpu-memory-utilization" in a else 0.9
+
+
+def precheck(c, name):
+    m = entry(c, name)
+    ok, size = weights_ok(m)
+    probs = []
+    if not ok:
+        hint = f"  huggingface-cli download {m['hf_id']} --local-dir {m['path']}" if m.get("hf_id") else ""
+        die(f"가중치가 없음: {m['path']} (config.json·*.safetensors) — 자동으로 받지 않습니다. 받은 뒤 다시:\n{hint}")
+    say(f"가중치: {m['path']} ({size / 2**30:.1f} GiB, {m.get('format', '?')})")
+    free = shutil.disk_usage(VDIR).free / 2**30
+    say(f"디스크 여유({VDIR}): {free:.0f} GiB")
+    if free < MIN_FREE_GB:
+        probs.append(f"디스크 여유 {free:.0f} GiB < {MIN_FREE_GB:.0f} GiB(JIT·컴파일 캐시·로그용)")
+    gi = gpu_info()
+    new_u = util_of(m.get("args", []))
+    for g in [int(x) for x in GPUS.split(",") if x.strip().isdigit()]:
+        if g not in gi:
+            probs.append(f"GPU {g} 정보를 못 읽음(nvidia-smi)")
+            continue
+        used, total = gi[g]
+        cur = c.get("models", {}).get(c.get("current", ""), {})
+        ours = util_of(cur.get("args", [])) * total if our_pid() else 0   # 지금 vLLM 이 미리 잡은 몫(대략) — 끄면 풀림
+        others = max(0, used - ours)
+        need_w = size / 2**20 * 1.05
+        say(f"GPU {g}: 전체 {total} MiB, 지금 사용 {used} MiB(그중 vLLM 몫 약 {ours:.0f}), 새 설정이 잡을 몫 {new_u:.2f} × {total} = {new_u * total:.0f} MiB, 가중치 약 {need_w:.0f} MiB")
+        if new_u * total + others > total:
+            probs.append(f"GPU {g}: 다른 프로세스가 {others:.0f} MiB 를 써서 gpu-memory-utilization {new_u} 를 못 잡음")
+        if need_w > new_u * total * 0.9:
+            probs.append(f"GPU {g}: 가중치({need_w:.0f} MiB)가 잡을 몫({new_u * total:.0f} MiB)에 비해 너무 큼 — KV 캐시 자리가 없음")
+    if probs:
+        die("사전 확인 실패:\n  - " + "\n  - ".join(probs))
+    say("사전 확인 통과")
+
+
+# ── 건강 확인 ────────────────────────────────────────────────────────────
+def http(path, body=None, timeout=120):
+    req = urllib.request.Request(URL + path, json.dumps(body).encode() if body is not None else None, {"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.load(r) if r.headers.get_content_type() == "application/json" else r.read()
+
+
+def tiny_png():
+    """빨간 32×32 PNG(외부 파일 없이)"""
+    raw = b"".join(b"\0" + b"\xff\x00\x00" * 32 for _ in range(32))
+    ch = lambda t, d: struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xffffffff)
+    return b"\x89PNG\r\n\x1a\n" + ch(b"IHDR", struct.pack(">IIBBBBB", 32, 32, 8, 2, 0, 0, 0)) + ch(b"IDAT", zlib.compress(raw)) + ch(b"IEND", b"")
+
+
+def wait_up(p):
+    t0 = time.time()
+    while time.time() - t0 < START_TIMEOUT:
+        if p.poll() is not None:   # /proc 확인은 좀비(아직 거두지 않은 자식)를 산 것으로 봄 — poll 로
+            return f"프로세스가 기동 중에 죽음(종료 코드 {p.returncode}, 로그 끝을 보세요)"
+        try:
+            urllib.request.urlopen(URL + "/health", timeout=5)
+            say(f"응답 시작: {time.time() - t0:.0f}초")
+            return None
+        except Exception:
+            time.sleep(5)
+    return f"{START_TIMEOUT}초 안에 /health 응답 없음"
+
+
+def health(served, image=True):
+    def chat(msgs, **kw):
+        r = http("/v1/chat/completions", {"model": served, "messages": msgs, "temperature": 0, "max_tokens": 64, **kw})
+        return r["choices"][0]["message"].get("content") or ""
+    ids = [m["id"] for m in http("/v1/models", timeout=10)["data"]]
+    assert served in ids, f"/v1/models 에 {served} 없음: {ids}"
+    say(f"  /v1/models: {ids}")
+    out = chat([{"role": "user", "content": "1+1은? 숫자만."}])
+    assert "2" in out, f"짧은 대화 답이 이상함: {out!r}"
+    say(f"  짧은 대화: {out.strip()[:40]!r}")
+    out = chat([{"role": "user", "content": 'JSON 으로만 답해: {"ok": true, "n": 3}'}], response_format={"type": "json_object"})
+    j = json.loads(out)
+    assert isinstance(j, dict), f"json_object 응답이 객체가 아님: {out!r}"
+    say(f"  json_object: {out.strip()[:60]!r}")
+    if image:
+        url = "data:image/png;base64," + base64.b64encode(tiny_png()).decode()
+        out = chat([{"role": "user", "content": [{"type": "image_url", "image_url": {"url": url}},
+                                                 {"type": "text", "text": "What color is this image? One English word."}]}])
+        assert "red" in out.lower(), f"이미지 입력 답이 이상함: {out!r}"
+        say(f"  이미지 입력: {out.strip()[:40]!r}")
+
+
+def tail_log(n=15):
+    try:
+        say("---- serve.log 끝 ----\n" + "".join(open(LOGF, errors="replace").readlines()[-n:]))
+    except OSError:
+        pass
+
+
+def bring_up(c, name, served, nojit=False):
+    """띄우고 건강 확인. 실패 사유(문자열) 또는 None"""
+    served = command(c, name, served)[2]   # None 이면 설정의 served_name
+    proc = start(c, name, served, nojit)
+    err = wait_up(proc)
+    if not err:
+        try:
+            health(served, image=c["models"][name].get("vision", True))
+            return None
+        except Exception as e:
+            err = f"건강 확인 실패: {type(e).__name__}: {e}"
+    p = our_pid()
+    if p:
+        stop(p)
+    return err
+
+
+def switch(c, name, served_override, dry):
+    m = entry(c, name)
+    prev = c.get("current")
+    say(f"전환: {prev or '(없음)'} → {name} ({m.get('desc', '')})")
+    precheck(c, name)
+    argv, _, served = command(c, name, served_override)
+    say("기동 명령: " + " ".join(argv))
+    if dry:
+        say("--dry-run: 여기까지(아무것도 바꾸지 않음)")
+        return
+    lock = open(os.path.join(VDIR, ".switch.lock"), "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        die("다른 vllm-switch 가 돌고 있음")
+    had_disabled = os.path.exists(DISABLED)
+    open(DISABLED, "a").close()   # 감시가 끼어들지 않게
+    try:
+        p = our_pid()
+        if p:
+            stop(p)
+        for _ in range(30):   # 포트가 풀릴 때까지
+            try:
+                urllib.request.urlopen(URL + "/health", timeout=2); time.sleep(2)
+            except Exception:
+                break
+        err = bring_up(c, name, served)
+        if not err:
+            c["current"] = name
+            if served_override:
+                c["served_name"] = served_override
+            save(c)
+            say(f"완료: '{name}' 이 {URL} 에서 '{served}' 로 응답합니다")
+            return
+        say(f"실패: {err}")
+        tail_log()
+        if prev and prev in c.get("models", {}):
+            say(f"이전 설정 '{prev}' 로 되돌림…")
+            err2 = bring_up(c, prev, None)   # served_name 은 성공해야 저장되므로 그대로 이전 값
+            if err2 and "VLLM_USE_DEEP_GEMM" in command(c, prev)[1] and command(c, prev)[1]["VLLM_USE_DEEP_GEMM"] == "1":
+                # 이전 설정도 JIT(DeepGEMM·FlashInfer) 때문에 못 뜨는 경우(예: 툴킷 헤더 부족) — JIT 끄고 한 번 더, 설정에도 jit:false 기록
+                say(f"이전 설정도 실패({err2}) — JIT 끄고 다시")
+                err2 = bring_up(c, prev, None, nojit=True)
+                if not err2:
+                    c["models"][prev]["jit"] = False
+                    save(c)
+            say("되돌리기 완료" if not err2 else f"되돌리기도 실패: {err2} — 손으로 확인하세요")
+        sys.exit(2)
+    finally:
+        if not had_disabled and os.path.exists(DISABLED):
+            os.remove(DISABLED)
+
+
+def _term(*_):
+    raise SystemExit(130)   # kill 로 멈춰도 finally(감시 DISABLED 정리)가 돌게
+
+
+def main():
+    signal.signal(signal.SIGTERM, _term)
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("name", nargs="?")
+    ap.add_argument("--list", action="store_true")
+    ap.add_argument("--current", action="store_true")
+    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--start", action="store_true")
+    ap.add_argument("--served-name")
+    a = ap.parse_args()
+    c = load()
+    if a.list:
+        for k, m in c.get("models", {}).items():
+            ok, size = weights_ok(m)
+            say(f"{'*' if k == c.get('current') else ' '} {k:24} {m.get('format', ''):12} {'가중치 있음 %.0fG' % (size / 2**30) if ok else '가중치 없음':14} {m.get('desc', '')}")
+        return
+    if a.current:
+        p = our_pid()
+        try:
+            ids = [m["id"] for m in http("/v1/models", timeout=5)["data"]]
+        except Exception:
+            ids = None
+        say(f"선택: {c.get('current')} · served {c.get('served_name')} · pid {p or '없음'} · {URL} 응답 {ids if ids else '없음'}"
+            + (" · 감시 멈춤(DISABLED)" if os.path.exists(DISABLED) else ""))
+        return
+    if a.start:
+        name = a.name or c.get("current")
+        entry(c, name)
+        if our_pid():
+            die(f"이미 떠 있음(pid {our_pid()}) — 바꾸려면 vllm-switch <이름표>")
+        start(c, name, a.served_name)
+        return
+    if not a.name:
+        ap.print_help()
+        return
+    switch(c, a.name, a.served_name, a.dry_run)
+
+
+if __name__ == "__main__":
+    main()

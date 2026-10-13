@@ -1,0 +1,46 @@
+{
+  "_doc": "vllm-switch 설정. current = 지금 선택(감시·start.sh 가 이걸 띄움). served_name = 도구에 보이는 모델 이름(고정하면 도구 재시작 불필요). cuda_home 에 nvcc 가 있으면 DeepGEMM·FlashInfer 샘플러 JIT 를 켬(항목에 \"jit\": false 면 끔). 항목: path(가중치 폴더) hf_id(받는 곳 안내용) format desc args(vllm serve 옵션) env(추가 환경변수) vision(이미지 입력 시험 여부, 기본 true). jit 기본 false: 2026-10-13 시험에서 FlashInfer JIT 가 cublasLt.h 부족으로 실패 — 툴킷 보강·사용자 확인 뒤에만 켤 것.",
+  "current": "gemma4-31b-fp8",
+  "served_name": "gemma4:31b",
+  "cuda_home": "~/.local/cuda-12.9",
+  "env": {
+    "TMPDIR": "~/.cache/tmp-vllm"
+  },
+  "models": {
+    "gemma4-31b-fp8": {
+      "path": "~/.local/vllm/models/gemma-4-31B-it-FP8-block",
+      "hf_id": "RedHatAI/gemma-4-31B-it-FP8-block",
+      "format": "FP8-block",
+      "desc": "Gemma 4 31B-it FP8(블록) — H100 1장, 기본",
+      "args": [
+        "--max-model-len",
+        "32768",
+        "--gpu-memory-utilization",
+        "0.85",
+        "--max-num-seqs",
+        "64",
+        "--enable-prefix-caching",
+        "--limit-mm-per-prompt",
+        "{\"image\": 4}"
+      ],
+      "jit": false
+    },
+    "gemma4-31b-bf16": {
+      "path": "~/.local/vllm/models/gemma-4-31B-it",
+      "hf_id": "google/gemma-4-31B-it",
+      "format": "BF16",
+      "desc": "Gemma 4 31B-it 원본 BF16(약 62GB) — 예시, 가중치 받은 뒤 사용",
+      "args": [
+        "--max-model-len",
+        "32768",
+        "--gpu-memory-utilization",
+        "0.9",
+        "--max-num-seqs",
+        "32",
+        "--enable-prefix-caching",
+        "--limit-mm-per-prompt",
+        "{\"image\": 4}"
+      ]
+    }
+  }
+}

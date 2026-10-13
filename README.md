@@ -101,7 +101,10 @@ notebook / avatar ──▶ TTS_BASE_URL(tts-local) · STT_BASE_URL(meeting-loca
 - **API** — 화면과 처리는 JSON HTTP API 로만 주고받습니다. 새 화면을 붙이거나 다른 프로그램에서 부르려면 [docs/api/README.md](docs/api/README.md)(로그인·연결 방법·포털 API)와 도구별 `docs/api/<dir>.md` 를 보세요.
 - **데이터 한곳에** — `AGENT_DATA`(기본 `../_data`) 아래에 `portal.db` 와 각 도구의 작업 폴더(`_data/<도구>/…`)가 모입니다. 포털이 도구를 띄울 때 `WORKSPACE=$AGENT_DATA/<도구>` 를 넘기고, 모든 도구가 그 변수를 읽습니다. 백업은 이 폴더 하나. (이 폴더는 어느 저장소에도 올리지 않습니다.)
 - **LLM** — `start-portal.sh` 가 `LLM_API=openai LLM_BASE_URL=http://127.0.0.1:11440/v1 LLM_MODEL=gemma4:31b MODEL=… VISION_MODEL=…` 를 export 하고 포털이 그대로 도구에 물려 줍니다. 모든 도구는 OpenAI 호환(`/v1/chat/completions`) 또는 Ollama API 로 이 주소를 부릅니다(외부 인터넷 불필요).
-  - 서버: [vLLM](https://github.com/vllm-project/vllm)(OpenAI 호환, `--served-model-name gemma4:31b`, `--max-model-len 32768`, 전용 GPU 1장). 기동 스크립트는 vLLM 을 **자동으로 띄우지 않고** 응답이 없으면 경고만 냅니다(작성자 서버는 `~/.local/vllm/start.sh`).
+  - 서버: [vLLM](https://github.com/vllm-project/vllm)(OpenAI 호환, `--served-model-name gemma4:31b`, `--max-model-len 32768`, 전용 GPU 1장). `start-portal.sh` 는 vLLM 을 띄우지 않고 응답이 없으면 경고만 냅니다.
+  - **모델 바꾸기 — `scripts/vllm-switch`**: 설정 파일(`$VLLM_DIR/models.json`, 예시 `scripts/vllm-models.example.json`)에 이름표별 가중치 경로·형식·`vllm serve` 옵션을 적고 `vllm-switch --list` · `--current` · `<이름표> --dry-run`(가중치·디스크·GPU 메모리 사전 확인만) · `<이름표>`(지금 vLLM 을 정확한 PID 로 끄고 새 설정으로 기동 → `/v1/models`·짧은 대화·`json_object`·이미지 입력 확인 → 실패하면 이전 설정으로 자동 롤백). 도구에 보이는 이름은 `served_name`(gemma4:31b)으로 고정이라 도구 재시작이 필요 없습니다(`--served-name` 으로 바꿀 수 있음). 가중치는 자동으로 받지 않습니다. 경로·포트·GPU 는 환경변수(`VLLM_DIR`·`VLLM_BIN`·`VLLM_PORT`·`VLLM_GPUS` 등)라 다른 서버에도 그대로 씁니다.
+  - **자동 기동·감시 — `scripts/llm-watchdog.sh`**: `autostart.sh` 가 로그인 때마다 부르고(flock 으로 하나만) 1분마다 vLLM `/health`·Ollama `/api/version` 을 봅니다. 꺼져 있으면 띄우고(vLLM 은 `$VLLM_DIR/start.sh` = `vllm-switch --start`, 즉 models.json 의 `current`), 3번 연속 응답이 없으면 pid 파일의 그 PID 만 끄고 다시 띄웁니다. 막 띄운 vLLM 은 15분 기다림, 같은 서버 재기동은 10분에 한 번까지. 로그 `<상위폴더>/llm-watchdog.log`. vLLM 을 일부러 꺼 두려면 `touch $VLLM_DIR/DISABLED`.
+  - 대기열: `GET /api/gpu` 의 `llm`(`running`·`waiting`·`kv_cache`, vLLM `/metrics`).
   - `NUM_CTX` 는 vLLM `--max-model-len` 과 같은 값(32768)으로 둡니다(도구가 입력 길이 상한 계산에 씀). JSON 을 기대하는 호출은 openai 방식에서 `response_format: {"type":"json_object"}` 를 보냅니다. `think`·`num_ctx`·`format` 같은 Ollama 전용 필드는 openai 방식에선 쓰지 않습니다.
   - 임베딩(notebook bge-m3)은 vLLM 채팅 서버에 없으므로 `EMBED_API=ollama EMBED_BASE_URL=http://127.0.0.1:11436 EMBED_MODEL=bge-m3` 로 로컬 Ollama 를 씁니다.
   - 되돌리기(Ollama): `start-portal.sh` 의 LLM 줄을 `LLM_API=ollama LLM_BASE_URL=http://127.0.0.1:11436` 으로, `AGENT_GPUS` 기본을 `0,1,2,3` 으로 바꾸고 포털과 도구를 다시 띄웁니다(스크립트 주석에 그대로 있음).
@@ -151,7 +154,7 @@ bash audit.sh                     # 전체 점검: CDN 유출·포트 중복·LI
 
 `scripts/` 의 네 스크립트는 원래 상위 폴더(`agent-page/`)에 있던 `start-portal.sh` · `start-test-portal.sh` · `autostart.sh` · `backup.sh` 의 사본입니다(상위 폴더로 `cd` 하도록만 바꾸고, 서버 주소는 `<server-ip>` 로 가림). 상위 폴더 쪽 원본도 그대로 쓸 수 있습니다.
 `scripts/portal-env.sh` 는 포털 공통 환경변수(LLM·임베딩·음성 연결·GPU 후보) 한 곳 — `start-portal.sh`·`start-fastportal.sh` 가 같이 읽고, 포털이 도구를 켤 때 그대로 물려줍니다. `scripts/start-fastportal.sh` 는 FastAPI 포털 기동(기본 :8720 시험용, 운영은 `start-portal.sh` 가 `PORT=8700 BACKUP=1` 로 부름).
-`~/.local/ollama-gpu/start.sh` 는 작성자 서버의 Ollama 기동 스크립트로, 없으면 건너뜁니다 — Ollama 는 각자 띄우세요. vLLM 은 스크립트가 띄우지 않습니다(꺼져 있으면 경고).
+`~/.local/ollama-gpu/start.sh` 는 작성자 서버의 Ollama 기동 스크립트로, 없으면 건너뜁니다 — Ollama 는 각자 띄우세요. vLLM 은 `start-portal.sh` 가 띄우지 않고(꺼져 있으면 경고) `scripts/llm-watchdog.sh`(autostart 가 부름)가 띄우고 지킵니다.
 
 ### https (선택, 기본은 꺼짐)
 내부망이라도 PIN·세션 쿠키가 평문으로 흐르지 않게 하려면 사내용 CA 를 만들어 인증서를 붙입니다(인터넷 필요 없음). 켜면 브라우저 작업 끝 알림(시스템 알림)도 쓸 수 있습니다.
@@ -228,7 +231,7 @@ GPU 를 도구마다 미리 정해 두지 않습니다. 포털 기동 스크립�
 | avatar-local 스튜디오(Qwen-Image-2512 약 60GB · Wan2.2 I2V-A14B 약 48GB) | 모델을 올릴 때마다(모델 바꿀 때도 새로) | 10분 안 쓰면 내림 |
 | avatar-local 말하기(Wan2.2-S2V 약 60GB)·립싱크(SadTalker) | 실행마다(서브프로세스) | 실행 끝나면 반환 |
 | tts-local(MeloTTS)·meeting-local(Whisper) | 처음 쓸 때 | 10분 안 쓰면 내림 → 다음에 다시 고름 |
-| vLLM(gemma4:31b) | GPU 3 고정(`~/.local/vllm/start.sh` 의 `VLLM_GPUS`), 기동 때 메모리 85% 를 미리 잡음 | 계속 올려 둠 |
+| vLLM(gemma4:31b) | GPU 3 고정(`vllm-switch` 의 `VLLM_GPUS`), 기동 때 메모리 85% 를 미리 잡음 | 계속 올려 둠 |
 | Ollama(bge-m3 임베딩) | Ollama 스케줄러가 여유 VRAM 보고 배치 | `OLLAMA_KEEP_ALIVE` |
 
 - 어느 GPU 에 올랐는지는 각 도구 로그(`server.log`·`studio.log`)와 진행 메시지에 `GPU 2 (여유 80GB) 에서 로드` 처럼 나옵니다.
