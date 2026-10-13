@@ -20,10 +20,12 @@ for f in sorted(glob.glob('img/*.png')):
     im.load(); im.save(f, pnginfo=meta); stamped += 1
 
 # 2) 본문 + 도구 목차(분류별, parts 순서대로)
-parts = sorted(glob.glob('parts/[0-9][0-9]-*.html'))
+try: TOOLS = json.load(open('../tools.json', encoding='utf-8'))
+except OSError: TOOLS = []
+titles = {t['dir']: t['title'] for t in TOOLS}
+hidden = {t['dir'] for t in TOOLS if t.get('hidden')}  # 포털에서 숨긴 도구는 설명서에도 안 넣음(parts 파일은 남겨 둠)
+parts = [f for f in sorted(glob.glob('parts/[0-9][0-9]-*.html')) if os.path.basename(f)[3:-5] not in hidden]
 body = '\n'.join(open(f, encoding='utf-8').read() for f in parts)
-try: titles = {t['dir']: t['title'] for t in json.load(open('../tools.json', encoding='utf-8'))}
-except OSError: titles = {}
 groups, order = {}, {}
 for m in re.finditer(r'<section class="tool" id="([^"]+)">\s*<p class="cat">([^<]*)</p>\s*<h2>(.*?)</h2>', body, re.S):
     d, cat, name = m.group(1), m.group(2).strip(), re.sub(r'<[^>]+>', '', m.group(3)).strip()
