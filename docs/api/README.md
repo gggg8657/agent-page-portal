@@ -21,7 +21,7 @@
 도구 app.py  http://127.0.0.1:<포트>   ← 서버 안에서만 열림. 바깥에서는 반드시 포털을 거침
    │  필요하면
    ▼
-로컬 LLM(Ollama) · GPU 모델
+로컬 LLM(vLLM, OpenAI 호환 · 임베딩은 Ollama) · GPU 모델
 ```
 
 - **주소 규칙**: 도구 문서의 경로 `api/xxx` 는 포털에서 `/t/<도구 dir>/api/xxx` 입니다.

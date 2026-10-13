@@ -94,13 +94,17 @@ ORDER BY "예산합계" DESC LIMIT 500
 브라우저 ──▶ portal.py :8700 ──/t/<dir>/──▶ 127.0.0.1:<port> (각 도구 app.py)
                 │  시작할 때 넘기는 환경변수: PORT, WORKSPACE=$AGENT_DATA/<dir>, 그리고 포털이 받은 환경 전부
                 └─ 첫 화면 HTML 에 guides/<dir>.md 사용법 팝업(?) 삽입
-도구들 ──▶ LLM_BASE_URL (로컬 Ollama, 기본 gemma4:31b)
+도구들 ──▶ LLM_BASE_URL (로컬 vLLM, OpenAI 호환, 기본 gemma4:31b)   notebook 임베딩 ──▶ EMBED_BASE_URL (로컬 Ollama, bge-m3)
 notebook / avatar ──▶ TTS_BASE_URL(tts-local) · STT_BASE_URL(meeting-local) · AVATAR_URL(avatar-local)
 ```
 
 - **API** — 화면과 처리는 JSON HTTP API 로만 주고받습니다. 새 화면을 붙이거나 다른 프로그램에서 부르려면 [docs/api/README.md](docs/api/README.md)(로그인·연결 방법·포털 API)와 도구별 `docs/api/<dir>.md` 를 보세요.
 - **데이터 한곳에** — `AGENT_DATA`(기본 `../_data`) 아래에 `portal.db` 와 각 도구의 작업 폴더(`_data/<도구>/…`)가 모입니다. 포털이 도구를 띄울 때 `WORKSPACE=$AGENT_DATA/<도구>` 를 넘기고, 모든 도구가 그 변수를 읽습니다. 백업은 이 폴더 하나. (이 폴더는 어느 저장소에도 올리지 않습니다.)
-- **LLM** — `start-portal.sh` 가 `LLM_API=ollama LLM_BASE_URL=http://127.0.0.1:11436 LLM_MODEL=gemma4:31b MODEL=… VISION_MODEL=…` 를 export 하고 포털이 그대로 도구에 물려 줍니다. 모든 도구는 OpenAI 호환/Ollama API 로 이 주소를 부릅니다(외부 인터넷 불필요).
+- **LLM** — `start-portal.sh` 가 `LLM_API=openai LLM_BASE_URL=http://127.0.0.1:11440/v1 LLM_MODEL=gemma4:31b MODEL=… VISION_MODEL=…` 를 export 하고 포털이 그대로 도구에 물려 줍니다. 모든 도구는 OpenAI 호환(`/v1/chat/completions`) 또는 Ollama API 로 이 주소를 부릅니다(외부 인터넷 불필요).
+  - 서버: [vLLM](https://github.com/vllm-project/vllm)(OpenAI 호환, `--served-model-name gemma4:31b`, `--max-model-len 32768`, 전용 GPU 1장). 기동 스크립트는 vLLM 을 **자동으로 띄우지 않고** 응답이 없으면 경고만 냅니다(작성자 서버는 `~/.local/vllm/start.sh`).
+  - `NUM_CTX` 는 vLLM `--max-model-len` 과 같은 값(32768)으로 둡니다(도구가 입력 길이 상한 계산에 씀). JSON 을 기대하는 호출은 openai 방식에서 `response_format: {"type":"json_object"}` 를 보냅니다. `think`·`num_ctx`·`format` 같은 Ollama 전용 필드는 openai 방식에선 쓰지 않습니다.
+  - 임베딩(notebook bge-m3)은 vLLM 채팅 서버에 없으므로 `EMBED_API=ollama EMBED_BASE_URL=http://127.0.0.1:11436 EMBED_MODEL=bge-m3` 로 로컬 Ollama 를 씁니다.
+  - 되돌리기(Ollama): `start-portal.sh` 의 LLM 줄을 `LLM_API=ollama LLM_BASE_URL=http://127.0.0.1:11436` 으로, `AGENT_GPUS` 기본을 `0,1,2,3` 으로 바꾸고 포털과 도구를 다시 띄웁니다(스크립트 주석에 그대로 있음).
 - **도구끼리 연결** — `start-portal.sh` 가 `TTS_BASE_URL=http://127.0.0.1:8771/v1`(tts-local), `STT_BASE_URL=http://127.0.0.1:8767/v1`(meeting-local 받아쓰기), `AVATAR_URL=http://127.0.0.1:8777/api/run`(avatar-local 립싱크) 와 `TTS_VOICE/TTS_MODEL/…_DEVICE` 를 넘깁니다. 그 밖에 chart·review·weekly·meeting 은 옆 폴더 `../kordoc-local` 의 kordoc 을 (있으면) 불러 HWP/HWPX 를 처리합니다.
 
 ## 전체 설치 — 도구를 나란히 clone
@@ -115,12 +119,12 @@ bash agent-page-portal/scripts/clone-all.sh     # tools.json 의 도구 전부 c
 
 손으로 하려면: `for d in humanize-kr-local kordoc-local notebook-local writer-local meeting-local diagram-local sketch-local tts-local sql-local saju-local avatar-local agent-cad-local award-local mail-local protein-local digitizer-local review-local chart-local shield-local battery-local weekly-local image-local coach-local; do git clone https://github.com/gggg8657/$d; done`
 
-그다음 각 도구의 README 대로 의존성(`bash <도구>/setup.sh`)과 로컬 Ollama(+ `ollama pull gemma4:31b`)를 준비합니다.
+그다음 각 도구의 README 대로 의존성(`bash <도구>/setup.sh`)과 LLM 서버를 준비합니다 — 기본은 vLLM(OpenAI 호환, 모델 이름 `gemma4:31b`)과 임베딩용 로컬 Ollama(`ollama pull bge-m3`). Ollama 만 쓰려면 `ollama pull gemma4:31b` 후 위 '되돌리기' 대로.
 
 ## 실행
 
 ```bash
-bash agent-page-portal/scripts/start-portal.sh        # 운영 포털 :8700 (모든 주소에서 열림) — Ollama 확인 → LLM·도구 연결 환경변수 export → portal.py
+bash agent-page-portal/scripts/start-portal.sh        # 운영 포털 :8700 (모든 주소에서 열림) — vLLM 확인(경고만)·Ollama 확인 → LLM·도구 연결 환경변수 export → portal.py
 bash agent-page-portal/scripts/start-test-portal.sh   # 본인 테스트 포털 :8701, HOST=127.0.0.1, SHOW_HIDDEN=1 (숨긴 도구도 보임, SSH 터널로 접속)
 bash agent-page-portal/scripts/autostart.sh           # 재부팅 후 한 번: 포털 + tools.json 의 모든 도구 기동 + 백업 (~/.zshrc 에서 백그라운드 호출용)
 bash agent-page-portal/scripts/backup.sh              # 지금 백업 한 번 (_data → ~/agent-page-backup, 7일치)
@@ -140,10 +144,11 @@ bash audit.sh                     # 전체 점검: CDN 유출·포트 중복·LI
 | `AGENT_OWNERS` | dongju,gggg8657 | 쉼표 목록 — 이 계정은 도구에 `owner`(예전 기록 포함 전부 보임). 서버 밖에서는 이 아이디로 가입 못 함 |
 | `BACKUP` | :8700 이면 1 | `1` 이면 포털이 매일 03시(KST) `backup.sh` 실행 |
 | `AGENT_BACKUP_DIR` / `BACKUP_KEEP` | `~/agent-page-backup` / 7 | 백업 위치·보관 개수 (`backup.sh` 가 읽음) |
-| `OLLAMA_PORT` / `LLM_MODEL` | 11436 / gemma4:31b | `scripts/start-*.sh` 가 읽음 |
+| `VLLM_PORT` / `OLLAMA_PORT` / `LLM_MODEL` | 11440 / 11436 / gemma4:31b | `scripts/start-*.sh` 가 읽음 (vLLM = 채팅, Ollama = 임베딩) |
+| `AGENT_GPUS` | 0,1,2 | GPU 도구 후보 — vLLM 전용 GPU(3)는 뺌 |
 
 `scripts/` 의 네 스크립트는 원래 상위 폴더(`agent-page/`)에 있던 `start-portal.sh` · `start-test-portal.sh` · `autostart.sh` · `backup.sh` 의 사본입니다(상위 폴더로 `cd` 하도록만 바꾸고, 서버 주소는 `<server-ip>` 로 가림). 상위 폴더 쪽 원본도 그대로 쓸 수 있습니다.
-`~/.local/ollama-gpu/start.sh` 는 작성자 서버의 Ollama 기동 스크립트로, 없으면 건너뜁니다 — Ollama 는 각자 띄우세요.
+`~/.local/ollama-gpu/start.sh` 는 작성자 서버의 Ollama 기동 스크립트로, 없으면 건너뜁니다 — Ollama 는 각자 띄우세요. vLLM 은 스크립트가 띄우지 않습니다(꺼져 있으면 경고).
 
 ### https (선택, 기본은 꺼짐)
 내부망이라도 PIN·세션 쿠키가 평문으로 흐르지 않게 하려면 사내용 CA 를 만들어 인증서를 붙입니다(인터넷 필요 없음). 켜면 브라우저 작업 끝 알림(시스템 알림)도 쓸 수 있습니다.
@@ -201,7 +206,7 @@ bash agent-page-portal/scripts/start-fastportal.sh stop
 ## 출처·감사 (Credits)
 
 - 포털 서버는 파이썬 표준 라이브러리만 씁니다. 제3자 구성요소 전체 목록·라이선스·상업 이용 여부는 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) 에 있습니다. 연결된 각 도구의 출처는 각 저장소의 `THIRD_PARTY_NOTICES.md`·README 'Credits' 를 보세요.
-- 기본 LLM: [Ollama](https://github.com/ollama/ollama) (MIT) + Google [Gemma](https://ai.google.dev/gemma) `gemma4:31b` (Apache-2.0) — 포털은 환경변수로 넘겨 줄 뿐 동봉하지 않습니다.
+- 기본 LLM: [vLLM](https://github.com/vllm-project/vllm) (Apache-2.0) + Google [Gemma](https://ai.google.dev/gemma) `gemma4:31b` (Apache-2.0), 임베딩은 [Ollama](https://github.com/ollama/ollama) (MIT) + bge-m3 — 포털은 환경변수로 넘겨 줄 뿐 동봉하지 않습니다.
 - 사용 설명서(`/guide`): 글꼴 [Noto Sans KR](https://fonts.google.com/noto/specimen/Noto+Sans+KR) (SIL OFL 1.1, Google Fonts), 캡처·PDF 생성에 [Playwright](https://github.com/microsoft/playwright) (Apache-2.0)·[Pillow](https://github.com/python-pillow/Pillow) (MIT-CMU).
 - 상업 이용 확인이 필요한 항목(캐릭터 파동이 그림, 생성 얼굴, 연결 도구의 비상업 요소)은 [#1](https://github.com/gggg8657/agent-page-portal/issues/1) 에 모았습니다.
 
@@ -210,7 +215,7 @@ bash agent-page-portal/scripts/start-fastportal.sh stop
 All rights reserved. 저작자의 허락 없이 복제·배포·개작할 수 없습니다.
 
 ### GPU 나눠 쓰기
-GPU 를 도구마다 미리 정해 두지 않습니다. 포털 기동 스크립트는 모든 GPU(`CUDA_VISIBLE_DEVICES=0,1,2,3` — 셸에 다른 값이 있어도 덮어씀, 줄이려면 `AGENT_GPUS=2,3`)를 도구에 넘기고, 각 도구가 **모델을 올리는 그 순간 여유 메모리가 가장 큰 GPU 1장**(같으면 덜 바쁜 쪽)을 고릅니다. 각 도구 저장소의 `gpu_pick.py`(stdlib, 같은 파일 복사)가 `nvidia-smi` 로 고릅니다.
+GPU 를 도구마다 미리 정해 두지 않습니다. 포털 기동 스크립트는 GPU 0·1·2(`CUDA_VISIBLE_DEVICES=0,1,2` — 셸에 다른 값이 있어도 덮어씀, 바꾸려면 `AGENT_GPUS=…`. GPU 3 은 vLLM 전용이라 뺌)를 도구에 넘기고, 각 도구가 **모델을 올리는 그 순간 여유 메모리가 가장 큰 GPU 1장**(같으면 덜 바쁜 쪽)을 고릅니다. 각 도구 저장소의 `gpu_pick.py`(stdlib, 같은 파일 복사)가 `nvidia-smi` 로 고릅니다.
 
 | 도구 | 언제 고르나 | 다 쓰면 |
 |---|---|---|
@@ -218,7 +223,8 @@ GPU 를 도구마다 미리 정해 두지 않습니다. 포털 기동 스크립�
 | avatar-local 스튜디오(Qwen-Image-2512 약 60GB · Wan2.2 I2V-A14B 약 48GB) | 모델을 올릴 때마다(모델 바꿀 때도 새로) | 10분 안 쓰면 내림 |
 | avatar-local 말하기(Wan2.2-S2V 약 60GB)·립싱크(SadTalker) | 실행마다(서브프로세스) | 실행 끝나면 반환 |
 | tts-local(MeloTTS)·meeting-local(Whisper) | 처음 쓸 때 | 10분 안 쓰면 내림 → 다음에 다시 고름 |
-| Ollama(gemma4:31b) | Ollama 스케줄러가 여유 VRAM 보고 배치 | `OLLAMA_KEEP_ALIVE` |
+| vLLM(gemma4:31b) | GPU 3 고정(`~/.local/vllm/start.sh` 의 `VLLM_GPUS`), 기동 때 메모리 85% 를 미리 잡음 | 계속 올려 둠 |
+| Ollama(bge-m3 임베딩) | Ollama 스케줄러가 여유 VRAM 보고 배치 | `OLLAMA_KEEP_ALIVE` |
 
 - 어느 GPU 에 올랐는지는 각 도구 로그(`server.log`·`studio.log`)와 진행 메시지에 `GPU 2 (여유 80GB) 에서 로드` 처럼 나옵니다.
 - 환경변수: `GPU_POOL=2,3`(이 GPU 들만 후보로), `GPU_IDLE_UNLOAD_S=600`(안 쓰면 내리는 초, 0 이면 안 내림).
