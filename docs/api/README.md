@@ -74,7 +74,8 @@ const g  = await (await fetch('/t/saju-local/api/graph?dept=' + encodeURICompone
 ### 배포할 때
 다 만든 화면은 포털과 같은 출처에서 나가야 합니다. 방법은 관리자(gggg8657)와 정합니다.
 - 도구의 `ui.html` 을 새 화면으로 바꾸기(도구 저장소에 PR), 또는
-- 포털에 새 화면용 정적 경로를 추가하기 — React 화면(agent-page-web)은 이 방식: 포털(fastportal)에 `WEB_DIST=<빌드 폴더>`(·`WEB_PREFIX`, 기본 `/app`)를 주면 `/app/…` 에서 같은 출처로 내보냄(SPA 폴백, `assets/` 긴 캐시, `index.html` no-cache). 화면은 로그인 없이 열리고 API 는 401 → 화면이 `/app/login` 으로. 빌드는 `vite build --base /app/`(라우터 `basename` 도 같게). 자세한 규칙은 포털 README 'FastAPI 포털'.
+- 포털에 새 화면용 정적 경로를 추가하기 — React 화면(agent-page-web)은 이 방식으로 **운영 중(`:8700/app`)**: 포털(fastportal)에 `WEB_DIST=<빌드 폴더>`(·`WEB_PREFIX`, 기본 `/app`)를 주면 `/app/…` 에서 같은 출처로 내보냄(SPA 폴백, `assets/` 긴 캐시, `index.html` no-cache). 로그인 화면·자산은 로그인 없이, 그 밖의 화면 주소는 로그인 전이면 `/app/login?next=` 로 302, API 는 401. 빌드는 `WEB_BASE`(기본 `/app/`, 라우터 `basename` 도 같게). `/` 까지 React 로 바꾸는 `WEB_ROOT`(준비만, 꺼짐)·배포·되돌리기는 포털 README 'FastAPI 포털' 과 agent-page-web `CUTOVER.md`.
+- React 화면이 부르는 포털 API: 셸이 `/api/me`·`/api/tools`·`/api/gpu`(홈, `llm` 대기열 포함)·`/api/events`(작업 끝 알림, 15초·창이 보일 때만)·`/api/account/notices`·`/api/account/theme`(테마 6종 저장)·`/api/account/onboarded`(둘러보기), 계정·승인·관리 화면이 `/api/account*`·`/api/pin`·`/api/approvals*`·`/api/admin*` — 예전 `account.html`·`theme/tour.js`·`help.html` 과 같은 요청(동등성 러너 `tests/parity/shell.spec.ts` 로 비교).
 
 다른 서버에 따로 올려야 한다면 포털에 CORS·토큰 방식을 따로 열어야 하니 먼저 말해 주세요.
 도구 자체가 다른 컨테이너·서버에서 돌 때(혼합형)는 `tools.json` 항목에 `"host"` 를 넣으면 포털이 `http://<host>:<port>` 로 프록시합니다(시작·중지는 409, 그쪽이 늘 켜 둠 — 도구는 `BIND=0.0.0.0`). 화면에서 보는 주소(`/t/<도구>/…`)·헤더 규칙은 그대로입니다.

@@ -14,6 +14,8 @@ VLLM_PORT="${VLLM_PORT:-11440}"
 curl -s -m 3 127.0.0.1:$VLLM_PORT/v1/models >/dev/null || echo "경고: vLLM(:$VLLM_PORT) 이 응답하지 않음 — LLM 을 쓰는 도구가 실패함" >&2
 curl -s -m 2 127.0.0.1:$OLLAMA_PORT/api/version >/dev/null || { [ -x ~/.local/ollama-gpu/start.sh ] && OLLAMA_GPUS="${OLLAMA_GPUS:-0,1,2}" ~/.local/ollama-gpu/start.sh; }  # Ollama(임베딩·되돌리기용)가 꺼져 있으면 띄움(자기 환경에 맞게)
 . agent-page-portal/scripts/portal-env.sh   # LLM·임베딩·음성 연결·GPU 후보 export — 포털이 도구를 켤 때 그대로 물려줌
+# + WEB_DIST(React 화면 /app — <상위 폴더>/_web/app 링크가 있으면 자동, agent-page-web/scripts/deploy.sh 가 만듦). 끄려면 WEB_DIST= start-portal.sh
+echo "React 화면(/app): ${WEB_DIST:-꺼짐}"
 
 IMPL="${PORTAL_IMPL:-fast}"
 if [ "$IMPL" = fast ] && [ ! -x "${FASTPORTAL_VENV:-$HOME/.local/fastportal-venv}/bin/python" ]; then

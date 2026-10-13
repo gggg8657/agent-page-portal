@@ -198,8 +198,9 @@ bash agent-page-portal/scripts/start-fastportal.sh stop
 | `PORTAL_LOCAL_OWNER` | token | 로컬 주인(로그인 없이 관리자) 판정. `token`: 127.0.0.1 에서 쿠키 없이 + 헤더 `X-Local-Owner` 가 `_data/.local_owner_token`(처음 기동 때 무작위 32바이트로 만듦, 권한 600, git 밖) 과 같을 때만 — 브라우저(SSH 포트포워딩 `localhost:8700` 포함)는 이 헤더를 못 붙이므로 로그아웃이 제대로 됨. `1`: 예전 방식(127.0.0.1 쿠키 없음 = 주인 — 포트포워딩 브라우저가 로그아웃 뒤에도 주인이 됨). `0`: 끔. 리버스 프록시 뒤에 둘 때는 `token` 또는 `0` |
 | `TRUSTED_PROXIES` | 없음 | 쉼표 목록. 바로 앞 접속이 이 주소일 때만 `X-Forwarded-For` 를 읽어 실제 주소로 판정(목록 밖 주소 중 가장 오른쪽). 없으면 `X-Forwarded-For` 는 무시 |
 | `TOOL_BIND` | 127.0.0.1 | 포털이 도구를 띄울 때 넘기는 `BIND`(도구가 열 주소). 컨테이너에서 다른 컨테이너의 포털이 붙어야 하면 `0.0.0.0` |
-| `WEB_DIST` | 없음(꺼짐) | React 화면(agent-page-web) 빌드 폴더. 있으면 포털이 `WEB_PREFIX` 아래에서 같은 출처로 내보냄(아래 'React 화면') — 없으면 예전과 완전히 같음 |
-| `WEB_PREFIX` | /app | React 화면 주소. `/app` 처럼 하위 경로만(‘/’ 는 아직 안 됨) |
+| `WEB_DIST` | 없음(꺼짐) — 운영은 `portal-env.sh` 가 `<상위>/_web/app` 링크가 있으면 자동 | React 화면(agent-page-web) 빌드 폴더(링크면 요청마다 따라감 — 배포는 링크 바꿔 끼우기, 재시작 없음). 있으면 포털이 `WEB_PREFIX` 아래에서 같은 출처로 내보냄(아래 'React 화면') — 없으면 예전과 완전히 같음 |
+| `WEB_PREFIX` | /app | React 화면 주소. `/app` 처럼 하위 경로만 |
+| `WEB_ROOT`·`WEB_ROOT_DIST` | 꺼짐 | **'/' 전환(준비만, 운영에선 꺼 둠)**: `WEB_ROOT=1` 이면 `/`·`/login`·`/all`·`/fav`·`/recent`·`/account`·`/approvals`·`/admin`·`/tool/*`·`/assets/*` 를 `WEB_ROOT_DIST`(WEB_BASE=/ 빌드)에서 내보냄. `/api`·`/t`·`/theme`·`/guide`·`/logout`·`/landing` 은 그대로. 절차·되돌리기: agent-page-web `CUTOVER.md` |
 | 나머지 | | `AGENT_DATA`·`AGENT_OWNERS`·`HOST`·`SHOW_HIDDEN`·`TLS_CERT`/`TLS_KEY`(TLS 1.2 이상) 는 위 표와 같음 |
 
 로컬 주인 토큰 쓰기(스크립트·관리 작업): `curl -H "X-Local-Owner: $(cat ~/agent-page/_data/.local_owner_token)" …` — 예: `curl -X POST -H "X-Local-Owner: $(cat ~/agent-page/_data/.local_owner_token)" localhost:8700/api/start -d '{"dir":"writer-local"}'`(`autostart.sh` 가 이렇게 부름). 토큰 값은 출력·커밋하지 말 것. 바꾸려면 파일을 지우고 포털 재시작(새로 만듦), 그 뒤 쓰는 스크립트는 파일을 다시 읽으면 됨. 포털은 이 헤더를 도구로 넘기지 않고, React 시범 서버(:8710)는 브라우저가 보낸 것도 버림.
@@ -215,12 +216,13 @@ bash agent-page-portal/scripts/start-fastportal.sh stop
 
 **React 화면(agent-page-web) — 같은 출처로**: `WEB_DIST=<빌드 폴더>` 를 주면 포털이 `WEB_PREFIX`(기본 `/app`) 아래에서 그 정적 파일을 직접 내보냅니다(따로 프록시 서버 없음 → 로컬 주인 판정이 섞이지 않음).
 `/app` → `/app/` 302 · 파일이 있으면 그 파일 · 없는 경로는 `index.html`(SPA 폴백: `/app/login`, `/app/tool/…`) · 없는 자산(`assets/…`·확장자 있는 이름)은 404 · `assets/`(해시 붙은 이름)는 `Cache-Control: public, max-age=31536000, immutable`, 그 밖(`index.html` 등)은 `no-cache` + ETag · HTML 엔 CSP(`'self'` 만)·`X-Frame-Options: SAMEORIGIN`.
-화면 파일은 로그인 없이도 내보내고(로그인 화면도 React), API 는 예전처럼 401(화면이 `/app/login?next=…` 로 보냄). 이미 로그인한 채 `/app/login` 이면 `next`(라우터 경로 `/all`·`/tool/x` 는 `/app/…` 로, `/t/<dir>/` 는 `/app/tool/<dir>`)로 302.
-React 랜딩이 읽는 `GET /web/landing.json`·`/app/web/landing.json`(분류·도구 수, 로그인 화면과 같은 값)도 이때만 열립니다. React 쪽은 `vite build --base /app/` + 라우터 `basename`·`toLogin` 이 `import.meta.env.BASE_URL` 을 따라야 합니다(agent-page-web 담당). 이미지 빌드는 multi-stage(Node 단계 `npm ci && npm run build` → `dist` 를 포털 이미지의 `WEB_DIST` 로 복사, 빌드 결과는 저장소에 넣지 않음).
+로그인 화면(`/app/login`)과 자산은 로그인 없이 내보내고, 그 밖의 화면 주소는 로그인 전이면 `/app/login?next=<라우터 경로>` 로 302(포털 `/` 처럼 — 화면이 401 을 받고 옮기는 것보다 빠르고 콘솔 오류 없음). API 는 예전처럼 401. 이미 로그인한 채 `/app/login` 이면 `next`(라우터 경로 `/all`·`/approvals`·`/admin`·`/tool/x` 는 `/app/…` 로, `/t/<dir>/` 는 `/app/tool/<dir>`, `/guide/` 같은 포털 경로는 그대로)로 302.
+운영 배포: agent-page-web `npm run deploy`(= `scripts/deploy.sh`) — 빌드를 `<상위>/_web/releases/<시각>` 에 두고 `_web/app` 링크를 원자적으로 바꿈(옛 해시 자산 유지, `--rollback`). 포털 재시작 필요 없음.
+React 랜딩이 읽는 `GET /web/landing.json`·`/app/web/landing.json`(분류·도구 수, 로그인 화면과 같은 값)도 이때만 열립니다. React 쪽은 빌드 base(`WEB_BASE`, 기본 `/app/`)를 라우터 `basename`·`toLogin`·로그아웃이 따릅니다(agent-page-web `src/lib/base.ts`). 이미지 빌드는 multi-stage(Node 단계 `npm ci && npm run build` → `dist` 를 포털 이미지의 `WEB_DIST` 로 복사, 빌드 결과는 저장소에 넣지 않음).
 
 워커는 **1개**(비동기)로 씁니다. `/api/events`(오래 걸린 작업 끝남)·도구 켜짐 캐시·GPU 캐시가 프로세스 메모리라, 워커를 늘리면 이 셋을 DB(또는 공유 저장소)로 옮겨야 합니다(세션·잠금·계정은 이미 DB). 막히는 일(DB·PIN 해시·nvidia-smi)은 스레드 풀에서 돌아 이벤트 루프를 막지 않습니다.
 
-계약 시험(`fastportal/tests/`): `contract_live.py --demo <id>:<pin> [--old <portal.py 포트>] [--new <fastportal 포트>]` 은 같은 요청을 예전 portal.py 와 새 포털에 보내(전환 뒤에는 portal.py 를 시험 포트에 따로 띄워 `--old` 로; 로컬 주인 요청엔 새 포털에만 토큰을 붙이고, 토큰 없는 로컬 = 401 도 확인) 상태·헤더·본문을 비교(읽기와 되돌리는 POST 만), `contract_fake.py` 는 임시 폴더에 두 포털과 가짜 도구를 띄워 프록시 헤더 규칙·본문·SSE·동시 스트림·끊김·잠금·프록시 뒤 판정·혼합형 `host`(127.0.0.2 에만 연 가짜 도구, 틀린 형식 7가지, start·stop 409)·`TOOL_BIND`·`WEB_DIST`(SPA 폴백·캐시·경로 넘기기·로그인 리디렉트)를 확인, `ui_compare.js` 는 Playwright 로 화면을 캡처해 비교합니다.
+계약 시험(`fastportal/tests/`): `contract_live.py --demo <id>:<pin> [--old <portal.py 포트>] [--new <fastportal 포트>]` 은 같은 요청을 예전 portal.py 와 새 포털에 보내(전환 뒤에는 portal.py 를 시험 포트에 따로 띄워 `--old` 로; 로컬 주인 요청엔 새 포털에만 토큰을 붙이고, 토큰 없는 로컬 = 401 도 확인) 상태·헤더·본문을 비교(읽기와 되돌리는 POST 만), `contract_fake.py` 는 임시 폴더에 두 포털과 가짜 도구를 띄워 프록시 헤더 규칙·본문·SSE·동시 스트림·끊김·잠금·프록시 뒤 판정·혼합형 `host`(127.0.0.2 에만 연 가짜 도구, 틀린 형식 7가지, start·stop 409)·`TOOL_BIND`·`WEB_DIST`(SPA 폴백·캐시·경로 넘기기·로그인 리디렉트·링크 바꿔 끼우기)·`WEB_ROOT`('/' 전환, 켠 경우·끈 경우)를 확인, `ui_compare.js` 는 Playwright 로 화면을 캡처해 비교합니다.
 의존성 라이선스는 모두 MIT·BSD·Apache-2.0 계열(certifi 만 MPL-2.0)로 상업 이용 가능 — 정확한 목록은 `fastportal/requirements.txt` 의 각 패키지.
 
 ## 출처·감사 (Credits)

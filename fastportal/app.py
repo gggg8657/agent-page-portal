@@ -11,6 +11,7 @@ env: portal.py 와 같음(PORT 기본 8720, AGENT_DATA, AGENT_OWNERS, TLS_CERT·
      BACKUP=1(매일 백업 — 기본 꺼짐: 운영 포털이 돌림) PORTAL_MAX_BODY(도구로 넘기는 본문 상한 바이트, 기본 600MB → 413)
      PORTAL_MAX_JSON(포털 API JSON 본문 상한, 기본 1MB) TOOLS_ALIVE_TTL(도구 켜짐 확인 캐시 초, 기본 5)
      TOOL_BIND(포털이 띄우는 도구의 BIND, 기본 127.0.0.1 — 컨테이너에선 0.0.0.0) WEB_DIST·WEB_PREFIX(React 빌드를 같은 출처로, 기본 꺼짐·/app)
+     WEB_ROOT=1·WEB_ROOT_DIST('/' 를 React 로 — 준비만, 기본 꺼짐)
 tools.json 의 "host": 그 도구는 다른 컨테이너·서버(http://<host>:<port>) — 상태 확인·프록시만, 시작·중지는 409"""
 import asyncio, hashlib, http.cookiejar, json, os, re, time, urllib.parse
 from contextlib import asynccontextmanager
@@ -387,12 +388,20 @@ def manage_post(ctx, c, p, req):
 # ── React 화면(agent-page-web 빌드) 같은 출처로 내보내기 ─────────────────────────
 # WEB_DIST(빌드 폴더)가 있으면 WEB_PREFIX(기본 /app) 아래에서 dist 를 내보냄. 파일이 없는 경로는 index.html(SPA 폴백),
 # 없는 자산(assets/·확장자 있는 파일)은 404. assets/ 는 해시 붙은 이름이라 1년 캐시, 그 밖(index.html 등)은 no-cache.
-# 로그인 없이도 화면 파일은 내보냄(로그인 화면도 React) — API 는 지금처럼 401. 규칙은 agent-page-web/server.py static() 과 같음
-WEB_DIST = os.path.realpath(os.environ["WEB_DIST"]) if os.environ.get("WEB_DIST") else ""
+# 로그인 화면(/app/login)과 자산은 로그인 없이 내보내고, 그 밖의 화면 주소는 로그인 전이면 /app/login?next= 로 302. 규칙은 agent-page-web/server.py static() 과 같음
+WEB_DIST = os.environ.get("WEB_DIST", "")   # 심볼릭 링크면 요청마다 따라감(배포 = 링크를 새 빌드로 바꿔 끼우기 — 포털 재시작 없이, agent-page-web scripts/deploy.sh)
 WEB_PREFIX = "/" + os.environ.get("WEB_PREFIX", "/app").strip("/")
 if WEB_DIST and (WEB_PREFIX == "/" or not re.fullmatch(r"(/[A-Za-z0-9_-]+)+", WEB_PREFIX)):
-    raise SystemExit(f"WEB_PREFIX 는 /app 처럼 하위 경로여야 합니다(지금 {WEB_PREFIX!r}) — '/' 로 옮기는 것은 아직 안 됨")
-WEB_SPA = re.compile(r"/($|[?#]|(all|fav|recent|account)([/?#]|$)|tool/)")   # React 라우터 경로(agent-page-web Landing.tsx SPA 와 같음)
+    raise SystemExit(f"WEB_PREFIX 는 /app 처럼 하위 경로여야 합니다(지금 {WEB_PREFIX!r}) — '/' 는 WEB_ROOT=1·WEB_ROOT_DIST 로")
+WEB_SPA = re.compile(r"/($|[?#]|(all|fav|recent|account|approvals|admin)([/?#]|$)|tool/)")   # React 라우터 경로(agent-page-web Landing.tsx SPA 와 같음)
+# '/' 전환(준비만 — 기본 꺼짐): WEB_ROOT=1 이면 포털 화면 주소(/ · /login · /all · /fav · /recent · /account · /approvals · /admin · /tool/*)와
+# 빌드 자산(/assets/* · /theme-boot.js · /fonts.css)을 WEB_ROOT_DIST(WEB_BASE=/ 로 만든 빌드, agent-page-web `npm run build:root`·deploy.sh --root)에서 내보낸다.
+# /api · /t · /theme · /guide · /logout · /landing 과 /app(WEB_DIST)은 그대로. 되돌리기: WEB_ROOT 를 지우고(=0) 포털 재시작 — 예전 화면이 바로 돌아옴
+WEB_ROOT = os.environ.get("WEB_ROOT", "0") == "1"
+WEB_ROOT_DIST = os.environ.get("WEB_ROOT_DIST", "")
+if WEB_ROOT and not WEB_ROOT_DIST:
+    raise SystemExit("WEB_ROOT=1 은 WEB_ROOT_DIST(WEB_BASE=/ 로 만든 React 빌드 폴더)가 필요합니다")
+WEB_ROOT_PATH = re.compile(r"/($|login|(all|fav|recent|account|approvals|admin)/?|tool/.+|assets/.+|theme-boot\.js|fonts\.css)")
 WEB_CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; "
            "connect-src 'self'; frame-src 'self'; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'")
 WEB_TYPES = {".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".html": "text/html; charset=utf-8",
@@ -401,7 +410,8 @@ WEB_TYPES = {".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; 
 
 
 def web_path(p):
-    return bool(WEB_DIST) and (p == WEB_PREFIX or p.startswith(WEB_PREFIX + "/") or p == "/web/landing.json")
+    return (bool(WEB_DIST) and (p == WEB_PREFIX or p.startswith(WEB_PREFIX + "/") or p == "/web/landing.json")) or \
+        (WEB_ROOT and (p == "/web/landing.json" or bool(WEB_ROOT_PATH.fullmatch(p))))
 
 
 def web_landing(ctx):
@@ -413,28 +423,33 @@ def web_landing(ctx):
 def web_file(ctx, p):
     if p == "/web/landing.json" or p == WEB_PREFIX + "/web/landing.json":
         return web_landing(ctx)
-    if p == WEB_PREFIX:
-        return ctx.bare(302, [("Location", WEB_PREFIX + "/" + ("?" + ctx.raw.split("?", 1)[1] if "?" in ctx.raw else ""))])
-    rel = urllib.parse.unquote(p[len(WEB_PREFIX) + 1:])
+    prefix, dist_env = (WEB_PREFIX, WEB_DIST) if WEB_DIST and (p == WEB_PREFIX or p.startswith(WEB_PREFIX + "/")) else ("", WEB_ROOT_DIST)   # /app 아래 또는 '/' 전환(WEB_ROOT)
+    if prefix and p == prefix:
+        return ctx.bare(302, [("Location", prefix + "/" + ("?" + ctx.raw.split("?", 1)[1] if "?" in ctx.raw else ""))])
+    rel = urllib.parse.unquote(p[len(prefix) + 1:])
     if rel == "login" and core.SID_RE.search(ctx.cookie) and ctx.auth() and ctx.uid != "owner":   # 이미 로그인 → 랜딩 대신 바로(포털 /login·server.py 와 같음)
         nxt = core.safe_next(urllib.parse.parse_qs(urllib.parse.urlsplit(ctx.raw).query).get("next", ["/"])[0])
         m = re.fullmatch(r"/t/([a-z0-9-]+)/?", nxt)
         if m:
             nxt = f"/tool/{m[1]}"
         if WEB_SPA.match(nxt):   # React 의 next 는 라우터 기준(/all, /tool/x) — 화면 주소로
-            nxt = WEB_PREFIX + nxt
+            nxt = prefix + nxt
         return ctx.redirect(nxt)
-    f = os.path.realpath(os.path.join(WEB_DIST, rel)) if rel and "\x00" not in rel else ""
-    if not (f and f.startswith(WEB_DIST + os.sep) and os.path.isfile(f)):
+    dist = os.path.realpath(dist_env)
+    f = os.path.realpath(os.path.join(dist, rel)) if rel and "\x00" not in rel else ""
+    if not (f and f.startswith(dist + os.sep) and os.path.isfile(f)):
         if rel.startswith("assets/") or re.search(r"\.[A-Za-z0-9]{1,12}$", rel.rsplit("/", 1)[-1]):
             return ctx.send({"error": "not found"}, code=404)   # 없는 자산은 index.html 이 아니라 404(옛 해시 파일 요청 등)
-        f = os.path.join(WEB_DIST, "index.html")               # SPA 라우팅(/app/login, /app/tool/…, /app/account 등)
+        f = os.path.join(dist, "index.html")               # SPA 라우팅(/app/login, /app/tool/…, /app/account 등)
         if not os.path.isfile(f):
-            return ctx.send({"error": "WEB_DIST 에 index.html 이 없습니다"}, code=503)
+            return ctx.send({"error": ("WEB_DIST" if prefix else "WEB_ROOT_DIST") + " 에 index.html 이 없습니다"}, code=503)
+        if rel != "login" and not ctx.auth():   # 로그인 전 화면 주소 → 로그인으로(포털 / 처럼 302 — 화면이 401 을 받고 옮기는 것보다 빠르고 콘솔 오류 없음)
+            q = ctx.raw.split("?", 1)[1] if "?" in ctx.raw else ""
+            return ctx.bare(302, [("Location", prefix + "/login?next=" + urllib.parse.quote("/" + rel + ("?" + q if q else ""), safe=""))])
     ext = os.path.splitext(f)[1].lower()
     st = os.stat(f)
     etag = f'"{int(st.st_mtime)}-{st.st_size}"'
-    immutable = f.startswith(os.path.join(WEB_DIST, "assets") + os.sep)
+    immutable = f.startswith(os.path.join(dist, "assets") + os.sep)
     hd = [("ETag", etag), ("Cache-Control", "public, max-age=31536000, immutable" if immutable else "no-cache"), ("X-Content-Type-Options", "nosniff"),
           ("Referrer-Policy", "same-origin")]
     if ext == ".html":
