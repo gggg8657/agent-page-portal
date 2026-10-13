@@ -15,7 +15,7 @@ KAERI 캐릭터 '파동이' 3D·2D 리그. 말(자연어)을 로컬 LLM 이 **�
 | GET | `api/gpu` | 서버 GPU 사용률·온도 | 30초 캐시 | - |
 | GET | `api/poll?since=<id>` | 바깥에서 넣은 명령 가져오기 | - | 예 (사용자별 큐) |
 | GET | `static/<파일>` | 화면용 JS(three.js·플러그인·펫 스크립트) | - | - |
-| GET | `ref/<파일>` | 화면 '원본 자료' 창의 그림(정해진 31개 이름만, 그 밖은 404) | - | - |
+| GET | `ref/<파일>` | 화면 '원본 자료' 창의 그림 — **관리자(owner)만**, 다른 사용자는 403(정해진 31개 이름만, 그 밖은 404) | - | - |
 | POST | `api/command` | 자연어 → steps | LLM, 약 5~15초 | - |
 | POST | `api/pet` | 포털 펫의 대답·혼잣말 → steps (+도구 추천) | LLM | - (상태는 클라이언트가 보냄) |
 | POST | `api/push` | 명령을 큐에 넣기(열린 화면이 실행) | `text` 면 LLM | 예 (사용자별 큐) |
@@ -169,5 +169,5 @@ setInterval(async () => {
 - 기념일 옷 고르기, 낱말 규칙(LLM 없을 때), 립싱크(TTS 음량으로 입 움직임), 브라우저 음성(Web Speech) 대체, .glb·PNG·표정 시트 내보내기는 전부 브라우저에서 계산합니다(API 없음).
 - 브라우저 콘솔 API(화면 안): `padong.do('wave',2)`, `padong.say('안녕')`, `padong.expr('wink')`, `padong.command('춤춰')`, `padong.play(id)`, `padong.run(steps)`, `padong.stop()`.
 - **포털 펫**: 포털 페이지가 `static/pet.js` 를 넣고, 그 스크립트가 `?pet=1` 화면을 iframe 으로 띄워 `postMessage({padong:1, cmd:...})`(`run`·`play`·`stop`·`expr`·`look`·`mode`·`sound`·`outfit` 등)로 조종합니다. iframe 은 `{padong:1, ev:...}`(`ready`·`move`·`bubble`·`done`·`click`·`dblclick`·`drag`·`menu`·`script`·`stage` 등)로 알립니다. 같은 출처(origin)끼리만 받습니다. 펫은 `walk`/`run`/`fly` 를 `jump` 로 바꿔 실행하고(이동은 바깥 페이지가 담당), 날씨·GPU 는 `api/weather`·`api/gpu` 로, 긴 작업 완료 알림은 포털의 `/api/events` 로 받습니다. 펫 상태(켜짐·이름·위치·친밀도·대화)는 브라우저 localStorage 에만 있습니다.
-- `ref/<파일>`: 화면 '원본 자료' 창이 부르는 `cha_padong_{intro,full01,turn,pose01,full02,pose02,pic01,pic02,pic03,credit}.jpg`·`cha_padong_turn.gif`·`wall_01.jpg`~`wall_20.jpg` 만 내줍니다(서버의 허용 목록 `REF_FILES`). 폴더에 다른 파일을 넣어도 나가지 않고, `../` 같은 경로는 404.
+- `ref/<파일>`: 화면 '원본 자료' 창이 부르는 `cha_padong_{intro,full01,turn,pose01,full02,pose02,pic01,pic02,pic03,credit}.jpg`·`cha_padong_turn.gif`·`wall_01.jpg`~`wall_20.jpg` 만 내줍니다(서버의 허용 목록 `REF_FILES`). 폴더에 다른 파일을 넣어도 나가지 않고, `../` 같은 경로는 404. 비공개 원본이라 **관리자(owner)만** 받을 수 있고, 다른 사용자는 403 입니다. `api/info` 의 `ref`(참/거짓)로 볼 수 있는지 알려 주며, 화면은 거짓이면 '원본 자료' 버튼을 숨깁니다.
 - 공유 데이터: `api/weather`·`api/gpu`·포털 도구 목록 캐시는 모든 사용자가 같이 씁니다. 사용자별로 나뉘는 건 push/poll 큐뿐입니다.
