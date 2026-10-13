@@ -12,3 +12,20 @@ html[data-ag-theme^="trendy"] table th{font-size:12px}
 html[data-ag-theme="classic-dark"] :is(.tabs button.on,button.primary){color:#17171a}
 /* 증명서 미리보기·디자인 견본·직인/로고 썸네일은 원래 흰 종이 그대로 */
 html[data-ag-theme$="dark"] :is(.designs img,#view img,.thumb){background:#fff}
+
+/* v2 — 작업대: 탭은 세그먼트(고른 조각 = 표면+선), 판·미리보기 틀은 1px 선 8px, 강조는 청록 토큰 하나 (증명서 미리보기·견본 그림은 그대로) */
+html[data-ag-theme^="v2"] .tabs{gap:2px;padding:2px;background:var(--ag-surface-2);border:1px solid var(--ag-line);border-radius:var(--ag-r-md)}
+html[data-ag-theme^="v2"] .tabs button{border-radius:var(--ag-r-sm);border-color:transparent;background:transparent;color:var(--ag-ink-2);padding:4px 9px}
+html[data-ag-theme^="v2"] .tabs button.on{background:var(--ag-surface);border-color:var(--ag-line-2);color:var(--ag-ink);font-weight:600}
+html[data-ag-theme^="v2"] .pane{border-color:var(--ag-line);border-radius:var(--ag-r-lg);background:var(--ag-surface);box-shadow:none;padding:10px 12px}
+html[data-ag-theme^="v2"] #view{border-color:var(--ag-line);border-radius:var(--ag-r-lg);background:var(--ag-surface-2)}
+html[data-ag-theme^="v2"] fieldset{border-radius:0;border-top-color:var(--ag-line)}
+html[data-ag-theme^="v2"] legend{color:var(--ag-ink);font-size:var(--ag-fs-sm);font-weight:650}
+html[data-ag-theme^="v2"] .designs button{border-radius:var(--ag-r-md);border-color:var(--ag-line);background:var(--ag-surface)}
+html[data-ag-theme^="v2"] .designs button.on{outline:1px solid var(--ag-accent);border-color:var(--ag-accent);background:var(--ag-accent-soft);color:var(--ag-accent-ink)}
+html[data-ag-theme^="v2"] .designs img{border-color:var(--ag-line);border-radius:var(--ag-r-xs)}
+html[data-ag-theme^="v2"] .thumb{border-color:var(--ag-line);border-radius:var(--ag-r-xs)}
+html[data-ag-theme^="v2"] :is(th,td){border-bottom-color:var(--ag-line)}
+html[data-ag-theme^="v2"] td a{color:var(--ag-accent-ink)}
+html[data-ag-theme^="v2"] .err{color:var(--ag-bad)}
+html[data-ag-theme^="v2"] .ok{color:var(--ag-ok)}

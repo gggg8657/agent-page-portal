@@ -7,3 +7,13 @@ html[data-ag-theme^="trendy"] #runs li{border-radius:var(--ag-r-xs);padding:3px 
 html[data-ag-theme^="trendy"] #runs li:hover{background:var(--ag-hover);color:var(--ag-accent-ink)}
 html[data-ag-theme^="trendy"] #dl{color:var(--ag-accent-ink)}
 html[data-ag-theme^="trendy"] audio{border-radius:var(--ag-r-full)}
+
+/* v2 — 작업대: 입력창·API 예시 1px 선 작은 둥글기, 내려받기 링크·강조 → 청록 토큰, 기록 목록은 촘촘한 줄 */
+html[data-ag-theme^="v2"]{--acc:var(--ag-accent-ink)}
+html[data-ag-theme^="v2"] textarea{border-color:var(--ag-line-2);border-radius:var(--ag-r-lg);background:var(--ag-surface)}
+html[data-ag-theme^="v2"] button.primary{background:var(--ag-accent);border-color:var(--ag-accent);color:var(--ag-on-accent)}
+html[data-ag-theme^="v2"] pre{background:var(--ag-surface-2);border:1px solid var(--ag-line);border-radius:var(--ag-r-md)}
+html[data-ag-theme^="v2"] #dl{color:var(--ag-accent-ink)}
+html[data-ag-theme^="v2"] audio{border-radius:var(--ag-r-lg)}
+html[data-ag-theme^="v2"] #runs li{border-radius:var(--ag-r-xs);padding:4px 6px;font-variant-numeric:tabular-nums;border-bottom:1px solid var(--ag-line)}
+html[data-ag-theme^="v2"] #runs li:hover{background:var(--ag-hover);color:var(--ag-ink)}
