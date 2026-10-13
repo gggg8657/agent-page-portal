@@ -2,48 +2,209 @@
 <html lang="ko"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>로그인 · AI Agent Portal</title>
+<title>로그인 · KAERI AI Agent Portal</title>
+<!-- 랜딩 겸 로그인(/login) — 모든 테마가 같은 배치, 색·모양만 테마 토큰. %…% 는 portal.py landing() 이 채움(도구 수·분류는 tools.json 에서).
+     #foot 은 서버가 채움(로컬 접속=서버 주인일 때 '지금 … 로 접속 중' — 로그인 전 /api/me 401 을 안 부르게). 스크립트가 쓰는 것: .lp-tabs button[data-t] · form#in · form#up · 필드 이름(id·pin·name·dept·remember) · .err · #dept · #foot -->
 <style>
-  :root{--bg:#f3f5f8;--fg:#1f2937;--muted:#6b7280;--line:#e5e7eb;--navy:#1f3a5f;--blue:#2563eb;--chip:#eef2f7;--bad:#dc2626;--card:#fff;--ring:#bfd3f6}
-  *{box-sizing:border-box}body{font:14px/1.5 -apple-system,"Pretendard","Apple SD Gothic Neo",system-ui,sans-serif;background:var(--bg);color:var(--fg);margin:0}
-  .top{background:var(--card);border-bottom:1px solid var(--line);padding:10px 20px}.logo{font-weight:800;color:var(--navy);font-size:16px}.logo small{font-weight:500;color:var(--muted);font-size:11px;margin-left:6px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;max-width:380px;margin:48px auto 0;padding:0 0 18px}
-  @media(max-width:420px){.card{margin:20px 16px 0}}
-  .tabs{display:flex;border-bottom:1px solid var(--line)}.tabs button{flex:1;border:none;background:none;padding:12px 0;font:inherit;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent}.tabs button.on{color:var(--navy);border-bottom-color:var(--navy)}
-  form{display:flex;flex-direction:column;gap:10px;padding:18px 20px 0}form[hidden]{display:none}
-  label{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px}
-  select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:6px;color:var(--fg);background:var(--card)}
-  input{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:6px;color:var(--fg)}input:focus{outline:2px solid var(--ring);border-color:var(--blue)}
-  .btn{background:var(--navy);color:#fff;border:none;border-radius:6px;padding:9px 0;font:inherit;font-weight:600;cursor:pointer;margin-top:4px}
-  .note{font-size:12px;color:var(--muted);margin:0}.err{font-size:12.5px;color:var(--bad);min-height:1.2em;margin:0}
-  .foot{text-align:center;font-size:12px;color:var(--muted);margin-top:14px}.foot a{color:var(--blue)}
-</style></head><body>
-<div class="top"><span class="logo">KAERI AI Agent Portal<small>내부망 로컬 LLM 에이전트</small></span></div>
-<div class="card">
-  <div class="tabs"><button data-t="in" class="on">로그인</button><button data-t="up">처음이에요 (가입)</button></div>
-  <form id="in"><label>아이디<input name="id" autocomplete="username" required autocapitalize="none"></label>
-    <label>PIN (숫자 4~8자리)<input name="pin" type="password" autocomplete="current-password" required></label>
-    <p class="err"></p><button class="btn">로그인</button></form>
-  <form id="up" hidden><label>아이디 <span>영문 소문자·숫자 (예: hong.gd) — 바꿀 수 없음</span><input name="id" required autocapitalize="none" pattern="[a-z0-9][a-z0-9_.\-]{1,31}"></label>
-    <label>이름<input name="name" required maxlength="40"></label><label>부서 (선택 — 부서장 승인 뒤 반영)<select name="dept" id="dept"><option value="">선택 안 함</option></select><span>목록에 없으면 관리자에게 요청하세요</span></label>
-    <label>PIN (숫자 4~8자리)<input name="pin" type="password" inputmode="numeric" autocomplete="new-password" required pattern="[0-9]{4,8}"></label>
-    <p class="note">PIN 은 서버에 해시로만 저장되어 아무도 볼 수 없습니다. 잊으면 관리자에게 초기화를 부탁하세요. 도구 기록은 계정마다 따로 저장됩니다.</p>
-    <p class="err"></p><button class="btn">가입하고 시작</button></form>
-</div>
-<div class="foot" id="foot"></div>
+  /* 기본값 = classic-light(예전 로그인 화면 색). 다른 테마는 아래에서 토큰(theme/tokens.css)으로 */
+  :root{--l-bg:#f3f5f8;--l-sf:#fff;--l-sf2:#f6f7f9;--l-ink:#1f2937;--l-ink2:#4b5563;--l-mut:#6b7280;--l-line:#e5e7eb;--l-line2:#d1d5db;
+    --l-pri:#1f3a5f;--l-pri-ink:#1f3a5f;--l-link:#2563eb;--l-soft:#eef2f7;--l-bad:#dc2626;--l-ring:#bfd3f6;--l-on:#fff;
+    --l-r:10px;--l-rc:6px;--l-sh:0 8px 24px rgba(31,41,55,.08);--l-font:-apple-system,"Pretendard","Apple SD Gothic Neo",system-ui,sans-serif}
+  html[data-ag-theme]:not([data-ag-theme="classic-light"]){--l-bg:var(--ag-bg);--l-sf:var(--ag-surface);--l-sf2:var(--ag-surface-2);--l-ink:var(--ag-ink);--l-ink2:var(--ag-ink-2);
+    --l-mut:var(--ag-ink-3);--l-line:var(--ag-line);--l-line2:var(--ag-line-2);--l-link:var(--ag-accent-ink);--l-soft:var(--ag-accent-soft);--l-bad:var(--ag-bad);--l-ring:var(--ag-ring)}
+  html[data-ag-theme="classic-dark"]{--l-pri:var(--ag-brand);--l-pri-ink:var(--ag-brand-ink);--l-soft:var(--ag-surface-3);--l-sh:var(--ag-shadow-3)}
+  html[data-ag-theme^="trendy"]{--l-pri:var(--ag-grad);--l-pri-ink:var(--ag-accent-ink);--l-r:var(--ag-r-xl);--l-rc:var(--ag-r-md);--l-sh:var(--ag-shadow-3);--l-font:var(--ag-sans)}
+  html[data-ag-theme^="v2"]{--l-pri:var(--ag-accent);--l-pri-ink:var(--ag-accent-ink);--l-r:var(--ag-r-xl);--l-rc:var(--ag-r-md);--l-sh:var(--ag-shadow-3);--l-font:var(--ag-sans)}
+
+  *{box-sizing:border-box}
+  html body.lp{margin:0;background:var(--l-bg);color:var(--l-ink);font:15px/1.6 var(--l-font);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+  html[data-ag-theme^="trendy"] body.lp{background-image:var(--ag-glow);background-repeat:no-repeat}
+  .lp-in{max-width:1200px;margin:0 auto;padding-left:24px;padding-right:24px}
+  html .lp a{color:var(--l-link)}
+  html .lp :is(a,button,input,select):focus-visible{outline:2px solid var(--l-link);outline-offset:2px}
+
+  /* 머리줄 */
+  .lp-top{background:var(--l-sf);border-bottom:1px solid var(--l-line)}
+  html[data-ag-theme^="trendy"] .lp-top{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--ag-bg) 80%,transparent);backdrop-filter:saturate(1.5) blur(14px);-webkit-backdrop-filter:saturate(1.5) blur(14px)}
+  .lp-top .lp-in{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding-top:10px;padding-bottom:10px}
+  html body .lp-logo{display:inline-flex;align-items:center;gap:10px;color:var(--l-pri-ink);text-decoration:none;font-weight:800;font-size:16px;letter-spacing:-.01em;min-width:0}
+  html[data-ag-theme$="dark"] .lp-logo,html[data-ag-theme^="trendy"] .lp-logo,html[data-ag-theme^="v2"] .lp-logo{color:var(--l-ink)}
+  .lp-mark{width:26px;height:26px;border-radius:calc(var(--l-rc) + 1px);background:var(--l-pri);flex:none;position:relative}
+  .lp-mark::after{content:"";position:absolute;inset:7px 6px 7px 7px;border:2px solid #fff;border-right:none;border-radius:2px 0 0 2px}
+  .lp-flag{font-size:12px;color:var(--l-ink2);border:1px solid var(--l-line2);border-radius:4px;padding:1px 7px;white-space:nowrap}
+  .lp-sp{flex:1}
+  html body .lp-nav{font-size:14px;color:var(--l-ink2);text-decoration:none;padding:10px 12px;border-radius:var(--l-rc);min-height:44px;display:inline-flex;align-items:center}
+  html body .lp-nav:hover{background:var(--l-sf2);color:var(--l-ink)}
+
+  /* 버튼 */
+  html body .lp-btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 20px;border-radius:var(--l-rc);background:var(--l-pri);color:var(--l-on);border:1px solid transparent;
+    font:inherit;font-size:15px;font-weight:600;text-decoration:none;cursor:pointer;white-space:nowrap}
+  html body .lp-btn:hover{filter:brightness(1.08)}
+  html body .lp-btn.ghost{background:var(--l-sf);color:var(--l-ink);border-color:var(--l-line2)}
+  html body .lp-btn.ghost:hover{background:var(--l-sf2);filter:none}
+  html body .lp-btn.sm{min-height:40px;padding:0 16px;font-size:14px}
+  html[data-ag-theme^="trendy"] .lp-btn:not(.ghost){box-shadow:0 1px 2px rgba(20,20,60,.18),0 8px 18px -10px color-mix(in srgb,var(--ag-accent) 80%,transparent),inset 0 1px 0 rgba(255,255,255,.2)}
+
+  /* 히어로: 소개 | 로그인 카드 / 캡처 */
+  .lp-hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,400px);grid-template-areas:"pitch card" "shot card";column-gap:48px;row-gap:28px;align-items:start;padding-top:56px;padding-bottom:48px}
+  .lp-pitch{grid-area:pitch;display:flex;flex-direction:column;gap:18px;min-width:0}
+  .lp-kicker{margin:0;font-size:13px;font-weight:600;color:var(--l-link)}
+  html[data-ag-theme="classic-light"] .lp-kicker,html:not([data-ag-theme]) .lp-kicker{color:var(--l-pri)}
+  .lp h1{margin:0;font-size:42px;line-height:1.25;font-weight:800;letter-spacing:-.025em;word-break:keep-all}
+  .lp-lead{margin:0;font-size:17px;line-height:1.7;color:var(--l-ink2);max-width:560px;word-break:keep-all}
+  .lp-cta{display:flex;flex-wrap:wrap;gap:12px}
+  .lp-shot{grid-area:shot;margin:0;border:1px solid var(--l-line);border-radius:var(--l-r);overflow:hidden;background:var(--l-sf);box-shadow:var(--l-sh);aspect-ratio:1440/620}
+  .lp-shot img{display:block;width:100%;height:100%;object-fit:cover;object-position:top left}
+
+  /* 로그인/가입 카드 */
+  #login{grid-area:card;background:var(--l-sf);border:1px solid var(--l-line);border-radius:var(--l-r);padding:24px;box-shadow:var(--l-sh);display:flex;flex-direction:column;gap:14px;scroll-margin-top:72px}
+  #login h2{margin:0;font-size:18px;letter-spacing:-.01em}
+  .lp-tabs{display:flex;border:1px solid var(--l-line2);border-radius:var(--l-rc);overflow:hidden;padding:0}
+  .lp-tabs button{flex:1;min-height:44px;border:0;background:var(--l-sf);color:var(--l-ink2);font:inherit;font-size:14px;font-weight:500;cursor:pointer}
+  .lp-tabs button+button{border-left:1px solid var(--l-line2)}
+  .lp-tabs button.on{background:var(--l-soft);color:var(--l-pri-ink);font-weight:700}
+  html[data-ag-theme$="dark"] .lp-tabs button.on{color:var(--l-ink)}
+  #login form{display:flex;flex-direction:column;gap:12px;margin:0}
+  #login form[hidden]{display:none}
+  #login label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:var(--l-ink)}
+  #login label>span{font-weight:400;font-size:12px;color:var(--l-mut)}
+  #login :is(input:not([type=checkbox]),select){min-height:44px;width:100%;padding:0 12px;border:1px solid var(--l-line2);border-radius:var(--l-rc);background:var(--l-sf);color:var(--l-ink);font:inherit;font-size:15px;font-weight:400;box-shadow:none}
+  #login :is(input:not([type=checkbox]),select):focus{outline:none;border-color:var(--l-link);box-shadow:0 0 0 3px var(--l-ring)}
+  #login input::placeholder{color:var(--l-mut);opacity:1}
+  #login label.lp-keep{flex-direction:row;align-items:center;gap:10px;font-weight:400;font-size:14px;color:var(--l-ink2);min-height:32px;cursor:pointer}
+  #login .lp-keep input{width:18px;height:18px;margin:0;accent-color:var(--l-link);flex:none}
+  html[data-ag-theme="classic-light"] #login .lp-keep input{accent-color:var(--l-pri)}
+  #login .lp-btn{width:100%;min-height:48px;margin-top:2px}
+  .lp .note{margin:0;font-size:13px;line-height:1.6;color:var(--l-mut)}
+  .lp .err{margin:0;font-size:13px;color:var(--l-bad);min-height:1.3em}
+  .lp .err:empty{min-height:0}
+  #foot{font-size:13px;color:var(--l-mut);text-align:center}
+  #foot:empty{display:none}
+
+  /* 띠 */
+  .lp-band{border-top:1px solid var(--l-line);background:var(--l-sf)}
+  .lp-sec{padding-top:52px;padding-bottom:52px;display:flex;flex-direction:column;gap:24px}
+  .lp h2.lp-h{margin:0;font-size:26px;letter-spacing:-.015em}
+  .lp-hd{display:flex;flex-wrap:wrap;align-items:baseline;gap:12px}
+  .lp-hd span{font-size:14px;color:var(--l-ink2)}
+  .lp-feats{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px}
+  .lp-feats li{display:flex;flex-direction:column;gap:8px}
+  .lp-ic{width:38px;height:38px;border-radius:var(--l-rc);background:var(--l-soft);color:var(--l-link);display:flex;align-items:center;justify-content:center}
+  html[data-ag-theme="classic-light"] .lp-ic{color:var(--l-pri)}
+  .lp-ic svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .lp-feats h3{margin:0;font-size:17px}
+  .lp-feats p,.lp-steps p{margin:0;font-size:14px;line-height:1.7;color:var(--l-ink2);word-break:keep-all}
+  .lp-groups{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+  .lp-g{background:var(--l-sf);border:1px solid var(--l-line);border-radius:calc(var(--l-r) - 2px);padding:16px;display:flex;flex-direction:column;gap:6px;min-width:0}
+  .lp-gh{display:flex;justify-content:space-between;gap:8px;font-size:15px}
+  .lp-gh span{font-weight:700;color:var(--l-link);font-variant-numeric:tabular-nums}
+  html[data-ag-theme="classic-light"] .lp-gh span{color:var(--l-pri)}
+  .lp-g p{margin:0;font-size:13px;line-height:1.6;color:var(--l-ink2);overflow-wrap:anywhere}
+  .lp-steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+  .lp-steps li{border:1px solid var(--l-line);border-radius:calc(var(--l-r) - 2px);padding:20px;display:flex;flex-direction:column;gap:6px;background:var(--l-bg)}
+  .lp-steps .n{font-size:13px;font-weight:700;color:var(--l-link)}
+  html[data-ag-theme="classic-light"] .lp-steps .n{color:var(--l-pri)}
+  .lp-steps b{font-size:16px}
+
+  /* 꼬리말 */
+  .lp-foot{border-top:1px solid var(--l-line)}
+  .lp-foot .lp-in{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;padding-top:20px;padding-bottom:24px;font-size:13px;color:var(--l-ink2)}
+  .lp-foot [data-sig]{flex:1;min-width:0}
+  html .lp-foot a{padding:8px 0}
+
+  @media (max-width:900px){
+    .lp-hero{grid-template-columns:minmax(0,1fr);grid-template-areas:"pitch" "card" "shot";padding-top:32px;row-gap:24px}
+    #login{max-width:520px;width:100%}
+  }
+  @media (max-width:600px){
+    .lp-in{padding-left:16px;padding-right:16px}
+    .lp h1{font-size:30px}
+    .lp-lead{font-size:15.5px}
+    .lp-flag{order:3;font-size:11.5px}
+    .lp-sp{display:none}
+    html body .lp-logo{font-size:15px;gap:8px;margin-right:auto}
+    html body .lp-top .lp-nav{padding:10px 6px}
+    html body .lp-top .lp-btn.sm{padding:0 12px}
+    #login{padding:18px}
+    .lp-sec{padding-top:36px;padding-bottom:36px}
+    .lp h2.lp-h{font-size:22px}
+    .lp-feats,.lp-steps{grid-template-columns:minmax(0,1fr)}
+    .lp-cta .lp-btn{flex:1}
+  }
+</style></head><body class="lp">
+<header class="lp-top"><div class="lp-in">
+  <a class="lp-logo" href="/login"><span class="lp-mark" aria-hidden="true"></span>KAERI AI Agent Portal</a>
+  <span class="lp-flag">내부 시험용 · 배포용 아님</span>
+  <span class="lp-sp"></span>
+  <a class="lp-nav" href="/guide/">사용 설명서</a>
+  <a class="lp-btn sm" href="#login" data-go="in">로그인</a>
+</div></header>
+<main>
+<section class="lp-hero lp-in">
+  <div class="lp-pitch">
+    <p class="lp-kicker">폐쇄망 · 로컬 LLM · 계정별 데이터 분리</p>
+    <h1>연구실 업무를 돕는<br>로컬 AI 도구 %N_TOOLS%개</h1>
+    <p class="lp-lead">문서·회의·그림·데이터·연구 도구를 브라우저에서 바로 씁니다. 모든 계산과 AI 처리는 연구소 안 서버 한 대에서 돌아가서, 올린 자료가 밖으로 나가지 않습니다.</p>
+    <div class="lp-cta"><a class="lp-btn" href="#login" data-go="in">로그인</a><a class="lp-btn ghost" href="#login" data-go="up">처음이면 가입하기</a></div>
+  </div>
+  <figure class="lp-shot"><img src="/landing/home.png" alt="포털 홈 화면 — 검색칸, 분류 칩, 인기·신규 도구 목록" width="1440" height="900"></figure>
+  <div id="login" role="region" aria-label="로그인·가입">
+    <div class="lp-tabs" role="tablist"><button type="button" role="tab" data-t="in" class="on" aria-selected="true">로그인</button><button type="button" role="tab" data-t="up" aria-selected="false">처음이에요 (가입)</button></div>
+    <form id="in"><label>아이디<input name="id" autocomplete="username" required autocapitalize="none" spellcheck="false" placeholder="예: hong.gd"></label>
+      <label>PIN<input name="pin" type="password" autocomplete="current-password" required placeholder="숫자 4~8자리"></label>
+      <label class="lp-keep"><input type="checkbox" name="remember" checked>이 PC에서 로그인 유지 (30일)</label>
+      <p class="err" role="alert"></p><button class="lp-btn">로그인</button>
+      <p class="note">PIN 을 잊었으면 관리자에게 초기화를 요청하세요. 10분 안에 5번 틀리면 10분 동안 잠깁니다. 공용 PC 면 '로그인 유지'를 끄세요 — 브라우저를 닫으면 로그아웃됩니다.</p></form>
+    <form id="up" hidden><label>아이디 <span>영문 소문자·숫자 (예: hong.gd) — 바꿀 수 없음</span><input name="id" required autocapitalize="none" spellcheck="false" pattern="[a-z0-9][a-z0-9_.\-]{1,31}"></label>
+      <label>이름<input name="name" required maxlength="40"></label><label>부서 (선택 — 부서장 승인 뒤 반영)<select name="dept" id="dept"><option value="">선택 안 함</option></select><span>목록에 없으면 관리자에게 요청하세요</span></label>
+      <label>PIN (숫자 4~8자리)<input name="pin" type="password" inputmode="numeric" autocomplete="new-password" required pattern="[0-9]{4,8}"></label>
+      <p class="note">PIN 은 서버에 해시로만 저장되어 아무도 볼 수 없습니다. 잊으면 관리자에게 초기화를 부탁하세요. 도구 기록은 계정마다 따로 저장됩니다.</p>
+      <p class="err" role="alert"></p><button class="lp-btn">가입하고 시작</button></form>
+    <div id="foot">%FOOT%</div>
+  </div>
+</section>
+
+<section class="lp-band" aria-label="특징"><div class="lp-in lp-sec">
+  <ul class="lp-feats">
+    <li><span class="lp-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span><h3>자료가 밖으로 나가지 않음</h3><p>AI 모델이 연구소 서버 안에서 돌아갑니다. 인터넷 없이 동작합니다.</p></li>
+    <li><span class="lp-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg></span><h3>내 기록은 나만</h3><p>계정마다 작업 기록과 올린 파일이 따로 저장됩니다. 주간보고 취합처럼 같이 쓰는 것은 화면에 표시합니다.</p></li>
+    <li><span class="lp-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10 20a2 2 0 0 0 4 0"/></svg></span><h3>긴 작업은 알려 드림</h3><p>영상·구조 예측처럼 오래 걸리는 작업이 끝나면 화면 구석의 파동이가 알려 줍니다.</p></li>
+  </ul>
+</div></section>
+
+<section class="lp-in lp-sec" aria-labelledby="lpTools">
+  <div class="lp-hd"><h2 class="lp-h" id="lpTools">어떤 도구가 있나</h2><span>분류 %N_GROUPS%개 · 도구 %N_TOOLS%개</span></div>
+  <ul class="lp-groups">%GROUPS%</ul>
+</section>
+
+<section class="lp-band" aria-labelledby="lpFirst"><div class="lp-in lp-sec">
+  <h2 class="lp-h" id="lpFirst">처음이라면</h2>
+  <ol class="lp-steps">
+    <li><span class="n">1</span><b>가입</b><p>아이디(영문 소문자)·이름·PIN(숫자 4~8자리)을 정하고 부서를 고릅니다.</p></li>
+    <li><span class="n">2</span><b>바로 사용</b><p>가입하면 바로 도구를 쓸 수 있습니다. 부서는 부서장이 승인하면 반영됩니다.</p></li>
+    <li><span class="n">3</span><b>1분 둘러보기</b><p>첫 로그인 때 화면 곳곳을 짚어 주는 안내가 나옵니다. 건너뛰어도 나중에 다시 볼 수 있습니다.</p></li>
+  </ol>
+</div></section>
+</main>
+<footer class="lp-foot"><div class="lp-in">%SIG%<a href="/guide/agent-portal.pdf">사용 설명서 (PDF)</a><a href="/guide/#licenses">출처·라이선스</a></div></footer>
 <script>
 const q = new URLSearchParams(location.search), raw = q.get('next') || '/';
-const next = /^\/(?![\/\\])/.test(raw) ? raw : '/';   // 같은 사이트 안으로만
-const show = t => { document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t)); document.querySelectorAll('form').forEach(f => f.hidden = f.getAttribute('id') !== t); document.querySelector('#' + t + ' input').focus(); };
-document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => show(b.dataset.t));
-if (location.hash === '#pin') location.replace('/account#pin'); else if (location.hash === '#up') show('up');   // PIN 바꾸기는 계정 설정으로 옮김
+const next = /^\/(?![\/\\])/.test(raw) ? raw : '/';   // 같은 사이트 안으로만 (서버 portal.py safe_next 와 같은 규칙)
+const show = (t, focus = true) => {
+  document.querySelectorAll('.lp-tabs button').forEach(b => { b.classList.toggle('on', b.dataset.t === t); b.setAttribute('aria-selected', b.dataset.t === t); });
+  document.querySelectorAll('#login form').forEach(f => f.hidden = f.getAttribute('id') !== t);
+  if (focus) document.querySelector('#' + t + ' input').focus({ preventScroll: true });
+};
+document.querySelectorAll('.lp-tabs button').forEach(b => b.onclick = () => show(b.dataset.t));
+document.querySelectorAll('[data-go]').forEach(a => a.onclick = e => { e.preventDefault(); show(a.dataset.go); document.getElementById('login').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }); });
+if (location.hash === '#pin') location.replace('/account#pin'); else if (location.hash === '#up') show('up', false);   // PIN 바꾸기는 계정 설정으로 옮김
 fetch('/api/depts').then(r => r.json()).then(j => { for (const d of j.depts || []) dept.add(new Option(d, d)); }).catch(() => {});
-fetch('/api/me').then(r => r.ok ? r.json() : null).then(m => { if (m) foot.innerHTML = `지금 <b>${m.name.replace(/[&<>]/g, '')}</b> 로 접속 중 · <a href="/">포털로</a> · <a href="/account">계정 설정·PIN 바꾸기</a> · <a href="/logout">로그아웃</a>`; }).catch(() => {});
-document.querySelectorAll('form').forEach(f => f.onsubmit = async e => {
+document.querySelectorAll('#login form').forEach(f => f.onsubmit = async e => {
   e.preventDefault(); const k = f.getAttribute('id'), err = f.querySelector('.err'); err.textContent = '';
-  const url = { in: '/api/login', up: '/api/signup' }[k];
+  const url = { in: '/api/login', up: '/api/signup' }[k], body = Object.fromEntries(new FormData(f));
+  if (k === 'in') body.remember = f.querySelector('[name=remember]').checked;   // 끄면 브라우저 닫으면 로그아웃(서버 12시간)
   try {
-    const r = await fetch(url, { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(f))) }), j = await r.json();
+    const r = await fetch(url, { method: 'POST', body: JSON.stringify(body) }), j = await r.json();
     if (j.error) { err.textContent = j.error; return; }
     location.href = next;
   } catch (x) { err.textContent = '서버에 연결하지 못했습니다'; }

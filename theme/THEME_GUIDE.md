@@ -169,7 +169,9 @@ html[data-ag-theme^="v2"] .chips button.on{background:var(--ag-accent-soft);colo
 - [ ] 강조는 청록 하나 — 도구 고유 파랑·보라 강조가 남았으면 토큰으로(분류색·차트 계열색은 그대로)
 - [ ] 대비 AA, 그림·캔버스·문서 '종이'(`data-ag-paper`) 색 그대로, 콘솔 오류 0
 
-**포털 화면(참고)**: v2 일 때 포털은 `portal.css` 대신 `portal-v2.css` 를 붙이고, 홈·로그인·계정 화면의 마크업을 `v2/home.html` · `v2/login.html` · `v2/account.html` 로 바꿔 내보낸다
+**포털 화면(참고)**: v2 일 때 포털은 `portal.css` 대신 `portal-v2.css` 를 붙이고, 홈·계정 화면의 마크업을 `v2/home.html` · `v2/account.html` 로 바꿔 내보낸다(로그인 랜딩 `login.html` 은 모든 테마가 한 배치 — 자기 `<style>` 안에서 `--ag-*` 토큰으로 색·모양만 바꿈, classic-light 는 예전 로그인 색)
 (portal.py `v2_page`: 원래 파일의 style 부터 첫 script 앞까지를 교체, **스크립트는 원래 것 그대로** — id·폼 이름을 바꾸면 안 됨, selftest 가 확인).
 v2 ↔ 다른 계열로 바꾸면 포털 화면은 저장 뒤 새로고침(boot.js `agTheme.set`, 다른 탭은 storage 이벤트로). 도구·설명서 화면은 새로고침 없이 바로 바뀜.
 v2 포털 화면에는 `palette-v2.js`(Ctrl+K 명령 팔레트)가 붙는다. 설명서(/guide) v2 손질은 `guide.css` 끝 v2 절(화면 전용, 인쇄는 원래 모양).
+
+**첫 로그인 둘러보기**(`theme/tour.js`): 포털 홈(classic·trendy·v2 공통)에만 붙는다. 색은 `--ag-*` 토큰(없으면 classic-light 값), 비출 요소는 파일 안 `TARGETS` 표(레이아웃별 선택자). 홈 배치를 바꿔 `.search`·`#chips`·`#cols`·`#user`·`#agHelpBtn` 이 없어지면 그 단계는 가운데 말풍선으로 뜬다 — 바꿀 때 표도 같이 고칠 것.

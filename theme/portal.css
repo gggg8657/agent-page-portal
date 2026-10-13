@@ -1,4 +1,4 @@
-/* 포털 자체 화면(홈·로그인·계정·승인·관리) — classic-dark · trendy-light · trendy-dark. classic-light 는 이 파일을 안 붙임.
+/* 포털 자체 화면(홈·계정·승인·관리 — 로그인 랜딩은 login.html 이 토큰으로 직접) — classic-dark · trendy-light · trendy-dark. classic-light 는 이 파일을 안 붙임.
    화면 CSS 가 쓰는 변수(--bg·--card·--navy …)를 토큰으로 바꾸고, 트렌디는 모양(둥글기·그림자·간격·글꼴)까지 다시 잡는다. */
 
 /* ── 공통: 변수 → 토큰 ─────────────────────────────────────────── */
@@ -110,19 +110,6 @@ html[data-ag-theme^="trendy"] dialog.form .fb{padding:16px 18px;gap:10px}
 html[data-ag-theme^="trendy"] :is(input,select,textarea){border-radius:var(--ag-r-md);border-color:var(--ag-line-2);transition:border-color .15s,box-shadow .15s}
 html[data-ag-theme^="trendy"] :is(input,select,textarea):focus{outline:none;border-color:var(--ag-accent);box-shadow:0 0 0 3px var(--ag-ring)}
 html[data-ag-theme^="trendy"] .search input:focus{box-shadow:none}
-
-/* 로그인 */
-html[data-ag-theme^="trendy"] body>.card{max-width:400px;margin-top:64px;border-radius:var(--ag-r-xl);box-shadow:var(--ag-shadow-3);overflow:hidden;padding-bottom:22px}
-html[data-ag-theme^="trendy"] body>.card:hover{transform:none}
-html[data-ag-theme^="trendy"] .tabs{margin:6px;padding:4px;gap:4px;border:none;border-radius:var(--ag-r-md);background:var(--ag-surface-2)}
-html[data-ag-theme^="trendy"] .tabs button{border:none;border-radius:8px;padding:9px 0;color:var(--ag-ink-2)}
-html[data-ag-theme^="trendy"] .tabs button.on{background:var(--ag-surface);color:var(--ag-ink);box-shadow:var(--ag-shadow-1),0 0 0 1px var(--ag-line)}
-html[data-ag-theme^="trendy"] body>.card form{padding:16px 22px 0;gap:12px}
-html[data-ag-theme^="trendy"] body>.card label{color:var(--ag-ink-2);font-weight:550;gap:6px}
-html[data-ag-theme^="trendy"] body>.card label span{font-weight:400;color:var(--ag-ink-3)}
-html[data-ag-theme^="trendy"] body>.card input{padding:10px 12px}
-html[data-ag-theme^="trendy"] body>.card .btn{padding:11px 0;margin-top:6px}
-html[data-ag-theme^="trendy"] .foot a{color:var(--ag-accent-ink)}
 
 /* 계정·승인·관리 */
 html[data-ag-theme^="trendy"] .nav a{border-radius:8px;padding:4px 10px;transition:background-color .15s}

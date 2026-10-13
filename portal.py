@@ -19,7 +19,8 @@ TOOLS_FILE = os.path.join(ROOT, "tools.json")
 GUIDE_DIR = os.path.join(ROOT, "guide")  # 사용 설명서 (/guide)
 THEME_DIR = os.path.join(ROOT, "theme")  # 화면 테마 (/theme) — theme/THEME_GUIDE.md
 THEMES = {f"{a}-{b}" for a in ("classic", "trendy", "v2") for b in ("light", "dark", "auto")}  # classic-light = 예전 그대로(CSS 안 붙임)
-V2_DIR = os.path.join(ROOT, "v2")  # v2 테마 포털 화면 배치(홈·로그인·계정) — 같은 JS, 다른 마크업. v2_page()
+LANDING_IMG = ("/landing/home.png", os.path.join(ROOT, "docs", "img", "home.png"))  # 랜딩 홈 캡처 = 공개 README 그림 그대로(개인 자료 없음)
+V2_DIR = os.path.join(ROOT, "v2")  # v2 테마 포털 화면 배치(홈·계정 — 로그인 랜딩은 모든 테마 login.html 하나) — 같은 JS, 다른 마크업. v2_page()
 
 
 # 서버 주인 → 도구에 X-Agent-User: owner (예전 기록 전부 보임). 나머지는 계정 id 별 폴더.
@@ -55,15 +56,18 @@ with db() as _c:  # 스키마는 시작 시 1회
     CREATE TABLE IF NOT EXISTS post_likes(post INTEGER, user TEXT, UNIQUE(post, user));
     CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY, name TEXT, dept TEXT, salt BLOB, hash BLOB, ts TEXT);
     CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, uid TEXT, exp REAL);          -- token = sha256(쿠키 값)
+    CREATE TABLE IF NOT EXISTS sess_short(token TEXT PRIMARY KEY);   -- '로그인 유지' 끈 세션(12시간, 연장 안 함). sessions 열을 안 늘려서 예전 코드와 같은 DB 를 써도 됨
     CREATE TABLE IF NOT EXISTS depts(name TEXT PRIMARY KEY, hidden INTEGER DEFAULT 0, ts TEXT);
     CREATE TABLE IF NOT EXISTS dept_heads(dept TEXT, uid TEXT, ts TEXT, UNIQUE(dept, uid));   -- 부서장 (한 부서에 여럿 가능)
     CREATE TABLE IF NOT EXISTS requests(id INTEGER PRIMARY KEY, kind TEXT, uid TEXT, dept TEXT, status TEXT, approver TEXT, note TEXT,
                                         ts TEXT, decided_ts TEXT, notified INTEGER DEFAULT 0);  -- kind dept_join|dept_head, status pending|approved|rejected|cancelled
     CREATE TABLE IF NOT EXISTS audit(ts TEXT, actor TEXT, action TEXT, target TEXT, detail TEXT);""")
     cols = {r[1] for r in _c.execute("PRAGMA table_info(users)")}
-    for col, ddl in (("iters", "INTEGER DEFAULT 200000"), ("disabled", "INTEGER DEFAULT 0"), ("seen", "TEXT"), ("theme", "TEXT")):  # 예전 DB 이어 쓰기
+    for col, ddl in (("iters", "INTEGER DEFAULT 200000"), ("disabled", "INTEGER DEFAULT 0"), ("seen", "TEXT"), ("theme", "TEXT"), ("onboarded", "INTEGER DEFAULT 0")):  # 예전 DB 이어 쓰기
         if col not in cols:
             _c.execute(f"ALTER TABLE users ADD COLUMN {col} {ddl}")
+            if col == "onboarded":  # 첫 로그인 둘러보기: 이미 쓰던 사람에게는 안 띄움 — 이 열이 생길 때 있던 계정은 전부 본 것으로
+                _c.execute("UPDATE users SET onboarded=1")
     if not _c.execute("SELECT 1 FROM depts").fetchone():  # 처음 한 번: 기존 계정·tools.json 의 부서로 목록 시작 ('개인' 은 부서가 아님)
         seed = {r[0] for r in _c.execute("SELECT DISTINCT dept FROM users")} | {t.get("dept") for t in json.load(open(TOOLS_FILE, encoding="utf-8"))}
         _c.executemany("INSERT OR IGNORE INTO depts(name, ts) VALUES(?, datetime('now','localtime'))", [(d.strip(),) for d in seed if d and d.strip() and d.strip() != "개인"])
@@ -71,7 +75,7 @@ with db() as _c:  # 스키마는 시작 시 1회
 
 # ── 계정·세션 ────────────────────────────────────────────────────────────
 ID_RE, PIN_RE = re.compile(r"^[a-z0-9][a-z0-9_.-]{1,31}$"), re.compile(r"^[0-9]{4,8}$")
-SESSION_S, ITERS = 30 * 86400, 600_000   # 예전 계정(200k)은 다음 로그인 때 600k 로 다시 해시
+SESSION_S, SHORT_S, ITERS = 30 * 86400, 12 * 3600, 600_000   # 로그인 유지 30일(슬라이딩) / 유지 끔 12시간(연장 없음). 예전 계정(200k)은 다음 로그인 때 600k 로 다시 해시
 FAILS, FAIL_LOCK = {}, threading.Lock()   # id → 최근 실패 시각들 (10분에 5번까지)
 
 
@@ -106,15 +110,32 @@ def limited(uid):
         return len(FAILS[uid]) >= 5
 
 
-def new_session(c, uid):
+def new_session(c, uid, remember=True):
+    """remember=False('이 PC에서 로그인 유지' 끔): 서버 만료 12시간·연장 없음, 쿠키는 브라우저 닫으면 끝(cookie(..., persist=False))"""
     tok = secrets.token_urlsafe(32)
+    h = hashlib.sha256(tok.encode()).hexdigest()
     c.execute("DELETE FROM sessions WHERE exp<?", (time.time(),))
-    c.execute("INSERT INTO sessions VALUES(?,?,?)", (hashlib.sha256(tok.encode()).hexdigest(), uid, time.time() + SESSION_S))
+    c.execute("DELETE FROM sess_short WHERE token NOT IN (SELECT token FROM sessions)")
+    c.execute("INSERT INTO sessions(token, uid, exp) VALUES(?,?,?)", (h, uid, time.time() + (SESSION_S if remember else SHORT_S)))
+    if not remember:
+        c.execute("INSERT OR IGNORE INTO sess_short VALUES(?)", (h,))
     return tok
 
 
-def cookie(tok, age=SESSION_S):
-    return f"agsid={tok}; Path=/; Max-Age={age}; HttpOnly; SameSite=Lax" + ("; Secure" if TLS else "")
+def cookie(tok, age=SESSION_S, persist=True):
+    """persist=False: Max-Age 없음 = 세션 쿠키(브라우저 닫으면 지워짐)"""
+    return f"agsid={tok}; Path=/;" + (f" Max-Age={age};" if persist else "") + " HttpOnly; SameSite=Lax" + ("; Secure" if TLS else "")
+
+
+def want_remember(v):
+    """/api/login 의 remember — 없으면 True(예전 클라이언트 그대로 30일)"""
+    return v not in (False, 0, "0", "false", "off", "no")
+
+
+def safe_next(raw):
+    """로그인 뒤 돌아갈 곳: 같은 사이트 안 경로만('/x', '//x'·'/\\x'·제어 문자는 '/'). 열린 리디렉트 막기 — login.html 의 next 검사와 같은 규칙"""
+    raw = raw or "/"
+    return raw if re.match(r"^/(?![/\\])", raw) and not re.search(r"[\x00-\x1f\x7f\\]", raw) else "/"
 
 
 def check_new(c, uid, name, pin, local):
@@ -306,6 +327,31 @@ def add_tool(t):
     return row
 
 
+def landing_groups():
+    """랜딩(/login)의 '어떤 도구가 있나': tools.json 에서 숨김 제외, 분류별 개수·이름 — 많은 분류부터(같으면 tools.json 순서)"""
+    order, g = [], {}
+    for t in tools():
+        if t.get("hidden"):
+            continue
+        k = t.get("group") or "기타"
+        if k not in g:
+            order.append(k); g[k] = []
+        g[k].append(t.get("name") or t["dir"])
+    return sorted(((k, g[k]) for k in order), key=lambda kv: -len(kv[1]))
+
+
+def landing(html, who=""):
+    """login.html 의 %N_TOOLS% %N_GROUPS% %GROUPS% %SIG% %FOOT% 를 채움 — 숫자는 하드코딩하지 않고 요청마다 tools.json 에서"""
+    gs = landing_groups()
+    esc = lambda s: str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+    cards = "".join(f'<li class="lp-g"><div class="lp-gh"><b>{esc(k)}</b><span>{len(v)}</span></div><p>{esc(" · ".join(v[:5]))}{" …" if len(v) > 5 else ""}</p></li>' for k, v in gs)
+    name, mail = _SIG.split(" · ")
+    sig = f'<span data-sig title="{mail}">{name} · 내부 시험용 · 배포용 아님</span>'
+    return (html.replace("%N_TOOLS%", str(sum(len(v) for _, v in gs))).replace("%N_GROUPS%", str(len(gs)))
+            .replace("%GROUPS%", cards).replace("%SIG%", sig)
+            .replace("%FOOT%", f'지금 <b>{esc(who)}</b> 로 접속 중 · <a href="/">포털로</a> · <a href="/account">계정 설정·PIN 바꾸기</a> · <a href="/logout">로그아웃</a>' if who else ""))
+
+
 def guide(d):
     p = os.path.join(ROOT, "guides", f"{d}.md")
     return open(p, encoding="utf-8").read() if os.path.exists(p) else f"## {d}\n\n사용법이 아직 없습니다. `portal/guides/{d}.md` 를 만들면 여기에 뜹니다."
@@ -447,8 +493,12 @@ def theme_files(pref, kind, d=""):
     return f
 
 
+def theme_ver():
+    return str(int(max(os.path.getmtime(os.path.join(r, x)) for r, _, fs in os.walk(THEME_DIR) for x in fs)))  # 고치면 바로 새 파일(캐시 무시)
+
+
 def theme_head(pref, kind, d=""):
-    v = str(int(max(os.path.getmtime(os.path.join(r, x)) for r, _, fs in os.walk(THEME_DIR) for x in fs)))  # 고치면 바로 새 파일(캐시 무시)
+    v = theme_ver()
     tags = "".join(f'<script src="/theme/{f}?v={v}" id="ag-th-{re.sub(r"[^A-Za-z0-9_]", "-", f)}"></script>' if f.endswith(".js") else
                    f'<link rel="stylesheet" href="/theme/{f}?v={v}" id="ag-th-{re.sub(r"[^A-Za-z0-9_]", "-", f)}">' for f in theme_files(pref, kind, d))
     js = BOOT.replace("%KIND%", kind).replace("%DIR%", d).replace("%V%", v).replace("%PREF%", pref).replace("%TOOLCSS%", "true" if f"tools/{d}.css" in theme_files("trendy-dark", kind, d) else "false")
@@ -495,13 +545,14 @@ class H(BaseHTTPRequestHandler):
         m = re.search(r"(?:^|;\s*)agsid=([A-Za-z0-9_-]+)", self.headers.get("Cookie") or "")
         if m:
             with db() as c:
-                r = c.execute("SELECT s.uid, s.exp, u.name, u.seen FROM sessions s JOIN users u ON u.id=s.uid WHERE s.token=? AND s.exp>? AND NOT u.disabled",
+                r = c.execute("SELECT s.uid, s.exp, u.name, u.seen, EXISTS(SELECT 1 FROM sess_short x WHERE x.token=s.token) short FROM sessions s "
+                              "JOIN users u ON u.id=s.uid WHERE s.token=? AND s.exp>? AND NOT u.disabled",
                               (hashlib.sha256(m[1].encode()).hexdigest(), time.time())).fetchone()
                 if r:
                     self.uid, self.uname = r["uid"], r["name"]
                     if (r["seen"] or "") < (datetime.datetime.now() - datetime.timedelta(minutes=5)).isoformat(timespec="seconds"):  # 마지막 접속(5분 단위)
                         c.execute("UPDATE users SET seen=? WHERE id=?", (now(), r["uid"]))
-                    if r["exp"] - time.time() < SESSION_S - 86400:  # 하루에 한 번 만료 연장(슬라이딩)
+                    if not r["short"] and r["exp"] - time.time() < SESSION_S - 86400:  # 하루에 한 번 만료 연장(슬라이딩) — '로그인 유지' 끈 세션은 연장 안 함
                         c.execute("UPDATE sessions SET exp=? WHERE token=?", (time.time() + SESSION_S, hashlib.sha256(m[1].encode()).hexdigest()))
                         self._setcookie = cookie(m[1])
         if not self.uid and not m and self.client_address[0] in LOCAL:  # 쿠키가 있는데 무효(로그아웃·정지·만료)면 로컬이어도 다시 로그인
@@ -559,12 +610,12 @@ class H(BaseHTTPRequestHandler):
 
     def me(self, c):
         """화면 위쪽 막대·계정 설정용: 이름·역할·부서·승인 대기 수"""
-        u = c.execute("SELECT dept FROM users WHERE id=?", (self.uid,)).fetchone()
+        u = c.execute("SELECT dept, onboarded FROM users WHERE id=?", (self.uid,)).fetchone()
         pend = c.execute("SELECT dept FROM requests WHERE uid=? AND kind='dept_join' AND status='pending'", (self.uid,)).fetchone()
         n = sum(can_decide(c, self.uid, r) for r in c.execute("SELECT * FROM requests WHERE status='pending'"))
         return {"id": self.uid, "name": self.uname, "owner": self.is_owner, "agent_user": self.agent_user, "role": role(c, self.uid),
                 "dept": u["dept"] if u else "", "dept_pending": pend["dept"] if pend else "", "heads": my_heads(c, self.uid), "approvals": n,
-                "account": bool(u)}
+                "account": bool(u), "onboarded": bool(u["onboarded"]) if u else True}  # onboarded: 첫 로그인 둘러보기를 봤거나 건너뜀(로컬 접속은 계정이 없어 늘 True)
 
     def page(self, p):
         """/account · /approvals · /admin — 같은 화면 파일, 권한 없는 쪽은 /account 로"""
@@ -641,6 +692,8 @@ class H(BaseHTTPRequestHandler):
                 if self.uid in heads_of(c, d):
                     raise ValueError("이미 부서장입니다")
                 new_request(c, self.uid, "dept_head", d)
+            elif p == "/api/account/onboarded":  # 첫 로그인 둘러보기 — 마치기·건너뛰기 둘 다 {"done": true}
+                c.execute("UPDATE users SET onboarded=? WHERE id=?", (1 if req.get("done", True) else 0, self.uid))
             elif p == "/api/account/cancel":
                 if not c.execute("UPDATE requests SET status='cancelled', decided_ts=? WHERE id=? AND uid=? AND status='pending'", (now(), int(req.get("id") or 0), self.uid)).rowcount:
                     raise ValueError("취소할 수 있는 요청이 아닙니다")
@@ -708,6 +761,12 @@ class H(BaseHTTPRequestHandler):
             self.send_header("Content-Length", "0"); self.end_headers(); return
         self._send({"error": "로그인이 필요합니다", "login": "/login"}, code=401)
 
+    def redirect(self, loc):
+        self.send_response(302); self.send_header("Location", urllib.parse.quote(loc, safe="/?&=#%:;@!$'()*+,~-._"))
+        if getattr(self, "_setcookie", None):
+            self.send_header("Set-Cookie", self._setcookie)
+        self.send_header("Content-Length", "0"); self.end_headers()
+
     def help_html(self, d):
         return HELP.replace("%DIR%", d).replace("%USER%", self.agent_user)
 
@@ -748,6 +807,12 @@ class H(BaseHTTPRequestHandler):
 
     def theme_file(self, p):
         """/theme/<css|js> · /theme/tools/<도구>.css · /theme/fonts/<글꼴> (글꼴은 guide/fonts 와 같은 파일). 이름 규칙에 맞는 파일만"""
+        if p == LANDING_IMG[0]:
+            f = LANDING_IMG[1]
+            st = os.stat(f); etag = f'"{int(st.st_mtime)}-{st.st_size}"'; cc = ("Cache-Control", "public, max-age=86400")
+            if self.headers.get("If-None-Match") == etag:
+                self.send_response(304); self.send_header("ETag", etag); self.send_header(*cc); self.send_header("Content-Length", "0"); self.end_headers(); return
+            return self._send(open(f, "rb").read(), "image/png", headers=[cc, ("ETag", etag), ("X-Content-Type-Options", "nosniff")])
         rel = urllib.parse.unquote(p[len("/theme/"):])
         m = re.fullmatch(r"[a-z][a-z0-9-]*\.(css|js)|tools/[a-z0-9][a-z0-9_-]*\.(css)|fonts/([A-Za-z0-9][\w.-]*\.(woff2|txt))", rel)
         top = os.path.join(GUIDE_DIR, "fonts") if m and m[3] else THEME_DIR
@@ -846,17 +911,23 @@ class H(BaseHTTPRequestHandler):
                         raise ValueError("아이디 또는 PIN 이 틀립니다 (정지된 계정이면 관리자에게)")
                     with FAIL_LOCK:
                         FAILS.pop(uid, None)
-                tok = new_session(c, uid)
-            self._send({"ok": True, "id": uid}, headers=[("Set-Cookie", cookie(tok))])
+                keep = self.path == "/api/signup" or want_remember(req.get("remember", True))  # 로그인 유지(기본 켬) — 끄면 브라우저 닫으면 끝·12시간
+                tok = new_session(c, uid, keep)
+            self._send({"ok": True, "id": uid}, headers=[("Set-Cookie", cookie(tok, persist=keep))])
         except (ValueError, KeyError) as e:
             self._send({"error": str(e)}, code=400)
 
     def do_GET(self):
         self._setcookie, self.uid = None, None  # keep-alive 로 같은 연결에서 앞 요청 값이 남지 않게
         p = self.path.split("?")[0]
-
-        if p == "/login":
-            return self._send(self.html_page(LOGIN, "portal", v2="login"), "text/html; charset=utf-8")
+        if p == "/login":  # 랜딩 겸 로그인(모든 테마 같은 배치). 이미 로그인(유효한 세션 쿠키)했으면 홈 또는 안전한 next 로
+            if self.auth() and self.uid != "owner":
+                return self.redirect(safe_next(urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("next", ["/"])[0]))
+            who = self.uname if self.uid == "owner" else ""  # 로컬 접속(쿠키 없음) = 서버 주인
+            self._setcookie, self.uid = None, None
+            return self._send(self.html_page(landing(LOGIN, who), "portal"), "text/html; charset=utf-8")
+        if p == LANDING_IMG[0]:  # 랜딩의 홈 화면 캡처(공개 README 그림) — 로그인 전에 받을 수 있는 유일한 그림
+            return self.theme_file(p)
         if p.startswith("/theme/"):  # 테마 CSS·글꼴 — 로그인 화면도 쓰므로 로그인 전에
             return self.theme_file(p)
         if p == "/api/depts":  # 가입 화면의 부서 목록(로그인 전)
@@ -904,7 +975,8 @@ class H(BaseHTTPRequestHandler):
             return self.guide_file(p)
         if p != "/":
             return self._send({"error": "not found"}, code=404)
-        self._send(self.html_page(HTML + self.help_html("portal"), "portal", v2="home"), "text/html; charset=utf-8")
+        tour = f'<script src="/theme/tour.js?v={theme_ver()}"></script>'  # 첫 로그인 둘러보기(classic·trendy·v2 홈 공통). help.html 보다 먼저 — ? 창 자동 열기와 겹치지 않게
+        self._send(self.html_page(HTML + tour + self.help_html("portal"), "portal", v2="home"), "text/html; charset=utf-8")
 
     def do_POST(self):
         self._setcookie = None  # keep-alive 로 같은 연결에서 앞 요청 값이 남지 않게
@@ -934,9 +1006,11 @@ class H(BaseHTTPRequestHandler):
                     if not PIN_RE.match(req.get("new", "")):
                         raise ValueError("새 PIN 은 숫자 4~8자리")
                     set_pin(c, self.uid, req["new"])
+                    m = re.search(r"(?:^|;\s*)agsid=([A-Za-z0-9_-]+)", self.headers.get("Cookie") or "")
+                    keep = not (m and c.execute("SELECT 1 FROM sess_short WHERE token=?", (hashlib.sha256(m[1].encode()).hexdigest(),)).fetchone())  # 지금 세션의 '로그인 유지' 그대로
                     c.execute("DELETE FROM sessions WHERE uid=?", (self.uid,))
-                    tok = new_session(c, self.uid)
-                    return self._send({"ok": True}, headers=[("Set-Cookie", cookie(tok))])
+                    tok = new_session(c, self.uid, keep)
+                    return self._send({"ok": True}, headers=[("Set-Cookie", cookie(tok, persist=keep))])
                 if self.path.startswith(("/api/account/", "/api/approvals/", "/api/admin/")):
                     return self.manage_post(c, self.path, req)
                 if self.path == "/api/post":

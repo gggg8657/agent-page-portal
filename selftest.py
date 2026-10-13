@@ -73,11 +73,37 @@ assert portal.theme_files("v2-light", "portal") == ["tokens.css", "portal-v2.css
 assert "palette-v2.js" in portal.theme_head("v2-auto", "portal") and "palette-v2.js" not in portal.theme_head("trendy-light", "portal")
 assert {"v2-light", "v2-dark", "v2-auto"} <= portal.THEMES
 for _n, _f, _ids in (("home", portal.HTML, ("user", "menu", "counts", "rank", "q", "chips", "home", "cols", "newcols", "gpus", "all", "count", "grid", "feed", "newPost", "addTool", "dlg", "dlgT", "dlgB")),
-                     ("account", portal.ACCOUNT, ("nav", "main")), ("login", portal.LOGIN, ("in", "up", "dept", "foot"))):
+                     ("account", portal.ACCOUNT, ("nav", "main"))):
     _v = portal.v2_page(_f, _n)
     assert _v != _f and _v[_v.find("<script>"):] == _f[_f.find("<script>"):], _n  # 스크립트는 원래 것 그대로
     for _i in _ids:
         assert f'id="{_i}"' in _v, (_n, _i)
+
+# 로그인 = 랜딩(모든 테마 같은 파일, v2 배치 교체 없음): 스크립트가 쓰는 id·필드, 숫자는 tools.json 에서 서버가 채움
+assert not os.path.exists(os.path.join(portal.V2_DIR, "login.html")) and portal.v2_page(portal.LOGIN, "login") == portal.LOGIN
+_l = portal.landing(portal.LOGIN)
+for _i in ('id="in"', 'id="up"', 'id="dept"', 'id="foot"', 'id="login"', 'name="remember"', 'data-t="in"', 'data-t="up"', "data-sig"):
+    assert _i in _l, _i
+assert "%" + "FOOT%" not in _l and '<div id="foot"></div>' in _l and "로 접속 중" in portal.landing(portal.LOGIN, "<x>").replace("&lt;x&gt;", "") and "%" + "N_TOOLS%" not in _l and "%" + "GROUPS%" not in _l and "%" + "SIG%" not in _l
+_n = sum(1 for t in portal.tools() if not t.get("hidden"))
+assert f"로컬 AI 도구 {_n}개" in _l and sum(len(v) for _, v in portal.landing_groups()) == _n
+_in = _l[_l.index('<form id="in"'):_l.index('</form>', _l.index('<form id="in"'))]
+assert "inputmode" not in _in and "pattern" not in _in, "로그인 탭 PIN 은 숫자 강제 금지(관리자 문자 비밀번호)"
+assert portal.LANDING_IMG[0] == "/landing/home.png" and os.path.isfile(portal.LANDING_IMG[1])
+# 열린 리디렉트 막기
+for _x, _y in (("/", "/"), ("/t/a/?x=1", "/t/a/?x=1"), ("//evil.com", "/"), ("/\\evil.com", "/"), ("http://e", "/"), ("/a\r\nX:1", "/"), ("", "/"), (None, "/")):
+    assert portal.safe_next(_x) == _y, (_x, portal.safe_next(_x))
+# 로그인 유지: 켬 = 30일·Max-Age, 끔 = 12시간·세션 쿠키(Max-Age 없음)·sess_short 에 기록
+assert portal.want_remember(True) and portal.want_remember(None) is True and not portal.want_remember(False) and not portal.want_remember("0")
+assert "Max-Age=" in portal.cookie("t") and "Max-Age" not in portal.cookie("t", persist=False)
+import hashlib, time as _t
+with portal.db() as c:
+    _a, _b = portal.new_session(c, "kim"), portal.new_session(c, "kim", remember=False)
+    _ea, _eb = (c.execute("SELECT exp FROM sessions WHERE token=?", (hashlib.sha256(x.encode()).hexdigest(),)).fetchone()[0] - _t.time() for x in (_a, _b))
+    assert _ea > 29 * 86400 and 11 * 3600 < _eb <= 12 * 3600, (_ea, _eb)
+    assert c.execute("SELECT COUNT(*) FROM sess_short").fetchone()[0] == 1 and len(c.execute("SELECT * FROM sessions LIMIT 1").fetchone()) == 3  # sessions 열은 그대로(예전 코드와 같은 DB)
+    # 첫 로그인 둘러보기: 새 가입자는 onboarded=0
+    assert c.execute("SELECT onboarded FROM users WHERE id='kim'").fetchone()[0] == 0
 
 # 도구 첫 화면 판정: 딥링크(쿼리)도 테마·사용법을 붙이고, 펫 iframe(?pet=1)과 하위 경로는 안 붙임
 assert portal.first_html("") and portal.first_html("index.html") and portal.first_html("?job=abc") and portal.first_html("?id=3&token=x")

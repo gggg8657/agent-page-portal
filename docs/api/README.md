@@ -34,10 +34,11 @@
 
 | 호출 | 설명 |
 |---|---|
-| `POST /api/login` `{"id": "아이디", "pin": "PIN"}` | 성공 `{"ok": true, "id": …}` + 쿠키 `agsid` (HttpOnly, SameSite=Lax, 30일). 틀리면 400 `{"error": …}`. 10분에 5번 틀리면 잠깐 잠김 |
+| `POST /api/login` `{"id": "아이디", "pin": "PIN", "remember": true}` | 성공 `{"ok": true, "id": …}` + 쿠키 `agsid` (HttpOnly, SameSite=Lax). `remember`(로그인 유지, 없으면 `true`): `true` = 30일, 쓰는 동안 하루에 한 번 연장 · `false` = 쿠키에 Max-Age 없음(브라우저 닫으면 끝) + 서버 만료 12시간, 연장 없음. 틀리면 400 `{"error": …}`. 10분에 5번 틀리면 10분 잠김 |
 | `POST /api/signup` `{"id", "name", "pin", "dept"}` | 가입. id 는 영문 소문자·숫자·`_.-` 2~32자, PIN 은 숫자 4~8자리. 부서는 `GET /api/depts` 목록 중 하나(부서장 승인 뒤 반영) |
+| `GET /login` | 로그인 화면(랜딩). 이미 로그인했으면 `next`(같은 사이트 경로만, 아니면 `/`)로 302 |
 | `GET /logout` | 세션 삭제 후 `/login` 으로 302 |
-| `GET /api/me` | 지금 사용자 `{"id", "name", "role", "dept", "owner", …}` |
+| `GET /api/me` | 지금 사용자 `{"id", "name", "role", "dept", "owner", "onboarded", …}` — `onboarded`: 첫 로그인 둘러보기를 봤거나 건너뜀 |
 
 - 로그인 안 된 요청: API 는 **401** `{"error": "로그인이 필요합니다", "login": "/login"}`, 화면 요청(`Accept: text/html` 인 GET)은 `/login?next=…` 로 302.
 - 쿠키가 HttpOnly 라 JS 에서 읽을 수 없습니다. **같은 출처에서 `fetch(…, {credentials: "same-origin"})`(기본값)로 부르면 브라우저가 알아서 붙입니다.**
@@ -117,7 +118,8 @@ const g  = await (await fetch('/t/saju-local/api/graph?dept=' + encodeURICompone
 | `POST /api/open` · `/api/like` `{"dir"}` | 사용·좋아요 기록(순위에 반영) | 로그인 |
 | `POST /api/post` · `/api/post_like` | 노하우 게시판 글쓰기·좋아요 | 로그인 |
 | `POST /api/account/theme` `{"theme"}` | 화면 테마 저장(`classic`·`trendy`·`v2` × `light`·`dark`·`auto`) | 로그인 |
-| `POST /api/pin` `{"pin", "new"}` | PIN 바꾸기 | 로그인 |
+| `POST /api/pin` `{"pin", "new"}` | PIN 바꾸기(다른 기기 세션은 끊김, 지금 세션의 '로그인 유지'는 그대로) | 로그인 |
+| `POST /api/account/onboarded` `{"done": true}` | 첫 로그인 둘러보기 마침·건너뜀 기록(`/api/me` 의 `onboarded`) | 본인 |
 | `/api/account…` · `/api/approvals…` · `/api/admin…` | 계정 설정·부서 승인·관리 | 본인·부서장·관리자 |
 
 ## 도구 목록
