@@ -116,12 +116,19 @@
       NATIVE = Array.prototype.some.call(document.styleSheets, function (sh) { return sheetOk(sh) && hasNative(sh); });
       if (NATIVE) D.setAttribute("data-ag-native", "1");
     }
-    ACTIVE = true; tokens();
+    ACTIVE = true; tokens(); waitTheme();
     if (!NATIVE) {
       Array.prototype.forEach.call(document.styleSheets, doSheet);
       if (document.body) document.body.querySelectorAll("[style]").forEach(doInline);
     }
     D.removeAttribute("data-ag-dk");
+  }
+  function waitTheme() {  // 밝게→어둡게 바로 바꾸면 tokens.css 등이 dark.js 보다 늦게 올 수 있음 → 다 오면 그 토큰으로 다시 바꿈
+    Array.prototype.forEach.call(document.querySelectorAll('link[id^="ag-th-"]'), function (l) {
+      if (l.sheet || l.__agWait) return;
+      l.__agWait = true;
+      l.addEventListener("load", function () { l.__agWait = false; if (dark() && ACTIVE) { restore(); run(); } }, { once: true });
+    });
   }
   function restore() {  // 밝게로 바꾸면 원래 값으로
     for (var i = undo.length - 1; i >= 0; i--) { var u = undo[i]; try { u[0].setProperty(u[1], u[2], u[3]); } catch (e) {} }
