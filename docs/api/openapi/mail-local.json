@@ -605,8 +605,7 @@
        "concise",
        "english"
       ],
-      "default": "natural",
-      "description": "polish 방식"
+      "description": "polish 방식(없으면 natural — write·reply 에는 안 씀)"
      }
     },
     "description": "kind 별로 쓰는 필드가 다름: write(to·purpose·points*·attach·due·tone·length·lang·sender) · reply(original*·points·to.relation·attach·tone·length·lang·sender) · polish(text*·mode)",
