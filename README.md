@@ -160,6 +160,44 @@ openssl x509 -req -in portal.csr -CA ca.crt -CAkey ca.key -CAcreateserial -days 
 - 각 PC 에 `ca.crt` 하나만 나눠 신뢰시킵니다 — Windows: 더블클릭 → 인증서 설치 → 로컬 컴퓨터 → '신뢰할 수 있는 루트 인증 기관'. macOS: 키체인 접근 → 시스템 → 항상 신뢰.
 - 켜면 `http://` 주소는 더 이상 안 열립니다(같은 포트). 키 파일은 git 에 넣지 말 것(`_data/` 는 저장소 밖).
 
+### FastAPI 포털 (시험 중, :8720)
+`fastportal/` 은 같은 포털을 **FastAPI + uvicorn(비동기)** 로 옮긴 판입니다. 같은 HTML·`theme/`·`guide/`·`tools.json`·`_data/portal.db` 를 그대로 쓰고(운영 포털과 동시에 같은 DB 를 써도 됨), 주소·응답은 `portal.py` 와 같게 맞췄습니다.
+바뀌는 점은 **스트리밍(SSE) 연결 수백 개를 스레드 없이 중계**하는 것 — `portal.py` 는 연결마다 스레드 하나, 새 포털은 이벤트 루프 하나가 중계하고 브라우저가 끊으면 도구 쪽 연결도 바로 닫습니다.
+
+```bash
+# 설치(사용자 영역 venv) — 인터넷 되는 곳
+python3 -m venv ~/.local/fastportal-venv
+~/.local/fastportal-venv/bin/pip install -r agent-page-portal/fastportal/requirements.txt
+# 폐쇄망: 인터넷 되는 PC(같은 OS·파이썬 3.13·x86_64)에서 wheel 을 받아 옮긴 뒤 --no-index 로
+pip download -r fastportal/requirements.txt -d fastportal-wheels --only-binary=:all: --python-version 3.13 --platform manylinux2014_x86_64
+~/.local/fastportal-venv/bin/pip install --no-index --find-links fastportal-wheels -r fastportal/requirements.txt
+
+bash agent-page-portal/scripts/start-fastportal.sh        # :8720 시작(이미 떠 있으면 pid 파일의 그 프로세스만 끄고 다시) · 로그 fastportal-8720.log
+bash agent-page-portal/scripts/start-fastportal.sh stop
+# 같은 앱을 uvicorn 으로 직접: cd agent-page-portal && ~/.local/fastportal-venv/bin/uvicorn fastportal.app:app --host 0.0.0.0 --port 8720 --no-server-header --no-proxy-headers
+```
+
+| 환경변수(새 포털만) | 기본 | 설명 |
+|---|---|---|
+| `PORT` | 8720 | 운영 전환 때 8700 |
+| `BACKUP` | 0 | 매일 백업 — 운영 포털이 돌리므로 기본 꺼짐. 전환 때 `1` |
+| `PORTAL_MAX_BODY` | 600MB | 도구로 넘기는 요청 본문 상한 — 넘으면 본문을 읽어 버린 뒤 413 |
+| `PORTAL_MAX_JSON` | 1MB | 포털 API(JSON) 본문 상한 → 413 |
+| `TOOLS_ALIVE_TTL` | 5 | `/api/tools` 의 도구 켜짐 확인 캐시(초) — 탭 수백 개가 폴링해도 포트 확인은 5초에 한 번 |
+| `PORTAL_LOCAL_OWNER` | 1 | `0` 이면 '127.0.0.1 에서 쿠키 없이 = 서버 주인'을 끔. **같은 서버의 리버스 프록시(nginx·Caddy 등) 뒤에 둘 때는 반드시 0** — 아니면 바깥 요청이 모두 127.0.0.1 로 보여 관리자 권한이 됨. 끄면 관리 작업은 관리자 계정으로 로그인 |
+| `TRUSTED_PROXIES` | 없음 | 쉼표 목록. 바로 앞 접속이 이 주소일 때만 `X-Forwarded-For` 를 읽어 실제 주소로 판정(목록 밖 주소 중 가장 오른쪽). 없으면 `X-Forwarded-For` 는 무시 |
+| 나머지 | | `AGENT_DATA`·`AGENT_OWNERS`·`HOST`·`SHOW_HIDDEN`·`TLS_CERT`/`TLS_KEY`(TLS 1.2 이상) 는 위 표와 같음 |
+
+`portal.py` 와 일부러 다르게 한 것: 로그인 실패 잠금을 메모리 대신 DB(`login_fails` 표 — 예전 코드는 모르는 표라 무시)에 둠(재시작·여러 프로세스에도 유지) ·
+빈 `agsid=`·형식이 틀린 `agsid`·여러 줄 `Cookie` 도 '쿠키 있음 → 무효 → 401'(예전엔 로컬이면 주인) · 청크 업로드 본문도 전달(예전엔 버림) · 업로드 상한 413 ·
+도구의 리디렉트는 같은 도구 안에서만 따라감(예전엔 아무 주소나) · 도구가 준 쿠키를 포털이 기억하지 않음 · 예상 못 한 오류는 연결을 끊는 대신 500 `{"error": "서버 오류"}` ·
+`/docs`·`/openapi.json` 은 열지 않음 · `Server` 헤더 없음.
+
+워커는 **1개**(비동기)로 씁니다. `/api/events`(오래 걸린 작업 끝남)·도구 켜짐 캐시·GPU 캐시가 프로세스 메모리라, 워커를 늘리면 이 셋을 DB(또는 공유 저장소)로 옮겨야 합니다(세션·잠금·계정은 이미 DB). 막히는 일(DB·PIN 해시·nvidia-smi)은 스레드 풀에서 돌아 이벤트 루프를 막지 않습니다.
+
+계약 시험(`fastportal/tests/`): `contract_live.py --demo <id>:<pin>` 은 같은 요청을 :8700 과 :8720 에 보내 상태·헤더·본문을 비교(읽기와 되돌리는 POST 만), `contract_fake.py` 는 임시 폴더에 두 포털과 가짜 도구를 띄워 프록시 헤더 규칙·본문·SSE·동시 스트림·끊김·잠금·프록시 뒤 판정을 확인, `ui_compare.js` 는 Playwright 로 화면을 캡처해 비교합니다.
+의존성 라이선스는 모두 MIT·BSD·Apache-2.0 계열(certifi 만 MPL-2.0)로 상업 이용 가능 — 정확한 목록은 `fastportal/requirements.txt` 의 각 패키지.
+
 ## 출처·감사 (Credits)
 
 - 포털 서버는 파이썬 표준 라이브러리만 씁니다. 제3자 구성요소 전체 목록·라이선스·상업 이용 여부는 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) 에 있습니다. 연결된 각 도구의 출처는 각 저장소의 `THIRD_PARTY_NOTICES.md`·README 'Credits' 를 보세요.
