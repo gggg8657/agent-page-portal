@@ -394,11 +394,12 @@ TOOL_PY = os.environ.get("TOOL_PYTHON") or getattr(sys, "_base_executable", None
 TOOL_BIND = os.environ.get("TOOL_BIND") or "127.0.0.1"   # 도구가 열 주소(BIND). 컨테이너에선 0.0.0.0(다른 컨테이너의 포털이 붙게)
 
 
-def start(t):
+def start(t, extra_env=None):
     if is_remote(t):
         return   # 다른 컨테이너의 도구 — 그쪽이 띄움
     cwd = os.path.join(BASE, t["dir"])
-    env = {**os.environ, "PORT": str(t["port"]), "WORKSPACE": os.path.join(DATA, t["dir"]), "BIND": TOOL_BIND}
+    env = {**os.environ, "PORT": str(t["port"]), "WORKSPACE": os.path.join(DATA, t["dir"]), "BIND": TOOL_BIND, **(extra_env or {})}   # + 작업 알림(PORTAL_JOBS_*, jobs.tool_env)
+    env.pop("PORTAL_JOBS_SECRET", None)   # 포털 비밀값은 도구로 안 넘김(도구는 자기 토큰만)
     if t.get("gpus"):
         env["CUDA_VISIBLE_DEVICES"] = str(t["gpus"])
     if os.path.exists(os.path.join(cwd, "setup.sh")):

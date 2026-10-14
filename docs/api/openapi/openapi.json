@@ -670,7 +670,7 @@
   "/api/events": {
    "get": {
     "operationId": "portalEvents",
-    "summary": "1분 넘게 걸려 끝난 내 작업",
+    "summary": "끝난 내 작업(예전 모양 — 새 화면은 /api/jobs·/api/jobs/stream)",
     "parameters": [
      {
       "name": "since",
@@ -712,7 +712,278 @@
     },
     "tags": [
      "portal"
-    ]
+    ],
+    "description": "작업 알림 센터(jobs 표)에서 done·failed 만 예전 모양으로. id = seq(예전처럼 초 단위 시각보다 큼). 파동이 펫(pet.js)이 씀. 포털을 재시작해도 남음."
+   }
+  },
+  "/api/jobs": {
+   "get": {
+    "operationId": "portalJobs",
+    "summary": "작업 알림 센터 — 최근 작업 목록",
+    "tags": [
+     "portal"
+    ],
+    "description": "본인 작업만(주인은 전부 — /api/events 와 같은 규칙), seq 큰 것부터. unread=1 이면 안 읽은 끝난 작업 + 아직 도는 작업만. 30일 지나면 지움.",
+    "parameters": [
+     {
+      "name": "unread",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "enum": [
+        0,
+        1
+       ]
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "default": 50,
+       "maximum": 200
+      }
+     },
+     {
+      "name": "since",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "description": "이 seq 보다 큰 것만"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "목록",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/JobsResponse"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    }
+   }
+  },
+  "/api/jobs/stream": {
+   "get": {
+    "operationId": "portalJobsStream",
+    "summary": "작업 알림 센터 — 실시간(SSE)",
+    "tags": [
+     "portal"
+    ],
+    "description": "text/event-stream(EventSource 로 엶). 처음 `event: hello` {last, unread}, 그 뒤 작업이 바뀔 때마다 `event: job`(id: seq, data: Job), 읽음 표시가 바뀌면 `event: read` {ids}(같은 사람의 다른 탭). 25초마다 주석 줄(`: ping`). 다시 붙을 때 Last-Event-ID(또는 ?since=) 뒤에 바뀐 것을 먼저 다시 보냄. `retry: 3000`. 연결마다 스레드를 쓰지 않음(수백 개 가능).",
+    "parameters": [
+     {
+      "name": "since",
+      "in": "query",
+      "schema": {
+       "type": "integer"
+      }
+     },
+     {
+      "name": "Last-Event-ID",
+      "in": "header",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "SSE",
+      "content": {
+       "text/event-stream": {
+        "schema": {
+         "type": "string"
+        },
+        "x-stream-events": [
+         {
+          "name": "hello",
+          "schema": {
+           "type": "object",
+           "properties": {
+            "last": {
+             "type": "integer"
+            },
+            "unread": {
+             "type": "integer"
+            }
+           }
+          }
+         },
+         {
+          "name": "job",
+          "schema": {
+           "$ref": "#/components/schemas/Job"
+          }
+         },
+         {
+          "name": "read",
+          "schema": {
+           "type": "object",
+           "properties": {
+            "ids": {
+             "type": "array",
+             "items": {
+              "type": "string"
+             }
+            }
+           }
+          }
+         }
+        ]
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    }
+   }
+  },
+  "/api/jobs/read": {
+   "post": {
+    "operationId": "portalJobsRead",
+    "summary": "작업 알림 읽음 표시",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "{ids:[…]} 또는 {all:true}. 읽음은 보는 사람마다 따로(주인이 남의 작업을 읽어도 그 사람에겐 안 읽음). 본인에게 보이는 끝난 작업만 표시됨.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "ids": {
+          "type": "array",
+          "items": {
+           "type": "string"
+          }
+         },
+         "all": {
+          "type": "boolean"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "표시함",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "ok",
+          "read",
+          "unread"
+         ],
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "read": {
+           "type": "integer"
+          },
+          "unread": {
+           "type": "integer"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    }
+   }
+  },
+  "/api/internal/jobs": {
+   "post": {
+    "operationId": "portalInternalJobs",
+    "summary": "도구 → 포털 작업 상태 알림(내부)",
+    "tags": [
+     "portal"
+    ],
+    "security": [],
+    "x-permission": "internal",
+    "description": "화면용 아님. 쿠키 대신 헤더 X-Portal-Jobs-Token(포털이 도구를 시작할 때 PORTAL_JOBS_TOKEN 으로 넘긴 그 도구 전용 값). 접속지가 127.0.0.1·::1, 그 도구의 tools.json host 주소, PORTAL_JOBS_ALLOW 일 때만 — 그 밖·토큰 틀림·없는 도구는 모두 403 {\"error\":\"forbidden\"}. 끝난 작업을 다시 진행 상태로 보내면 무시(ignored: true). 같은 id 를 다른 사용자로 보내면 403. 본문 상한 64KB. 도구에선 sdk/portal_jobs.py 를 쓰면 됨(README '도구가 작업 상태를 알리는 법').",
+    "parameters": [
+     {
+      "name": "X-Portal-Jobs-Token",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/JobReport"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "받음",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "ok",
+          "id",
+          "ignored"
+         ],
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "id": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "ignored": {
+           "type": "boolean"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     }
+    }
    }
   },
   "/api/guide/{dir}": {
@@ -20757,6 +21028,13 @@
      },
      "t": {
       "type": "integer"
+     },
+     "title": {
+      "type": "string"
+     },
+     "link": {
+      "type": "string",
+      "description": "결과 화면 /t/<도구>/…"
      }
     }
    },
@@ -35121,6 +35399,161 @@
         }
        }
       }
+     }
+    }
+   },
+   "JobStatus": {
+    "type": "string",
+    "enum": [
+     "queued",
+     "running",
+     "done",
+     "failed",
+     "canceled"
+    ]
+   },
+   "Job": {
+    "type": "object",
+    "description": "작업 알림 센터의 작업 하나(포털 jobs 표). 자동 기록은 id 가 auto:<도구>:… , 도구가 알린 것은 <도구>:<도구의 작업 id>",
+    "required": [
+     "id",
+     "tool",
+     "name",
+     "user",
+     "title",
+     "status",
+     "progress",
+     "started",
+     "finished",
+     "link",
+     "message",
+     "seq",
+     "unread"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "tool": {
+      "type": "string",
+      "description": "도구 dir"
+     },
+     "name": {
+      "type": "string",
+      "description": "도구 이름(tools.json name)"
+     },
+     "user": {
+      "type": "string",
+      "description": "작업한 사람(X-Agent-User 값 — 주인은 owner)"
+     },
+     "title": {
+      "type": "string"
+     },
+     "status": {
+      "$ref": "#/components/schemas/JobStatus"
+     },
+     "progress": {
+      "type": [
+       "integer",
+       "null"
+      ],
+      "minimum": 0,
+      "maximum": 100
+     },
+     "started": {
+      "type": "number",
+      "description": "유닉스 초"
+     },
+     "finished": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "link": {
+      "type": "string",
+      "description": "결과 화면 — 포털 주소 /t/<도구>/<도구 안 경로>. React 셸은 /tool/<도구>/<같은 나머지> 로 엶"
+     },
+     "message": {
+      "type": "string"
+     },
+     "seq": {
+      "type": "integer",
+      "description": "바뀔 때마다 커지는 번호(SSE id·since 에 씀)"
+     },
+     "unread": {
+      "type": "boolean",
+      "description": "끝났고(done·failed·canceled) 보는 사람이 아직 안 읽음"
+     }
+    }
+   },
+   "JobsResponse": {
+    "type": "object",
+    "required": [
+     "jobs",
+     "unread",
+     "last"
+    ],
+    "properties": {
+     "jobs": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Job"
+      }
+     },
+     "unread": {
+      "type": "integer",
+      "description": "안 읽은 끝난 작업 수"
+     },
+     "last": {
+      "type": "integer",
+      "description": "보이는 작업 중 가장 큰 seq"
+     }
+    }
+   },
+   "JobReport": {
+    "type": "object",
+    "required": [
+     "tool",
+     "user",
+     "status"
+    ],
+    "description": "도구 → 포털 작업 상태 알림(portal_jobs.py 가 보냄)",
+    "properties": {
+     "tool": {
+      "type": "string",
+      "description": "도구 dir — 토큰이 이 도구 것이어야 함"
+     },
+     "user": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.@-]{1,64}$",
+      "description": "요청의 X-Agent-User"
+     },
+     "status": {
+      "$ref": "#/components/schemas/JobStatus"
+     },
+     "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,80}$",
+      "description": "도구의 작업 id(같은 id 로 상태를 고침). 없으면 새로 만듦"
+     },
+     "title": {
+      "type": "string",
+      "maxLength": 200
+     },
+     "link": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "도구 안 경로('/' 로 시작, 예: /#<id>, /?job=<id>)"
+     },
+     "message": {
+      "type": "string",
+      "maxLength": 500
+     },
+     "progress": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
      }
     }
    }

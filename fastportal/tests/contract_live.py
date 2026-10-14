@@ -192,7 +192,7 @@ same("/api/admin 거절(403)", "GET", "/api/admin", expect=403)
 same("/api/account/없음", "GET", "/api/account/nothing")
 same("/api/tools", "GET", "/api/tools")
 same("/api/gpu", "GET", "/api/gpu")
-same("/api/events", "GET", "/api/events")
+# /api/events: 새 포털은 작업 표(DB)에서 — 예전 메모리 기록과 내용이 다를 수 있어 아래 '작업 알림 센터'에서 모양만 확인
 same("/api/events?since=", "GET", "/api/events?since=99999999999")
 same("/api/guide/portal", "GET", "/api/guide/portal")
 same("/api/guide/kordoc-local", "GET", "/api/guide/kordoc-local")
@@ -267,6 +267,58 @@ new_only("틀린 토큰 로컬 /api/me = 401", "GET", "/api/me", {"X-Local-Owner
 new_only("헤더 없는 로컬 / → 로그인으로", "GET", "/", {"Accept": "text/html"}, 302)
 if LOCAL_TOK:
     new_only("토큰 맞는 로컬 /api/me = 200", "GET", "/api/me", {"X-Local-Owner": LOCAL_TOK}, 200)
+
+print("\n## 작업 알림 센터(새 포털만 — /api/jobs·/api/jobs/stream·/api/jobs/read·/api/internal/jobs). 쓰기 없음(거절만)")
+import hmac as _hmac, hashlib as _hashlib, socket as _socket
+
+
+def jcheck(name, ok, detail="", who="demo"):
+    RESULTS.append({"name": name, "req": "jobs", "who": who, "status": "-", "ok": bool(ok), "diff": "" if ok else detail, "note": "새 기능"})
+    print(("  OK  " if ok else "  !!  ") + f"{name}" + ("" if ok else f"  — {detail}"))
+
+
+DCK = {"Cookie": "agsid=" + DEMO_TOK}
+st, _, b = req(A.new, "GET", "/api/events", headers=DCK)
+ev = json.loads(b) if st == 200 else {}
+jcheck("/api/events(예전 모양, 작업 표에서)", st == 200 and isinstance(ev.get("events"), list) and isinstance(ev.get("last"), int)
+       and all({"id", "dir", "name", "user", "ok", "sec", "t"} <= set(e) and e["user"] == DEMO_ID for e in ev["events"]), f"{st} {b[:200]!r}")
+st, hd, b = req(A.new, "GET", "/api/jobs", headers=DCK)
+jl = json.loads(b) if st == 200 else {}
+jcheck(f"/api/jobs(데모) → {st}, 본인 작업만 {len(jl.get('jobs', []))}건", st == 200 and {"jobs", "unread", "last"} <= set(jl) and all(j["user"] == DEMO_ID for j in jl["jobs"]), f"{st} {b[:200]!r}")
+st, _, b = req(A.new, "GET", "/api/jobs?unread=1&limit=5", headers=DCK)
+jcheck(f"/api/jobs?unread=1 → {st}", st == 200 and all(j["unread"] or j["status"] in ("queued", "running") for j in json.loads(b)["jobs"]), f"{st}")
+if LOCAL_TOK:
+    st, _, b = req(A.new, "GET", "/api/jobs?limit=200", headers={"X-Local-Owner": LOCAL_TOK})
+    jo = json.loads(b) if st == 200 else {}
+    jcheck(f"/api/jobs(주인) → {st}, 전부 {len(jo.get('jobs', []))}건(데모 것 포함)", st == 200 and {j["id"] for j in jl.get("jobs", [])} <= {j["id"] for j in jo["jobs"]}, who="local")
+for name, path, hdrs in (("로그인 없이 /api/jobs", "/api/jobs", {}), ("로그인 없이 /api/jobs/stream", "/api/jobs/stream", {})):
+    st, _, _ = req(A.new, "GET", path, EXT, hdrs)
+    jcheck(f"{name} → {st}", st == 401, who="anon")
+s_ = _socket.create_connection(("127.0.0.1", A.new), 10); s_.settimeout(5)
+s_.sendall(f"GET /api/jobs/stream HTTP/1.1\r\nHost: x\r\nCookie: agsid={DEMO_TOK}\r\n\r\n".encode())
+buf, t0 = b"", time.time()
+while b"event: hello" not in buf and time.time() - t0 < 5:
+    try:
+        buf += s_.recv(4096)
+    except _socket.timeout:
+        break
+s_.close()
+jcheck(f"/api/jobs/stream(데모) → hello {time.time() - t0:.2f}s", b"200 OK" in buf.split(b"\r\n")[0] and b"text/event-stream" in buf and b"event: hello" in buf, buf[:200].decode("latin-1"))
+st, _, b = req(A.new, "POST", "/api/jobs/read", headers={**DCK, "Content-Type": "application/json"}, body=b'{"ids": 3}')
+jcheck(f"/api/jobs/read 형식 틀림 → {st}", st == 400)
+SECF = os.path.join(os.path.dirname(os.path.abspath(A.db)), ".portal_jobs_secret")
+J = json.dumps({"tool": "kordoc-local", "user": DEMO_ID, "id": "contract-live", "status": "done", "title": "x"}).encode()
+for name, host, tok, exp in (("토큰 없음", "127.0.0.1", None, 403), ("틀린 토큰", "127.0.0.1", "x" * 64, 403), ("로컬 주인 토큰", "127.0.0.1", LOCAL_TOK or "y", 403)):
+    hd_ = {"Content-Type": "application/json", **({"X-Portal-Jobs-Token": tok} if tok else {})}
+    st, _, b = req(A.new, "POST", "/api/internal/jobs", host, hd_, J)
+    jcheck(f"/api/internal/jobs {name} → {st}", st == exp, f"{st} {b[:100]!r}", who="local")
+if os.path.exists(SECF):   # 맞는 토큰이어도 바깥 주소면 403(값은 출력 안 함)
+    good = _hmac.new(open(SECF).read().strip().encode(), b"portal-jobs:kordoc-local", _hashlib.sha256).hexdigest()
+    st, _, b = req(A.new, "POST", "/api/internal/jobs", EXT, {"Content-Type": "application/json", "X-Portal-Jobs-Token": good}, J)
+    jcheck(f"/api/internal/jobs 맞는 토큰 + 바깥 주소({'EXT'}) → {st}", st == 403, f"{st}", who="anon")
+    bad = _hmac.new(open(SECF).read().strip().encode(), b"portal-jobs:writer-local", _hashlib.sha256).hexdigest()
+    st, _, b = req(A.new, "POST", "/api/internal/jobs", "127.0.0.1", {"Content-Type": "application/json", "X-Portal-Jobs-Token": bad}, J)
+    jcheck(f"/api/internal/jobs 다른 도구의 토큰 → {st}", st == 403, f"{st}", who="local")
 
 print("\n## 프록시 /t/<도구>/ (GET 만)")
 same("/t/kordoc-local → 302", "GET", "/t/kordoc-local")

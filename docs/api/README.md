@@ -75,7 +75,7 @@ const g  = await (await fetch('/t/saju-local/api/graph?dept=' + encodeURICompone
 다 만든 화면은 포털과 같은 출처에서 나가야 합니다. 방법은 관리자(gggg8657)와 정합니다.
 - 도구의 `ui.html` 을 새 화면으로 바꾸기(도구 저장소에 PR), 또는
 - 포털에 새 화면용 정적 경로를 추가하기 — React 화면(agent-page-web)은 이 방식으로 **운영 중(`:8700/app`)**: 포털(fastportal)에 `WEB_DIST=<빌드 폴더>`(·`WEB_PREFIX`, 기본 `/app`)를 주면 `/app/…` 에서 같은 출처로 내보냄(SPA 폴백, `assets/` 긴 캐시, `index.html` no-cache). 로그인 화면·자산은 로그인 없이, 그 밖의 화면 주소는 로그인 전이면 `/app/login?next=` 로 302, API 는 401. 빌드는 `WEB_BASE`(기본 `/app/`, 라우터 `basename` 도 같게). `/` 까지 React 로 바꾸는 `WEB_ROOT`(준비만, 꺼짐)·배포·되돌리기는 포털 README 'FastAPI 포털' 과 agent-page-web `CUTOVER.md`.
-- React 화면이 부르는 포털 API: 셸이 `/api/me`·`/api/tools`·`/api/gpu`(홈, `llm` 대기열 포함)·`/api/events`(작업 끝 알림, 15초·창이 보일 때만)·`/api/account/notices`·`/api/account/theme`(테마 6종 저장)·`/api/account/onboarded`(둘러보기), 계정·승인·관리 화면이 `/api/account*`·`/api/pin`·`/api/approvals*`·`/api/admin*` — 예전 `account.html`·`theme/tour.js`·`help.html` 과 같은 요청(동등성 러너 `tests/parity/shell.spec.ts` 로 비교).
+- React 화면이 부르는 포털 API: 셸이 `/api/me`·`/api/tools`·`/api/gpu`(홈, `llm` 대기열 포함)·`/api/jobs`·`/api/jobs/stream`(작업 알림 센터 🔔 — SSE, 끊기면 30초 폴링)·`/api/jobs/read`·`/api/account/notices`·`/api/account/theme`(테마 6종 저장)·`/api/account/onboarded`(둘러보기), 계정·승인·관리 화면이 `/api/account*`·`/api/pin`·`/api/approvals*`·`/api/admin*` — 예전 `account.html`·`theme/tour.js`·`help.html` 과 같은 요청(동등성 러너 `tests/parity/shell.spec.ts`·`jobs.spec.ts` 로 비교).
 
 다른 서버에 따로 올려야 한다면 포털에 CORS·토큰 방식을 따로 열어야 하니 먼저 말해 주세요.
 도구 자체가 다른 컨테이너·서버에서 돌 때(혼합형)는 `tools.json` 항목에 `"host"` 를 넣으면 포털이 `http://<host>:<port>` 로 프록시합니다(시작·중지는 409, 그쪽이 늘 켜 둠 — 도구는 `BIND=0.0.0.0`). 화면에서 보는 주소(`/t/<도구>/…`)·헤더 규칙은 그대로입니다.
@@ -100,7 +100,7 @@ const g  = await (await fetch('/t/saju-local/api/graph?dept=' + encodeURICompone
   | 502 | **도구가 꺼져 있음** → `POST /api/start {"dir": "<도구>"}` 로 켠 뒤 다시 시도 |
 
 - **오래 걸리는 작업**: 포털은 요청 하나를 최대 1시간 기다립니다. 영상·구조 예측처럼 긴 작업은 도구마다 ① 스트리밍(SSE·줄 단위 JSON)으로 진행 상황을 흘리거나 ② 작업 id 를 받고 상태를 폴링합니다 — 도구별 문서의 "오래 걸림" 표시를 보세요.
-  1분 넘게 걸린 POST 는 포털이 기록해서 `GET /api/events` 로 알려 줍니다(파동이 펫의 "작업 끝났어요!" 알림).
+  **작업 알림 센터**: 도구가 알린 작업(대기·진행·완료·실패·취소)과 1분 넘게 걸린 POST(포털 자동 기록)가 `portal.db` 의 작업 표에 남고, `GET /api/jobs/stream`(SSE)으로 바로 옵니다 — 화면의 🔔·토스트. 예전 `GET /api/events` 도 같은 표에서 그대로 동작(파동이 펫의 "작업 끝났어요!").
 - **스트리밍**: 포털은 응답을 버퍼링하지 않고 그대로 흘립니다. `fetch` 의 `response.body.getReader()` 나 `EventSource` 로 읽으면 됩니다.
 - **GPU·LLM**: 이 표시가 있는 호출은 서버 GPU 를 씁니다. 여러 사람이 동시에 부르면 줄을 서니, 버튼 연타를 막아 주세요. `GET /api/gpu` 로 GPU 여유와 LLM 대기열(`llm.waiting`)을 볼 수 있습니다.
 
@@ -111,7 +111,11 @@ const g  = await (await fetch('/t/saju-local/api/graph?dept=' + encodeURICompone
 | `GET /api/tools` | 도구 목록 `{"tools": [{dir, name, title, desc, group, tags, port, up(켜짐), url, usage}], "rank", "posts", "me"}` | 로그인 |
 | `GET /api/me` | 지금 사용자 | 로그인 |
 | `GET /api/gpu` | GPU 사용 현황 `{"gpus": [{index, name, used, total, util, procs: [{tool, mem}]}], "t", "llm"}` — `llm` = LLM 대기열 `{ok, model, running(생성 중), waiting(대기), kv_cache(0~1)}`(vLLM 일 때만, 아니면 null · 5초 캐시) | 로그인 |
-| `GET /api/events?since=<id>` | 1분 넘게 걸려 끝난 내 작업 `{"events": [{id, dir, name, ok, sec, t}], "last"}` | 로그인 |
+| `GET /api/jobs?unread=1&limit=50&since=<seq>` | 작업 알림 센터 목록 `{"jobs": [Job], "unread", "last"}` — Job = `{id, tool, name, user, title, status(queued·running·done·failed·canceled), progress, started, finished, link(/t/<도구>/…), message, seq, unread}`. 본인 것만(주인은 전부), `unread=1` 이면 안 읽은 끝난 작업 + 도는 작업 | 로그인 |
+| `GET /api/jobs/stream` | 실시간(SSE, `EventSource`): `hello {last, unread}` → 바뀔 때마다 `job`(id: seq) · 다른 탭에서 읽으면 `read {ids}` · 25초마다 `: ping`. 다시 붙으면 `Last-Event-ID`(또는 `?since=`) 뒤 바뀐 것부터. 연결마다 스레드를 쓰지 않음 | 로그인 |
+| `POST /api/jobs/read` `{"ids": [...]}` 또는 `{"all": true}` | 읽음 표시(보는 사람마다 따로) → `{ok, read, unread}` | 로그인 |
+| `GET /api/events?since=<id>` | (예전 모양) 끝난 내 작업 `{"events": [{id, dir, name, ok, sec, t, title, link}], "last"}` — 작업 표의 done·failed, id = seq | 로그인 |
+| `POST /api/internal/jobs` | **도구 전용**(화면 X) — 아래 '도구가 작업 상태를 알리는 법' | 127.0.0.1 + 도구 토큰 |
 | `GET /api/guide/<도구>` | 도구 사용법(마크다운 텍스트) | 로그인 |
 | `GET /api/readme/<도구>` | 도구 README(마크다운 텍스트) | 로그인 |
 | `GET /api/depts` | 부서 목록 | 누구나 |
@@ -123,6 +127,20 @@ const g  = await (await fetch('/t/saju-local/api/graph?dept=' + encodeURICompone
 | `POST /api/pin` `{"pin", "new"}` | PIN 바꾸기(다른 기기 세션은 끊김, 지금 세션의 '로그인 유지'는 그대로) | 로그인 |
 | `POST /api/account/onboarded` `{"done": true}` | 첫 로그인 둘러보기 마침·건너뜀 기록(`/api/me` 의 `onboarded`) | 본인 |
 | `/api/account…` · `/api/approvals…` · `/api/admin…` | 계정 설정·부서 승인·관리 | 본인·부서장·관리자 |
+
+### 도구가 작업 상태를 알리는 법(개발 가이드)
+오래 걸리는 작업(대기열·폴링·스트리밍)을 하는 도구는 상태를 포털에 알려 주세요 — 사용자는 다른 화면에 있어도 🔔·토스트·브라우저 알림으로 받고, '결과 보기'로 그 결과 화면에 바로 갑니다.
+1. `agent-page-portal/sdk/portal_jobs.py`(표준 라이브러리만, 한 파일)를 도구 저장소에 복사.
+2. 상태가 바뀌는 곳에서 한 줄:
+   ```python
+   import portal_jobs
+   portal_jobs.notify(user, "running", id=job_id, title="유비퀴틴 구조 예측", link="/#" + job_id)    # user = 요청의 X-Agent-User
+   portal_jobs.notify(user, "done", id=job_id, message="pLDDT 87")                                   # done | failed | canceled | queued | running (+ progress=0~100)
+   ```
+   `id` 는 도구의 작업 id(같은 id 로 보내면 고침), `link` 는 **도구 안 경로**(`/` 로 시작 — `/#<id>`, `/?job=<id>` 등, 그 결과를 여는 주소 — 포털이 `/t/<도구>` 를 붙이고 React 셸은 `/app/tool/<도구>/…` 로 엶). 끝난 작업을 다시 진행 상태로 보내면 무시됩니다.
+3. 아무 설정도 필요 없습니다 — 포털이 도구를 켤 때 환경변수 `PORTAL_JOBS_URL`(`http://127.0.0.1:<포털 포트>/api/internal/jobs`)·`PORTAL_JOBS_TOKEN`(그 도구 전용, 로그·화면에 찍지 말 것)·`PORTAL_JOBS_TOOL` 을 넘깁니다. 없으면(포털 밖에서 띄움·selftest) `notify` 는 아무것도 안 하고 `False`. 보내기는 백그라운드 스레드 하나가 순서대로, 2초 타임아웃, 실패는 버림 — 도구 동작에 영향 없음. selftest 에 '환경변수 없이도 정상' 시험을 넣어 주세요.
+4. 다른 컨테이너의 도구(`tools.json` `host`): 그쪽에 `PORTAL_JOBS_URL=http://<포털>:<포트>/api/internal/jobs`·`PORTAL_JOBS_TOOL=<dir>` 와, `PORTAL_JOBS_TOKEN`(포털 쪽에서 관리자가 `python -m fastportal.jobs token <dir>` 로 만든 값 — 포털 비밀값 `_data/.portal_jobs_secret` 또는 `PORTAL_JOBS_SECRET` 이 같아야 맞음)을 주세요. 포털은 그 도구의 host 주소(또는 `PORTAL_JOBS_ALLOW`)에서 온 요청만 받습니다.
+직접 알리는 도구는 포털의 '1분 넘는 POST 자동 기록'에서 빠집니다(두 번 뜨지 않게). 지금 쓰는 도구: protein·battery·avatar·image·meeting·review·agent-cad.
 
 ## 도구 목록
 

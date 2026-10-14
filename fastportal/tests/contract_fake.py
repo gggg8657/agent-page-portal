@@ -44,6 +44,9 @@ class Tool(BaseHTTPRequestHandler):
                     "te": self.headers.get("Transfer-Encoding"), "len": len(body), "sha": hashlib.sha256(body).hexdigest()[:16]})
 
     def do_POST(self):
+        if self.path.startswith("/quick-slow"):   # 작업 알림 자동 기록 시험(PORTAL_JOBS_AUTO_S=1)
+            n = int(self.headers.get("Content-Length") or 0); n and self.rfile.read(n)
+            time.sleep(2.5); return self._json({"ok": True}, code=500 if "fail" in self.path else 200)
         if self.path.startswith("/slow"):
             n = int(self.headers.get("Content-Length") or 0); n and self.rfile.read(n)
             time.sleep(61); return self._json({"ok": True})
@@ -121,7 +124,9 @@ json.dump([{"dir": "fake-local", "port": TOOL_PORT, "name": "가짜", "title": "
           open(os.path.join(ROOT, "tools.json"), "w"), ensure_ascii=False)
 # bind-local: 포털이 띄우면 받은 BIND 를 파일에 적고 끝남(core.start 의 TOOL_BIND 확인용)
 os.makedirs(os.path.join(T, "bind-local"))
-open(os.path.join(T, "bind-local", "app.py"), "w").write("import os\nopen(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bind.txt'), 'w').write(os.environ.get('BIND', ''))\n")
+open(os.path.join(T, "bind-local", "app.py"), "w").write("import os, json\nh = os.path.dirname(os.path.abspath(__file__))\n"
+    "json.dump({k: os.environ.get(k) for k in ('PORTAL_JOBS_URL', 'PORTAL_JOBS_TOKEN', 'PORTAL_JOBS_TOOL', 'PORTAL_JOBS_SECRET')}, open(os.path.join(h, 'jobs-env.json'), 'w'))\n"
+    "open(os.path.join(h, 'bind.txt'), 'w').write(os.environ.get('BIND', ''))\n")
 BIND_TXT = os.path.join(T, "bind-local", "bind.txt")
 # React 빌드 대신 작은 가짜 dist(WEB_DIST 시험)
 WEB = os.path.join(T, "webdist")
@@ -502,13 +507,160 @@ check(f"/app(WEB_DIST)도 같이 → {st}", st == 200 and b'id="root"' in b and 
 st, _, b = req(NEW, "GET", "/", {**CK, "Accept": "text/html"})
 check(f"WEB_ROOT 없으면 / 는 예전 포털 화면 → {st}", st == 200 and not isroot(b) and b"/theme/tour.js" in b, kind="설정")
 
+print("\n## 작업 알림 센터(jobs 표 · 내부 경로 · SSE)")
+import hmac as _hmac
+SECF = os.path.join(DATA, ".portal_jobs_secret")
+check("비밀값 파일 권한 600", os.path.exists(SECF) and (os.stat(SECF).st_mode & 0o777) == 0o600, kind="보안")
+SEC = open(SECF).read().strip().encode()
+jtok = lambda d: _hmac.new(SEC, ("portal-jobs:" + d).encode(), hashlib.sha256).hexdigest()
+JE = json.load(open(os.path.join(T, "bind-local", "jobs-env.json")))
+check("도구 시작 때 PORTAL_JOBS_URL·TOKEN·TOOL 을 넘김(비밀값은 안 넘김)", JE["PORTAL_JOBS_URL"] == f"http://127.0.0.1:{BINDP}/api/internal/jobs" and JE["PORTAL_JOBS_TOOL"] == "bind-local"
+      and JE["PORTAL_JOBS_TOKEN"] == jtok("bind-local") and not JE["PORTAL_JOBS_SECRET"], str({k: bool(v) for k, v in JE.items()}), kind="설정")
+st, hd, b = req(NEW, "POST", "/api/signup", {"Content-Type": "application/json"}, json.dumps({"id": "other", "name": "남", "pin": "1234"}).encode(), tok=False)
+CK2 = {"Cookie": "agsid=" + hdr(hd, "set-cookie")[0].split(";")[0].split("=", 1)[1]}
+
+
+def ijob(port, payload, token=None, tool=None, extra=None):
+    hd_ = {"Content-Type": "application/json", **(extra or {})}
+    if token is not False:
+        hd_["X-Portal-Jobs-Token"] = token or jtok(tool or payload.get("tool", ""))
+    st, _, b = req(port, "POST", "/api/internal/jobs", hd_, json.dumps(payload).encode(), tok=False)
+    return st, json.loads(b or b"{}")
+
+
+J1 = {"tool": "down-local", "user": "tester", "id": "j1", "status": "running", "title": "시험 작업", "link": "/?job=j1", "message": "도는 중"}
+for name, kw, exp in (("토큰 없음", {"token": False}, 403), ("틀린 토큰", {"token": "x" * 64}, 403), ("다른 도구의 토큰", {"token": jtok("fake-local")}, 403),
+                      ("로컬 주인 토큰(다른 비밀)", {"token": TOKV}, 403)):
+    st, j = ijob(NEW, J1, **kw)
+    check(f"내부 경로 {name} → {st}", st == exp, str(j), kind="보안")
+st, j = ijob(NEW, {**J1, "tool": "none-local"}, token=jtok("none-local"))
+check(f"내부 경로 없는 도구 → {st}(같은 403)", st == 403, kind="보안")
+st, j = ijob(PROX, J1, extra={"X-Forwarded-For": "203.0.113.5"})
+check(f"내부 경로 바깥 주소(믿을 프록시 뒤 XFF 203.0.113.5)·맞는 토큰 → {st}", st == 403, kind="보안")
+st, j = ijob(PROX, {**J1, "tool": "remote-local", "id": "r1"}, extra={"X-Forwarded-For": "127.0.0.2"})
+check(f"tools.json host(127.0.0.2) 도구는 그 주소에서 받음 → {st}", st == 200 and j.get("id") == "remote-local:r1", str(j), kind="설정")
+st, j = ijob(PROX, {**J1, "tool": "down-local", "id": "r2"}, extra={"X-Forwarded-For": "127.0.0.2"})
+check(f"host 주소에서 다른(로컬) 도구 이름으로 → {st}", st == 403, kind="보안")
+for name, bad in (("status 틀림", {"status": "weird"}), ("user 형식", {"user": "a b<"}), ("id 형식", {"id": "../x"})):
+    st, j = ijob(NEW, {**J1, **bad})
+    check(f"내부 경로 {name} → {st}", st == 400, str(j), kind="설정")
+
+
+def sse_open(port, cookie_hd, since=None, last_id=None):
+    s = socket.create_connection(("127.0.0.1", port), 10)
+    extra = "".join(f"{k}: {v}\r\n" for k, v in cookie_hd.items()) + (f"Last-Event-ID: {last_id}\r\n" if last_id else "")
+    s.sendall(f"GET /api/jobs/stream{'?since=' + str(since) if since else ''} HTTP/1.1\r\nHost: x\r\n{extra}\r\n".encode())
+    s.settimeout(10)
+    return s
+
+
+def sse_read(s, want, timeout=5):
+    """이벤트(event, data) 목록 — want 개 모이거나 timeout"""
+    buf, out, end = b"", [], time.time() + timeout
+    s.settimeout(0.2)
+    while time.time() < end and len(out) < want:
+        try:
+            ch = s.recv(65536)
+            if not ch:
+                break
+            buf += ch
+        except socket.timeout:
+            pass
+        while b"\n\n" in buf:
+            blk, buf = buf.split(b"\n\n", 1)
+            ev = dict(l.split(": ", 1) for l in blk.decode().splitlines() if ": " in l and not l.startswith(":") and "HTTP/" not in l)
+            if "event" in ev:
+                out.append((ev["event"], json.loads(ev["data"]), ev.get("id")))
+    return out
+
+
+s_me, s_other, s_own = sse_open(NEW, CK), sse_open(NEW, CK2), sse_open(NEW, {"X-Local-Owner": TOKV})
+h = [sse_read(x, 1) for x in (s_me, s_other, s_own)]
+check("SSE 연결 → hello{last, unread}", all(x and x[0][0] == "hello" and "unread" in x[0][1] for x in h), str(h), kind="동작 확인")
+t0 = time.time(); st, j = ijob(NEW, J1)
+got = sse_read(s_me, 1); dt = time.time() - t0
+check(f"내부 경로 running → 본인 SSE 로 {dt:.2f}s 안에", st == 200 and got and got[0][0] == "job" and got[0][1]["status"] == "running" and got[0][1]["link"] == "/t/down-local/?job=j1"
+      and got[0][1]["title"] == "시험 작업" and dt < 1.5, str(got), kind="동작 확인")
+st, j = ijob(NEW, {**J1, "status": "done", "message": "끝", "title": ""})
+got = sse_read(s_me, 1)
+check("done → SSE(제목은 그대로, progress 100, unread)", got and got[0][1]["status"] == "done" and got[0][1]["title"] == "시험 작업" and got[0][1]["progress"] == 100 and got[0][1]["unread"], str(got), kind="동작 확인")
+own = sse_read(s_own, 2)
+check("주인(owner) SSE 는 남의 작업도 받음", [e[1]["status"] for e in own] == ["running", "done"], str(own), kind="동작 확인")
+oth = sse_read(s_other, 1, timeout=1.5)
+check("다른 계정 SSE 엔 안 감", oth == [], str(oth), kind="보안")
+st, j = ijob(NEW, {**J1, "status": "running"})
+check("끝난 작업을 다시 running 으로 → 무시", st == 200 and j.get("ignored") is True, str(j), kind="설정")
+st, j = ijob(NEW, {**J1, "user": "other", "status": "failed"})
+check(f"같은 id 를 다른 사용자로 → {st}", st == 403, kind="보안")
+jl = json.loads(req(NEW, "GET", "/api/jobs?unread=1", CK)[2])
+jo = json.loads(req(NEW, "GET", "/api/jobs", CK2)[2])
+jw = json.loads(req(NEW, "GET", "/api/jobs")[2])
+check("/api/jobs?unread=1: 본인 것(안 읽은 끝난 작업 + 도는 작업) + 안 읽은 개수", [x["id"] for x in jl["jobs"]] == ["down-local:j1", "remote-local:r1"] and jl["unread"] == 1, str(jl), kind="동작 확인")
+check("/api/jobs: 다른 계정엔 안 보임 · 주인은 전부", jo["jobs"] == [] and jo["unread"] == 0 and {x["id"] for x in jw["jobs"]} >= {"down-local:j1", "remote-local:r1"}, kind="보안")
+st, _, b = req(NEW, "GET", "/api/jobs", tok=False)
+check(f"/api/jobs 로그인 없이 → {st}", st == 401, kind="보안")
+st, _, b = req(NEW, "GET", "/api/jobs/stream", tok=False)
+check(f"/api/jobs/stream 로그인 없이 → {st}", st == 401, kind="보안")
+ev = json.loads(req(NEW, "GET", "/api/events", CK)[2])
+check("/api/events(예전 모양)에도 끝난 작업", any(e["dir"] == "down-local" and e["ok"] is True and {"id", "name", "sec", "t"} <= set(e) for e in ev["events"]) and ev["last"] > 1_700_000_000,
+      str(ev), kind="동작 확인")
+st, _, b = req(NEW, "POST", "/api/jobs/read", {**CK2, "Content-Type": "application/json"}, json.dumps({"ids": ["down-local:j1"]}).encode(), tok=False)
+check("남의 작업 읽음 표시 → 0건", st == 200 and json.loads(b)["read"] == 0, b.decode(), kind="보안")
+st, _, b = req(NEW, "POST", "/api/jobs/read", {**CK, "Content-Type": "application/json"}, json.dumps({"all": True}).encode(), tok=False)
+got = sse_read(s_me, 1)
+check("모두 읽음 → unread 0 + 본인 SSE 에 read", st == 200 and json.loads(b)["unread"] == 0 and got and got[0][0] == "read" and got[0][1]["ids"] == ["down-local:j1"], f"{b} {got}", kind="동작 확인")
+check("읽음 표시는 주인 SSE 로 안 감", sse_read(s_own, 1, timeout=1) == [], kind="동작 확인")
+jw2 = json.loads(req(NEW, "GET", "/api/jobs?unread=1")[2])
+check("주인의 읽음은 따로(본인이 읽어도 주인에겐 안 읽음)", any(x["id"] == "down-local:j1" and x["unread"] for x in jw2["jobs"]), kind="동작 확인")
+last_seq = got and json.loads(req(NEW, "GET", "/api/jobs", CK)[2])["jobs"][0]["seq"]
+for x in (s_me, s_other, s_own):
+    x.close()
+ijob(NEW, {**J1, "id": "j2", "status": "queued", "title": "두 번째"})
+s_re = sse_open(NEW, CK, last_id=last_seq)
+got = sse_read(s_re, 2)
+check("다시 붙을 때 Last-Event-ID 뒤 바뀐 것만 다시 받음", [e[0] for e in got] == ["hello", "job"] and got[1][1]["id"] == "down-local:j2", str(got), kind="동작 확인")
+s_re.close()
+st, _, b = req(NEW2, "GET", "/api/jobs", CK, tok=False)
+check("다른 포털 프로세스(재시작과 같음)에도 남음(DB)", st == 200 and {x["id"] for x in json.loads(b)["jobs"]} == {"down-local:j1", "down-local:j2", "remote-local:r1"}, b.decode()[:200], kind="동작 확인")
+print(f"  … SSE {A.streams * 4}개 동시 연결")
+pid = procs["new"].pid; t_a, m_a = threads_rss(pid)
+many = [sse_open(NEW, CK) for _ in range(A.streams * 4)]
+okh = sum(1 for x in many if sse_read(x, 1))
+t_b, m_b = threads_rss(pid)
+t0 = time.time(); ijob(NEW, {**J1, "id": "j3", "status": "running", "title": "많이"})
+okj = sum(1 for x in many if (lambda g: g and g[0][1]["id"] == "down-local:j3")(sse_read(x, 1, timeout=3)))
+dt = time.time() - t0
+for x in many:
+    x.close()
+check(f"SSE {len(many)}개: hello {okh}, 새 작업 {okj}개에 {dt:.2f}s, 스레드 {t_a}→{t_b}, RSS {m_a}→{m_b}MB", okh == okj == len(many) and t_b - t_a <= 41, kind="동작 확인")
+JA = free_port()
+launch("jobsauto", JA, {"PORTAL_JOBS_AUTO_S": "1"})
+s_a = sse_open(JA, CK); sse_read(s_a, 1)
+st, _, _ = req(JA, "POST", "/t/fake-local/quick-slow", {**CK, "Content-Type": "application/json"}, b"{}", tok=False)
+got = sse_read(s_a, 2, timeout=4)
+check("자동 기록: 기준(1초) 넘는 프록시 POST → running 뒤 done", [e[1]["status"] for e in got] == ["running", "done"] and got[0][1]["id"].startswith("auto:fake-local:")
+      and got[1][1]["link"] == "/t/fake-local/" and got[1][1]["message"].endswith("초 걸림"), str(got), kind="동작 확인")
+req(JA, "POST", "/t/fake-local/quick-slow?fail=1", {**CK, "Content-Type": "application/json"}, b"{}", tok=False)
+got = sse_read(s_a, 2, timeout=4)
+check("자동 기록: 도구가 500 → failed", [e[1]["status"] for e in got] == ["running", "failed"], str(got), kind="동작 확인")
+req(JA, "POST", "/t/fake-local/echo", {**CK, "Content-Type": "application/json"}, b"{}", tok=False)
+check("짧은 POST 는 기록 안 함", sse_read(s_a, 1, timeout=1.5) == [], kind="동작 확인")
+ijob(JA, {**J1, "tool": "fake-local", "id": "self1", "status": "done"})
+sse_read(s_a, 1)
+req(JA, "POST", "/t/fake-local/quick-slow", {**CK, "Content-Type": "application/json"}, b"{}", tok=False)
+check("자기 알림을 쓰는 도구는 자동 기록 건너뜀(두 번 안 뜸)", sse_read(s_a, 1, timeout=2) == [], kind="동작 확인")
+s_a.close()
+logs = "".join(open(os.path.join(T, f)).read() for f in os.listdir(T) if f.endswith(".log"))
+check("로그에 도구 토큰·비밀값 없음", SEC.decode() not in logs and jtok("bind-local") not in logs and jtok("down-local") not in logs, kind="보안")
+
 if A.slow:
     print("\n## 1분 넘는 POST → /api/events (61초)")
+    since0 = json.loads(req(NEW, "GET", "/api/events", CK)[2])["last"]   # 앞 시험(작업 알림 센터)이 같은 DB 에 남긴 것은 빼고 비교
     ths = [threading.Thread(target=req, args=(p, "POST", "/t/fake-local/slow", {**CK, "Content-Type": "application/json"}, b"{}")) for p in (OLD, NEW)]
     [t.start() for t in ths]; [t.join() for t in ths]
-    ea = json.loads(req(OLD, "GET", "/api/events", CK)[2]); eb = json.loads(req(NEW, "GET", "/api/events", CK)[2])
-    strip = lambda e: [{k: v for k, v in x.items() if k not in ("id", "t", "sec")} for x in e["events"]]
-    check("/api/events 기록 같음", strip(ea) == strip(eb) and len(eb["events"]) == 1, f"{strip(ea)} / {strip(eb)}")
+    ea = json.loads(req(OLD, "GET", "/api/events", CK)[2]); eb = json.loads(req(NEW, "GET", f"/api/events?since={since0}", CK)[2])
+    strip = lambda e: [{k: v for k, v in x.items() if k in ("dir", "name", "user", "ok")} for x in e["events"]]
+    check("/api/events 기록 같음(예전 키 — 새 포털은 title·link 를 더 줌)", strip(ea) == strip(eb) and len(strip(eb)) == 1, f"{strip(ea)} / {strip(eb)}")
 
 for p in procs.values():
     p.send_signal(signal.SIGTERM)

@@ -22,7 +22,7 @@
 </style>
 <button id="agHelpBtn" title="사용법 보기">?</button>
 <dialog id="agHelp"><div class="agh-h"><span id="agHelpT">사용법</span><button id="agHelpX" aria-label="닫기">×</button></div><div class="agh-b" id="agHelpB">불러오는 중…</div>
-<div class="agh-f"><label><input type="checkbox" id="agHelpNo" checked> 다음부터 자동으로 띄우지 않기</label><label title="1분 넘게 걸린 내 작업이 끝나면 알려 줌"><input type="checkbox" id="agNoteOn"> 작업 끝 알림</label><a id="agHelpTour" href="/#tour" hidden>둘러보기 다시 보기</a><a id="agHelpG" href="/guide/#%DIR%" target="_blank">설명서에서 보기</a><button id="agHelpOk" autofocus>시작하기</button></div></dialog>
+<div class="agh-f"><label><input type="checkbox" id="agHelpNo" checked> 다음부터 자동으로 띄우지 않기</label><label title="내 작업이 끝나면 알려 줌(실시간)"><input type="checkbox" id="agNoteOn"> 작업 끝 알림</label><a id="agHelpTour" href="/#tour" hidden>둘러보기 다시 보기</a><a id="agHelpG" href="/guide/#%DIR%" target="_blank">설명서에서 보기</a><button id="agHelpOk" autofocus>시작하기</button></div></dialog>
 <script>(function(){
   if (window.top !== window) { document.getElementById('agHelpBtn').remove(); return; }  // iframe(예: 파동이 펫) 안에서는 사용법 버튼·팝업 없음
   const DIR = "%DIR%", KEY = "agGuideSeen:%USER%:" + DIR;   // 계정별(포털 로그인 id) · 브라우저(localStorage) 기준
@@ -60,39 +60,46 @@
     if (!seen) (window.agTourCheck || Promise.resolve(false)).then(t => { if (!t) open(); });   // 최초 1회 자동 — 첫 로그인 둘러보기가 뜨면 그쪽이 먼저
   }).catch(() => { b.textContent = '사용법을 불러오지 못했습니다.'; });
 })();</script>
-<script>(function(){  // 오래 걸린 내 작업(1분 넘는 요청)이 끝나면 알림 — 어느 포털 화면을 보고 있든. 끄기: ? 사용법 창 아래 '작업 끝 알림'
+<script>(function(){  // 작업 알림 센터 — 내 작업(도구가 알린 것 + 1분 넘는 요청)이 끝나면 바로 알림(SSE /api/jobs/stream, 끊기면 30초 폴링). 끄기: ? 사용법 창 아래 '작업 끝 알림'
   if (window.top !== window) return;
   const DIR = "%DIR%", LS = (k, v) => { try { return v === undefined ? localStorage.getItem(k) : localStorage.setItem(k, v); } catch (e) { return null; } };
-  const on = () => LS('agNotify') !== 'off', sys = () => window.isSecureContext && 'Notification' in window;  // 시스템 알림은 https·localhost 에서만 됨 → 아니면 화면 안 알림
+  const on = () => LS('agNotify') !== 'off';
+  const sys = () => window.isSecureContext && 'Notification' in window && LS('agNotifyBrowser') === 'on' && Notification.permission === 'granted';  // 브라우저 알림은 새 화면 계정 설정에서 켠 경우만
   const box = document.createElement('div'); box.id = 'agNote'; document.body.appendChild(box);
   const toast = (html, cls, ms) => { const d = document.createElement('div'); d.className = cls || ''; d.innerHTML = html; box.appendChild(d);
     d.querySelectorAll('button:not(.y)').forEach(b => b.onclick = () => d.remove()); if (ms) setTimeout(() => d.remove(), ms); return d; };
-  const cb = document.getElementById('agNoteOn'); if (cb) { cb.checked = on(); cb.onchange = () => { LS('agNotify', cb.checked ? 'on' : 'off'); if (cb.checked) ask(true); }; }
-  function ask(force) {  // 권한은 한 번만 공손하게 물음(버튼 눌러야 브라우저 창이 뜸)
-    if (!sys() || Notification.permission !== 'default' || (!force && LS('agNotifyAsked'))) return;
-    LS('agNotifyAsked', '1');
-    const d = toast('<span>🔔 1분 넘게 걸리는 작업이 끝나면 알려 드릴까요?</span><button class="y">알림 받기</button><button>괜찮아요</button><button aria-label="닫기">×</button>', '', 15000);
-    d.querySelector('.y').onclick = () => { d.remove(); Notification.requestPermission(); };
-  }
-  let since = null, title = document.title, blink = null;
+  const cb = document.getElementById('agNoteOn'); if (cb) { cb.checked = on(); cb.onchange = () => LS('agNotify', cb.checked ? 'on' : 'off'); }
+  let title = document.title, blink = null, last = 0, es = null, fails = 0, poller = 0;
+  const E = x => String(x ?? '').replace(/[&<>"]/g, '');
+  const LABEL = { done: '끝', failed: '실패', canceled: '취소' };
   const seen = () => +(LS('agNotifyLast') || 0);
-  function show(e) {
-    const min = Math.max(1, Math.round(e.sec / 60)), msg = `${e.name} 작업 ${e.ok ? '끝' : '실패'} (${min}분)`;
-    if (e.dir === DIR && !document.hidden) return;  // 지금 그 도구 화면을 보고 있으면 이미 보임
-    if (sys() && Notification.permission === 'granted') { try { const n = new Notification(msg, { tag: 'ag-' + e.id, body: '눌러서 열기' }); n.onclick = () => { window.focus(); if (e.dir !== DIR) window.open('/t/' + e.dir + '/'); n.close(); }; return; } catch (x) {} }
-    toast(`<span>${e.ok ? '✅' : '⚠️'} ${msg.replace(/[&<>]/g, '')}</span>${e.dir !== DIR ? `<a href="/t/${e.dir}/" target="_blank" style="color:#2563eb;white-space:nowrap">열기</a>` : ''}<button aria-label="닫기">×</button>`, e.ok ? '' : 'bad', 15000);
+  function show(j) {  // j: 작업(Job) — {seq, tool, name, title, status, link, message}
+    if (!LABEL[j.status] || j.seq <= seen()) return;
+    LS('agNotifyLast', j.seq);  // 여러 탭이어도 한 번
+    if (!on() || (j.tool === DIR && !document.hidden)) return;  // 지금 그 도구 화면을 보고 있으면 이미 보임
+    const ok = j.status === 'done', msg = `${j.title || j.name + ' 작업'} ${LABEL[j.status]}${j.message ? ' · ' + j.message : ''}`;
+    const link = /^\/t\/[a-z0-9-]+\//.test(j.link || '') ? j.link : '/t/' + j.tool + '/';
+    if (document.hidden && sys()) { try { const n = new Notification(msg, { tag: 'ag-job-' + j.id, body: j.name + ' · 눌러서 결과 보기' }); n.onclick = () => { window.focus(); location.href = link; n.close(); }; return; } catch (x) {} }
+    toast(`<span>${ok ? '✅' : '⚠️'} ${E(msg)}</span><a href="${E(link)}" style="color:#2563eb;white-space:nowrap">결과 보기</a><button aria-label="닫기">×</button>`, ok ? '' : 'bad', 15000);
     if (document.hidden && !blink) { let k = 0; blink = setInterval(() => { document.title = (k++ % 2) ? title : '🔔 ' + msg; }, 1000);
       document.addEventListener('visibilitychange', function f() { if (!document.hidden) { clearInterval(blink); blink = null; document.title = title; document.removeEventListener('visibilitychange', f); } }); }
   }
-  function poll() {
-    if (!on()) return;
-    fetch('/api/events?since=' + (since ?? 0)).then(r => r.json()).then(j => {
-      const fresh = since !== null;  // 첫 조회는 기준점만 잡되, 탭이 닫혀 있던 사이 10분 안에 끝난 건 알려 줌
-      for (const e of j.events || []) if (e.id > seen() && (fresh || Date.now() / 1000 - e.t < 600)) { LS('agNotifyLast', e.id); show(e); }  // 여러 탭이어도 한 번만
-      since = j.last;
-    }).catch(() => {});
+  function take(j) { last = Math.max(last, j.seq); show(j); }
+  function poll() {  // SSE 가 안 될 때(프록시가 막음 등) 30초마다
+    if (document.hidden) return;
+    fetch('/api/jobs?since=' + last).then(r => r.ok ? r.json() : null).then(j => { if (j) j.jobs.slice().reverse().forEach(take); }).catch(() => {});
   }
-  poll(); setInterval(poll, 15000);
+  function connect() {
+    if (!window.EventSource) return void (poller = setInterval(poll, 30000));
+    es = new EventSource('/api/jobs/stream' + (last ? '?since=' + last : ''));
+    es.addEventListener('hello', e => { fails = 0; const h = JSON.parse(e.data); if (!last) last = h.last; });
+    es.addEventListener('job', e => take(JSON.parse(e.data)));
+    es.onerror = () => { if (++fails >= 3 || es.readyState === 2) { es.close(); if (!poller) { poller = setInterval(poll, 30000); setTimeout(() => { clearInterval(poller); poller = 0; connect(); }, 120000); } } };
+  }
+  fetch('/api/jobs?limit=30').then(r => r.ok ? r.json() : null).then(j => {  // 탭이 닫혀 있던 사이 10분 안에 끝난 것은 알려 줌
+    if (!j) return; last = j.last; const now = Date.now() / 1000;
+    j.jobs.slice().reverse().filter(x => x.unread && x.finished && now - x.finished < 600).forEach(show);
+  }).catch(() => {}).finally(connect);
   fetch('/api/account/notices').then(r => r.ok ? r.json() : null).then(j => {  // 내 요청 결과(부서·부서장) 한 번씩 + 승인할 요청 안내(탭마다 한 번)
     if (!j) return; const E = x => String(x ?? '').replace(/[&<>"]/g, '');
     for (const n of j.notices || []) toast(`<span>${n.status === 'approved' ? '✅' : '⚠️'} ${E(n.label)} 요청(${E(n.dept)})이 ${n.status === 'approved' ? '승인' : '거절'}됐습니다${n.note ? ' — ' + E(n.note) : ''}</span><a href="/account" style="color:#2563eb;white-space:nowrap">보기</a><button aria-label="닫기">×</button>`, n.status === 'approved' ? '' : 'bad', 30000);
@@ -100,7 +107,6 @@
     if (j.approvals && shown != j.approvals) { try { sessionStorage.setItem('agApprovals', j.approvals); } catch (e) {}
       toast(`<span>📝 승인할 요청이 ${j.approvals}건 있습니다</span><a href="/approvals" style="color:#2563eb;white-space:nowrap">보기</a><button aria-label="닫기">×</button>`, '', 20000); }
   }).catch(() => {});
-  setTimeout(() => { if (on() && !document.getElementById('agHelp').open) ask(); }, 4000);
 })();</script>
 <script>(function(){  // 파동이 펫 — 모든 화면 아래를 돌아다님(끄기: 펫 메뉴 ⋯ → 펫 끄기). padong-local 이 꺼져 있으면 아무것도 안 뜸
   if (window.top !== window || "%DIR%" === "padong-local") return;

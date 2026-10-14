@@ -12,8 +12,10 @@ env: portal.py 와 같음(PORT 기본 8720, AGENT_DATA, AGENT_OWNERS, TLS_CERT·
      PORTAL_MAX_JSON(포털 API JSON 본문 상한, 기본 1MB) TOOLS_ALIVE_TTL(도구 켜짐 확인 캐시 초, 기본 5)
      TOOL_BIND(포털이 띄우는 도구의 BIND, 기본 127.0.0.1 — 컨테이너에선 0.0.0.0) WEB_DIST·WEB_PREFIX(React 빌드를 같은 출처로, 기본 꺼짐·/app)
      WEB_ROOT=1·WEB_ROOT_DIST('/' 를 React 로 — 준비만, 기본 꺼짐)
+     작업 알림 센터(jobs.py): PORTAL_JOBS_AUTO_S(자동 기록 기준 초, 60) PORTAL_JOBS_URL(도구에 넘길 내부 주소, 기본 http://127.0.0.1:PORT/api/internal/jobs)
+     PORTAL_JOBS_SECRET(도구 토큰을 만드는 비밀값 — 없으면 _data/.portal_jobs_secret) PORTAL_JOBS_ALLOW(내부 경로를 더 받을 IP, 쉼표) PORTAL_JOBS_KEEPALIVE(SSE 빈 줄 초, 25)
 tools.json 의 "host": 그 도구는 다른 컨테이너·서버(http://<host>:<port>) — 상태 확인·프록시만, 시작·중지는 409"""
-import asyncio, hashlib, http.cookiejar, json, os, re, time, urllib.parse
+import asyncio, hashlib, http.cookiejar, json, os, re, secrets, sqlite3, time, urllib.parse
 from contextlib import asynccontextmanager
 
 import anyio
@@ -22,7 +24,7 @@ from fastapi import FastAPI, Request
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import Response
 
-from . import core
+from . import core, jobs
 from .core import LOCAL, OWNERS, TLS, HOP
 
 MAX_BODY = int(os.environ.get("PORTAL_MAX_BODY", str(600 * 1024 * 1024)))   # 보안 설계서 '포털 업로드 상한' 제안값(meeting 음성 500MB 포함)
@@ -34,8 +36,10 @@ DROP_REQ = HOP | {"x-agent-user", "x-forwarded-user", "x-user", "cookie", "x-loc
 AG_COOKIE = re.compile(r"(?:^|;\s*)ag(?:sid|theme)=[^;]*")
 
 core.init_db()
-
-EVENTS = []          # 오래 걸린 도구 작업(1분 넘는 POST) 끝남 — /api/events. 프로세스 메모리(1워커 전제, README 참고)
+with core.db() as _c:
+    jobs.init(_c)   # 작업 알림 센터(jobs 표) — 예전 메모리 EVENTS 를 대체(재시작해도 남음)
+jobs.load_self_report()
+JOBS_KEEPALIVE = float(os.environ.get("PORTAL_JOBS_KEEPALIVE", "25"))   # SSE 빈 줄(주석) 간격 — 중간 프록시가 끊지 않게
 CLIENT = {"c": None}
 
 
@@ -52,6 +56,7 @@ async def lifespan(_app):
     # 쿠키 저장소는 끔: 켜 두면 한 사람의 요청에 도구가 준 Set-Cookie 를 클라이언트가 기억했다가 다른 사람 요청에 붙인다.
     # 리디렉트는 직접 따라감(_send) — httpx 가 따라가면 Cookie 헤더를 빼서 portal.py(urllib)와 달라짐.
     jar = http.cookiejar.CookieJar(policy=_NoCookies())
+    jobs.HUB.loop = asyncio.get_running_loop()
     CLIENT["c"] = httpx.AsyncClient(timeout=httpx.Timeout(PROXY_TIMEOUT, connect=10.0), follow_redirects=False, trust_env=False, cookies=jar,
                                     limits=httpx.Limits(max_connections=None, max_keepalive_connections=64, keepalive_expiry=30))
     if os.environ.get("BACKUP", "0") == "1":
@@ -496,8 +501,21 @@ def get_sync(ctx):
         return manage_get(ctx, p)
     if p.startswith("/t/"):
         return "proxy"
-    if p == "/api/events":
-        return "events"
+    if p == "/api/events":   # 예전 모양(파동이 펫 pet.js 등) — 작업 표에서 끝난 것만
+        try:
+            since = int((ctx.raw.split("since=") + ["0"])[1].split("&")[0] or 0)
+        except ValueError:
+            since = 0
+        return ctx.send(jobs.legacy_events(ctx.agent_user, since))
+    if p == "/api/jobs":
+        q = urllib.parse.parse_qs(urllib.parse.urlsplit(ctx.raw).query)
+        try:
+            lim, since = int(q.get("limit", ["50"])[0]), int(q.get("since", ["0"])[0])
+        except ValueError:
+            return ctx.send({"error": "limit·since 는 숫자"}, code=400)
+        return ctx.send(jobs.listing(ctx.agent_user, q.get("unread", ["0"])[0] in ("1", "true"), lim, since))
+    if p == "/api/jobs/stream":
+        return "jobs_stream"
     if p == "/api/gpu":
         return ctx.send(core.gpu_status())
     if p == "/api/tools":
@@ -619,6 +637,14 @@ def post_sync(ctx, body):
             if path == "/api/post_like":
                 c.execute("INSERT OR IGNORE INTO post_likes(post,user) VALUES(?,?)", (int(req["id"]), ctx.uid))
                 return ctx.send({"ok": True})
+            if path == "/api/jobs/read":
+                ids = req.get("ids")
+                if not req.get("all") and not (isinstance(ids, list) and all(isinstance(i, str) for i in ids)):
+                    raise ValueError("ids(문자열 목록) 또는 all: true")
+                got = jobs.mark_read(ctx.agent_user, None if req.get("all") else ids)
+                if got:
+                    jobs.HUB.publish("read", {"ids": got}, ctx.agent_user, exact=True)   # 같은 사람의 다른 탭 배지도 맞춤
+                return ctx.send({"ok": True, "read": len(got), "unread": jobs.listing(ctx.agent_user, limit=1)["unread"]})
             if path == "/api/tool_add":
                 if not ctx.is_owner:
                     return ctx.send({"error": "앱 등록은 관리자만 할 수 있습니다"}, code=403)
@@ -633,7 +659,7 @@ def post_sync(ctx, body):
             elif path == "/api/start":
                 if _alive_sync(core.tool_addr(t)) and not ctx.is_owner:
                     return ctx.send({"error": "이미 실행 중입니다"}, code=409)
-                core.start(t); _ALIVE["t"] = 0.0   # 켜짐 캐시 비움 — 다음 /api/tools 가 바로 다시 확인
+                core.start(t, jobs.tool_env(t)); _ALIVE["t"] = 0.0   # 켜짐 캐시 비움 — 다음 /api/tools 가 바로 다시 확인
             elif path == "/api/stop":
                 if not ctx.is_owner:
                     return ctx.send({"error": "도구 중지는 관리자만 할 수 있습니다"}, code=403)
@@ -659,15 +685,41 @@ def _alive_sync(addr):
 
 
 # ── 프록시 /t/<도구>/… ───────────────────────────────────────────────────
-def _record(ctx, t0, status):
-    """오래 걸린 도구 작업(1분 넘는 POST)이 끝나면 기록 → 파동이 펫이 '작업 끝났어요!' (/api/events)"""
-    parts, sec = ctx.raw.split("/", 3), time.time() - t0
-    if ctx.method == "POST" and sec > 60 and len(parts) > 2 and parts[2] != "padong-local":
-        t = core.tool(parts[2])
+def _auto_write(user, t, jid, status, message):
+    for _ in range(2):   # running 과 done 이 거의 같은 때 처음 들어가면 한쪽이 키 충돌 — 한 번 더
+        try:
+            j = jobs.upsert(user, t["dir"], status, jid, f"{t.get('name', t['dir'])} 작업", "/", message, auto=True)
+            if j:
+                jobs.HUB.publish("job", j, j["user"])
+            return
+        except sqlite3.IntegrityError:
+            continue
+        except Exception as e:
+            print("jobs: 자동 기록 실패", type(e).__name__, e, flush=True)
+            return
+
+
+def _auto_job(ctx, t):
+    """오래 걸리는 프록시 POST 자동 기록: AUTO_S(기본 60초) 지나도 안 끝나면 running, 끝나면 done/failed.
+    파동이 펫·자기 알림(portal_jobs.py)을 쓰는 도구는 건너뜀(같은 작업이 두 번 뜨지 않게)"""
+    if ctx.method != "POST" or t["dir"] == "padong-local" or t["dir"] in jobs.SELF_REPORT:
+        return None
+    loop, st = asyncio.get_running_loop(), {"id": secrets.token_hex(6)}
+    st["h"] = loop.call_later(jobs.AUTO_S, lambda: loop.run_in_executor(None, _auto_write, ctx.agent_user, t, st["id"], "running", "오래 걸리는 요청 — 진행 중"))
+    return st
+
+
+def _record(ctx, t0, status, auto):
+    """프록시 요청이 끝남 → 자동 작업이면 AUTO_S 를 넘겼을 때만 done/failed 로 기록(예전 /api/events 와 같은 조건)"""
+    if not auto:
+        return
+    auto["h"].cancel()
+    sec = time.time() - t0
+    if sec > jobs.AUTO_S:
+        t = core.tool(ctx.raw.split("/", 3)[2])
         if t:
-            EVENTS.append({"id": (EVENTS[-1]["id"] + 1) if EVENTS else int(t0), "dir": parts[2], "name": t.get("name", parts[2]), "user": ctx.agent_user,
-                           "ok": status < 400, "sec": round(sec), "t": int(time.time())})
-            del EVENTS[:-30]
+            msg = (f"{round(sec)}초 걸림" if sec < 90 else f"{round(sec / 60)}분 걸림") + ("" if status < 400 else f" · HTTP {status}")
+            asyncio.get_running_loop().run_in_executor(None, _auto_write, ctx.agent_user, t, auto["id"], "done" if status < 400 else "failed", msg)
 
 
 class Stream(Response):
@@ -747,7 +799,8 @@ async def proxy(ctx):
         return ctx.send({"error": "unknown tool"}, code=404)
     if len(parts) < 4:
         return ctx.bare(302, [("Location", f"/t/{t['dir']}/")])
-    rec = lambda: _record(ctx, t0, status[0])
+    auto = _auto_job(ctx, t)
+    rec = lambda: _record(ctx, t0, status[0], auto)
     # 요청 본문: Content-Length 가 있으면 그 길이로 흘려 넘김(버퍼 없음), 청크면 상한까지 모아 길이를 붙여 넘김(stdlib 도구는 청크 본문을 못 읽음)
     try:
         n = _length(ctx)
@@ -811,6 +864,83 @@ async def proxy(ctx):
     return Stream(r.status_code, out, r, rec)
 
 
+# ── 작업 알림 센터: 도구 → 포털(내부 경로) · 화면 ← 포털(SSE) ─────────────────
+def internal_sync(ctx, body):
+    try:
+        req = parse_json(body)
+    except ValueError:
+        return ctx.send({"error": "요청 본문은 JSON 객체여야 합니다"}, code=400)
+    d = str(req.get("tool") or "")
+    if not core.tool(d) or not jobs.internal_ok(ctx.client, ctx.headers.get("x-portal-jobs-token"), d):   # 없는 도구도 같은 403(목록을 알려 주지 않게)
+        return ctx.send({"error": "forbidden"}, code=403)
+    try:
+        j = jobs.upsert(req.get("user"), d, req.get("status"), req.get("id"), req.get("title"), req.get("link"), req.get("message"), req.get("progress"))
+    except PermissionError as e:
+        return ctx.send({"error": str(e)}, code=403)
+    except (ValueError, TypeError) as e:
+        return ctx.send({"error": str(e) if isinstance(e, ValueError) else "요청 값 형식이 틀립니다"}, code=400)
+    if j:
+        jobs.HUB.publish("job", j, j["user"])
+    return ctx.send({"ok": True, "id": j["id"] if j else None, "ignored": j is None})
+
+
+class JobStream(Response):
+    """GET /api/jobs/stream — text/event-stream. 연결마다 asyncio 큐 하나(스레드 없음). 처음에 hello{last, unread},
+    since(?since= 또는 Last-Event-ID) 뒤에 바뀐 작업을 다시 보내고, 그다음 바뀔 때마다 event: job / event: read. 빈 줄 주석으로 연결 유지"""
+
+    def __init__(self, ctx, since):
+        self.status_code, self.background, self.ctx, self.since = 200, None, ctx, since
+        hd = [("X-Author", _h(core._SIG_A)), ("Content-Type", "text/event-stream; charset=utf-8"), ("Cache-Control", "no-cache"),
+              ("X-Accel-Buffering", "no"), ("X-Content-Type-Options", "nosniff")]
+        if ctx.setcookie:
+            hd.append(("Set-Cookie", ctx.setcookie))
+        self.raw_headers = [(k.lower().encode("latin-1"), v if isinstance(v, bytes) else v.encode("latin-1")) for k, v in hd]
+
+    async def __call__(self, scope, receive, send):
+        viewer = self.ctx.agent_user
+        q = jobs.HUB.subscribe(viewer)   # 다시 보내기 전에 구독 — 그 사이 바뀐 것도 놓치지 않음(화면은 seq·id 로 중복을 걸러냄)
+        try:
+            async with anyio.create_task_group() as tg:
+                async def pump():
+                    try:
+                        await send({"type": "http.response.start", "status": 200, "headers": self.raw_headers})
+                        head = await run_in_threadpool(jobs.listing, viewer, False, 100, self.since)
+                        buf = b"retry: 3000\n\n" + jobs.sse("hello", {"last": head["last"], "unread": head["unread"]})
+                        if self.since:
+                            buf += b"".join(jobs.sse("job", j, j["seq"]) for j in reversed(head["jobs"]))
+                        await send({"type": "http.response.body", "body": buf, "more_body": True})
+                        while not q.dead:
+                            try:
+                                kind, data = await asyncio.wait_for(q.get(), JOBS_KEEPALIVE)
+                                chunk = jobs.sse(kind, data, data.get("seq") if kind == "job" else None)
+                            except asyncio.TimeoutError:
+                                chunk = b": ping\n\n"
+                            await send({"type": "http.response.body", "body": chunk, "more_body": True})
+                    except OSError:
+                        pass
+                    finally:
+                        tg.cancel_scope.cancel()
+
+                async def watch():
+                    while (await receive())["type"] != "http.disconnect":
+                        pass
+                    tg.cancel_scope.cancel()
+
+                tg.start_soon(pump)
+                tg.start_soon(watch)
+        finally:
+            jobs.HUB.unsubscribe(q)
+
+
+def job_stream(ctx):
+    q = urllib.parse.parse_qs(urllib.parse.urlsplit(ctx.raw).query)
+    try:
+        since = int(ctx.headers.get("last-event-id") or q.get("since", ["0"])[0] or 0)
+    except ValueError:
+        since = 0
+    return JobStream(ctx, since)
+
+
 # ── 진입점: portal.py 의 do_GET·do_POST 와 같은 순서 ────────────────────────
 def _501(method):
     """portal.py(BaseHTTPRequestHandler)는 GET·POST 말고는 501 — 같은 응답(HEAD 는 uvicorn 이 본문을 뺌)"""
@@ -827,18 +957,19 @@ async def handle(request: Request):
             r = await run_in_threadpool(get_sync, ctx)
             if r == "proxy":
                 return await proxy(ctx)
-            if r == "events":
-                try:
-                    since = int((ctx.raw.split("since=") + ["0"])[1].split("&")[0] or 0)
-                except ValueError:
-                    since = 0
-                me = ctx.agent_user
-                return ctx.send({"events": [e for e in EVENTS if e["id"] > since and me in ("owner", e["user"])], "last": EVENTS[-1]["id"] if EVENTS else since})
+            if r == "jobs_stream":
+                return job_stream(ctx)
             if r == "tools":
                 up = await alive_map([core.tool_addr(t) for t in core.tools()])
                 return await run_in_threadpool(tools_sync, ctx, up)
             return r
         if ctx.method == "POST":
+            if ctx.raw == "/api/internal/jobs":   # 도구 → 포털(쿠키 없음, 접속지 + 도구 토큰)
+                try:
+                    body = await read_body(ctx, 64 * 1024)
+                except TooBig:
+                    return too_big(ctx, 64 * 1024)
+                return await run_in_threadpool(internal_sync, ctx, body)
             if ctx.raw in ("/api/login", "/api/signup"):
                 try:
                     body = await read_body(ctx, MAX_JSON)
