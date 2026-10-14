@@ -212,7 +212,7 @@
     ],
     "operationId": "weeklyPrev",
     "summary": "같은 사람의 지난 제출(최근 4주 중 가장 최근)",
-    "description": "없으면 {}",
+    "description": "없으면 {}. 계정 사용자는 그 계정이 낸 지난 제출(dept·name 무시), 관리자는 org·dept·name 으로",
     "parameters": [
      {
       "name": "org",
@@ -284,7 +284,7 @@
     ],
     "operationId": "weeklyReport",
     "summary": "그 주 제출본",
-    "description": "없으면 {}. 주차 형식이 틀리면 404 '잘못된 주차'",
+    "description": "없으면 {}. 계정 사용자는 그 주·소본부(org)의 자기 보고(dept·name 무시). 관리자는 id 또는 org·dept·name 으로. 주차 형식이 틀리면 404 '잘못된 주차'",
     "parameters": [
      {
       "name": "org",
@@ -320,6 +320,16 @@
        "description": "ISO 주 YYYY-Www (비우면 이번 주)",
        "example": "2026-W42"
       }
+     },
+     {
+      "name": "id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{12}$"
+      },
+      "description": "관리자만 — 보고 id"
      }
     ],
     "x-shared-data": true,
@@ -536,7 +546,8 @@
      "502": {
       "$ref": "#/components/responses/BadGateway"
      }
-    }
+    },
+    "description": "계정 사용자는 dept·name 을 포털 계정 값으로 바꿔 씀."
    }
   },
   "/t/weekly-local/api/registry": {
@@ -598,7 +609,7 @@
     ],
     "operationId": "weeklyFormTemplate",
     "summary": "빈 작성 양식 파일",
-    "description": "Content-Type: xlsx·hwpx(application/hwp+zip)·docx·pptx. 잘못된 fmt 는 500(KeyError).",
+    "description": "Content-Type: xlsx·hwpx(application/hwp+zip)·docx·pptx. 잘못된 fmt 는 500(KeyError). 계정 사용자는 dept·name 을 포털 계정 값으로 바꿔 씀.",
     "parameters": [
      {
       "name": "fmt",
@@ -788,7 +799,8 @@
      "502": {
       "$ref": "#/components/responses/BadGateway"
      }
-    }
+    },
+    "description": "계정 사용자는 dept·name 을 포털 계정 값으로 바꿔 씀."
    }
   },
   "/t/weekly-local/api/sources": {
@@ -1054,7 +1066,7 @@
     ],
     "operationId": "weeklySubmit",
     "summary": "개인 보고 제출(저장)",
-    "description": "dept·name 필수, 빈 text 항목은 버림. 같은 계정이 다시 내면 덮어쓰고 history 에 쌓임. 409: 미확인 약어·과제명 남음 → 답하거나 unresolved_reason 넣어 재제출. 보기는 누구나. 덮어쓰기·고치기·지우기는 처음 만든 계정 또는 관리자(owner)만 — 아니면 403 {\"error\":\"…만든 사람이나 관리자만 …\"}. POST 본문 전체 상한 160MB(넘으면 413 {\"error\":\"요청이 너무 큽니다(최대 160MB)\"}).",
+    "description": "계정 사용자: 보고 주인 = 로그인 계정(X-Agent-User), 이름·부서는 서버가 포털 계정(표시 이름·승인 부서)으로 채움 — profile 의 name·dept 는 무시하고 org(소본부)만 씀(조직 설정에 그 부서가 있으면 그 소본부 안에서만). 같은 주·소본부에 계정당 하나(id = 계정 기준), 다시 내면 덮어쓰고 history 에 {ts,n,action} 이 쌓임(행위자 계정은 서버에만 기록, 응답에는 안 나감). 계정에 승인된 부서가 없으면 403 {\"error\",\"no_dept\":true}. 계정 정보를 못 읽으면 403. 남의 보고 id 를 주면 403. 관리자(owner): profile 의 이름·부서로 대신 내거나, id 로 기존 보고를 고침(주인·이름·부서는 그대로). 빈 text 항목은 버림. 409: 미확인 약어·과제명 남음 → 답하거나 unresolved_reason 넣어 재제출. POST 본문 전체 상한 160MB(넘으면 413 {\"error\":\"요청이 너무 큽니다(최대 160MB)\"}).",
     "requestBody": {
      "required": true,
      "content": {
@@ -1094,10 +1106,14 @@
          },
          "unresolved_reason": {
           "type": "string"
+         },
+         "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{12}$",
+          "description": "관리자만 — 고칠 기존 보고 id. 계정 사용자는 자기 보고 id 만(아니면 403)"
          }
         },
         "required": [
-         "profile",
          "items"
         ]
        }
@@ -1128,6 +1144,10 @@
           },
           "path": {
            "type": "string"
+          },
+          "profile": {
+           "$ref": "#/components/schemas/WeeklyProfile",
+           "description": "실제로 저장된 소본부·부서·이름(계정 값)"
           }
          },
          "required": [
@@ -1377,7 +1397,7 @@
     ],
     "operationId": "weeklyAggSave",
     "summary": "취합본 저장(화면에서 고친 것)",
-    "description": "agg.week·agg.org 로 저장 위치 결정. 처음 취합한 계정·관리자가 아니면 403. POST 본문 전체 상한 160MB(넘으면 413 {\"error\":\"요청이 너무 큽니다(최대 160MB)\"}). src_reports(취합에 쓰인 제출 목록)는 서버 값을 유지(보낸 값은 무시).",
+    "description": "agg.week·agg.org 로 저장 위치 결정. 처음 취합한 계정·관리자가 아니면 403. POST 본문 전체 상한 160MB(넘으면 413 {\"error\":\"요청이 너무 큽니다(최대 160MB)\"}). src_reports(취합에 쓰인 제출 목록)는 서버 값을 유지(보낸 값은 무시). history(저장·취합한 시각·동작)는 서버가 쌓음(보낸 값은 무시, 행위자 계정은 서버에만).",
     "requestBody": {
      "required": true,
      "content": {
@@ -2038,7 +2058,7 @@
     ],
     "operationId": "weeklyRegistryOp",
     "summary": "과제 등록부 편집",
-    "description": "add·copy_prev(새 과제)는 누구나. update·delete·restore·reorder·alias 는 그 과제를 만든 계정·관리자만, members 는 그 실 등록부를 처음 만든 계정·관리자만 — 아니면 403. POST 본문 전체 상한 160MB(넘으면 413 {\"error\":\"요청이 너무 큽니다(최대 160MB)\"}).",
+    "description": "그 실(dept) 사람(포털에서 승인된 부서)·그 실 부서장·관리자만 — 아니면 403(다른 실 사람은 추가·별칭·구성원도 못 바꿈). update·delete·restore·reorder·alias 는 그 과제를 만든 계정·그 실 부서장·관리자만, members 는 그 실 사람·관리자. editor 는 무시하고 서버가 계정 표시 이름을 기록, 이력마다 바꾼 계정도 서버에 기록(응답에는 안 나감). POST 본문 전체 상한 160MB(넘으면 413 {\"error\":\"요청이 너무 큽니다(최대 160MB)\"}).",
     "requestBody": {
      "required": true,
      "content": {
@@ -2066,7 +2086,9 @@
           "type": "string"
          },
          "editor": {
-          "type": "string"
+          "type": "string",
+          "deprecated": true,
+          "description": "무시됨(서버가 계정 이름으로 기록)"
          },
          "name": {
           "type": "string"
@@ -2381,7 +2403,7 @@
     ],
     "operationId": "weeklyGlossarySave",
     "summary": "약어 등록·수정",
-    "description": "abbr 와 (full 또는 ko) 필수. 이미 있는 사내 항목은 만든 계정·관리자만 고침 — 아니면 403. POST 본문 전체 상한 160MB(넘으면 413 {\"error\":\"요청이 너무 큽니다(최대 160MB)\"}).",
+    "description": "abbr 와 (full 또는 ko) 필수. 이미 있는 사내 항목은 만든 계정·관리자만 고침 — 아니면 403. editor 는 무시 — 서버가 계정 표시 이름을 기록하고 바꾼 계정도 남김. POST 본문 전체 상한 160MB(넘으면 413 {\"error\":\"요청이 너무 큽니다(최대 160MB)\"}).",
     "requestBody": {
      "required": true,
      "content": {
@@ -2408,7 +2430,9 @@
           "type": "string"
          },
          "editor": {
-          "type": "string"
+          "type": "string",
+          "deprecated": true,
+          "description": "무시됨(서버가 계정 이름으로 기록)"
          },
          "src": {
           "type": "string",
@@ -2466,7 +2490,7 @@
     ],
     "operationId": "weeklyGlossaryDelete",
     "summary": "약어 삭제",
-    "description": "만든 계정·관리자만 — 아니면 403. POST 본문 전체 상한 160MB(넘으면 413 {\"error\":\"요청이 너무 큽니다(최대 160MB)\"}).",
+    "description": "만든 계정·관리자만 — 아니면 403. editor 는 무시 — 서버가 계정 표시 이름을 기록하고 바꾼 계정도 남김. POST 본문 전체 상한 160MB(넘으면 413 {\"error\":\"요청이 너무 큽니다(최대 160MB)\"}).",
     "requestBody": {
      "required": true,
      "content": {
@@ -2478,7 +2502,9 @@
           "type": "string"
          },
          "editor": {
-          "type": "string"
+          "type": "string",
+          "deprecated": true,
+          "description": "무시됨(서버가 계정 이름으로 기록)"
          }
         },
         "required": [
@@ -3361,6 +3387,9 @@
      },
      "kordoc": {
       "type": "boolean"
+     },
+     "me": {
+      "$ref": "#/components/schemas/WeeklyMe"
      }
     },
     "required": [
@@ -4491,6 +4520,51 @@
     "required": [
      "ok",
      "trash_id"
+    ]
+   },
+   "WeeklyMe": {
+    "type": "object",
+    "description": "내 계정(작성자) — 계정 사용자는 이름·부서를 입력받지 않고 이 값을 표시. 관리자(owner)는 admin:true 로 이름·부서를 적어 대신 제출할 수 있음",
+    "properties": {
+     "admin": {
+      "type": "boolean"
+     },
+     "account": {
+      "type": "boolean",
+      "description": "포털 계정을 읽었는지"
+     },
+     "name": {
+      "type": "string",
+      "description": "포털 표시 이름"
+     },
+     "dept": {
+      "type": "string",
+      "description": "포털에서 승인된 부서(없으면 \"\")"
+     },
+     "heads": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "부서장인 부서"
+     },
+     "orgs": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "조직 설정에서 그 부서가 든 소본부"
+     },
+     "problem": {
+      "type": "string",
+      "description": "제출할 수 없는 이유(승인된 부서 없음 등). 있으면 제출 버튼을 막음"
+     }
+    },
+    "required": [
+     "admin",
+     "account",
+     "name",
+     "dept"
     ]
    }
   },

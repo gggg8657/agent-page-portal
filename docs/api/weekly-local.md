@@ -6,8 +6,11 @@
 
 공통:
 - 포털을 거치면 로그인 쿠키(`agsid`)가 필요합니다. 없으면 `401 {"error":"로그인이 필요합니다","login":"/login"}`.
-- **데이터 공유**: 다른 도구와 달리 보고·취합·약어집·과제 등록부·조직 설정은 사용자 구분 없이 **모든 사용자가 같은 저장소**를 씁니다(부서 취합을 위해). 보고는 `org|dept|name` 조합으로 구분됩니다. 사용자별인 것은 `api/sources`(내 회의록·메일 기록 읽기)뿐입니다.
+- **데이터 공유**: 다른 도구와 달리 보고·취합·약어집·과제 등록부·조직 설정은 사용자 구분 없이 **모든 사용자가 같은 저장소**를 씁니다(부서 취합을 위해). 보고는 **로그인 계정**(`X-Agent-User`)마다 주·소본부(`org`)당 하나입니다(예전 보고는 `org|dept|name` 조합 id 그대로). 사용자별인 것은 `api/sources`(내 회의록·메일 기록 읽기)뿐입니다.
 - **권한**(포털이 붙인 `X-Agent-User` 기준, 관리자 = `owner`): 보기는 누구나. 덮어쓰기·고치기·지우기는 **처음 만든 계정 또는 owner 만** — 제출 보고, 취합본(주·소본부별), 약어집 사내 항목, "약어 아님" 해제, 합치기 제안 "따로 두기" 해제, 과제 등록부의 과제(고치기·지우기·되살리기·순서·별칭)와 실 구성원. 만든 계정 기록이 없는 예전 데이터는 owner 만. 새로 만들기(새 보고·새 약어·새 과제·약어 아님 표시)는 누구나. **조직 설정(`api/orgs`)은 owner 만.** 거절은 `403 {"error": "…만든 사람이나 관리자만 …"}`. 만든 계정은 서버 파일에 `_by` 로 남고 응답에는 나가지 않습니다.
+- **작성자 = 로그인 계정**: 제출자의 이름·부서는 서버가 포털 계정(표시 이름·**승인된** 부서)에서 채웁니다 — 요청의 `profile.name`·`profile.dept` 는 무시하고 `org`(소본부)만 씁니다(조직 설정에 그 부서가 있으면 그 소본부 안에서만). 승인된 부서가 없으면 제출 `403 {"error", "no_dept": true}`. 관리자(`owner`)만 이름·부서를 적어 대신 내거나 `id` 로 남의 보고를 고칠 수 있습니다(주인·이름·부서는 그대로).
+- **행위자 기록**: 보고 `history`·취합본 `history`·약어집·과제 등록부 이력에 서버가 바꾼 계정을 남깁니다(서버 파일에만, 응답에는 안 나감). 요청의 `editor` 는 무시하고 계정 표시 이름(관리자는 "관리자")을 씁니다.
+- **과제 등록부**(`api/registry/op`)는 그 실 사람(포털 승인 부서)·그 실 부서장·owner 만 바꿀 수 있습니다.
 - POST 본문은 JSON, `Content-Length` 필수. 응답에 `Cache-Control: no-store`.
 - 오류: `{"error":"..."}`. GET 은 잘못된 값·없는 파일이 `404`, 그 밖 `500`. POST 는 입력 오류(`ValueError` 등)가 `400`, 권한 없음이 `403`, 그 밖 `500`. 깨진 JSON 은 `400 {"error":"잘못된 요청"}`, JSON 객체가 아닌 본문은 `400 {"error":"요청 본문은 JSON 객체여야 합니다"}`.
 - 주차 키 형식: `YYYY-Www` (ISO 주, 예 `2026-W42`). 대부분 `week` 를 비우면 이번 주.
@@ -76,20 +79,21 @@
 ## 엔드포인트 — 조회
 
 ### GET api/meta
-- 응답 키: `model`, `is_owner`(이 요청 계정이 관리자인지 — 화면은 아니면 조직 설정을 잠금), `week`(아래 주 정보), `cats`(키→이름표), `kinds`(키→이름표), `guide`(입력 도움말 `[제목, 예시]` 배열), `orgs`(`{상위조직: [부서…]}`), `templates`(`[{id, name}]` — 내보내기 양식), `glossary`(약어집 통계), `fields`(약어 분야 목록), `levels`(분야별 기본 풀이 수준 1~3), `presets`(독자별 풀이 수준 묶음), `colors`, `has_sources`(회의록·메일 기록 폴더가 있는지), `kordoc`(HWPX 검증 도구 유무).
+- 응답 키: `model`, `is_owner`(이 요청 계정이 관리자인지 — 화면은 아니면 조직 설정을 잠금), `me`(내 계정: `{"admin","account","name","dept","heads","orgs","problem"}` — 화면은 이름·부서 입력칸 대신 이 값을 표시, `problem` 이 있으면 제출 버튼을 막음), `week`(아래 주 정보), `cats`(키→이름표), `kinds`(키→이름표), `guide`(입력 도움말 `[제목, 예시]` 배열), `orgs`(`{상위조직: [부서…]}`), `templates`(`[{id, name}]` — 내보내기 양식), `glossary`(약어집 통계), `fields`(약어 분야 목록), `levels`(분야별 기본 풀이 수준 1~3), `presets`(독자별 풀이 수준 묶음), `colors`, `has_sources`(회의록·메일 기록 폴더가 있는지), `kordoc`(HWPX 검증 도구 유무).
 
 ### GET api/week?d=<YYYY-MM-DD 또는 YYYY-Www>
 - 응답: `{"key":"2026-W42","mon":"2026-10-12","fri":"2026-10-16","label":"2026. 10. 12.(월) ~ 10. 16.(금)","title":"2026년 10월 2주차"}`. `d` 가 없으면 오늘. 형식 오류는 404.
 
 ### GET api/report · api/prev
-- 쿼리: `org`, `dept`, `name`, `week`(필수: report — 형식이 틀리면 404 "잘못된 주차").
+- 쿼리: `org`, `dept`, `name`, `week`(필수: report — 형식이 틀리면 404 "잘못된 주차"), `id`(관리자만).
+- 계정 사용자: 그 주·`org` 의 **자기 보고**(`dept`·`name` 무시). `prev` 도 그 계정이 낸 지난 제출. 관리자: `id` 또는 `org`·`dept`·`name` 으로.
 - 응답: 제출 레코드(없으면 `{}`):
 ```json
 {"id": "<해시 12자리>", "week": "2026-W42", "org": "…", "dept": "…", "name": "…", "memo": "원래 메모",
  "items": [<item>], "carry": [<지난 계획 대조>], "remarks": ["특기사항"], "ts": "…",
- "history": [{"ts": "…", "n": 7}], "unresolved": [{"abbr": "…", "kind": "abbr", "sentence": "…"}], "unresolved_reason": ""}
+ "history": [{"ts": "…", "n": 7, "action": "제출|다시 제출|되살림"}], "unresolved": [{"abbr": "…", "kind": "abbr", "sentence": "…"}], "unresolved_reason": ""}
 ```
-  - `prev`: 지난 4주 안의 가장 최근 제출(같은 org·dept·name).
+  - `prev`: 지난 4주 안의 가장 최근 제출(계정 사용자는 같은 계정, 관리자는 같은 org·dept·name).
   - `report` 는 제출이 있으면 `"locked": bool, "lock_reason": "…", "mine": bool` 도 붙음(아래 '제출 취소·휴지통').
 
 ### GET api/reports?week=&org=
@@ -139,11 +143,11 @@
 - 메모: 저장하지 않습니다. 결과를 화면에서 고친 뒤 `api/submit`.
 
 ### POST api/submit
-- 요청: `{"profile": {"org","dept","name"}, "week", "items": [<item>], "memo", "carry", "remarks": [...], "unresolved_reason": ""}` — `dept`·`name` 필수, 빈 `text` 항목은 버림.
-- 응답: `{"ok": true, "id": "<해시>", "week": "2026-W42", "path": "reports/2026-W42/<id>.json"}`
-- 오류: `400` 이름·부서 없음/항목 없음. **`409`** 미확인 약어·과제명이 남음: `{"error": "확인되지 않은 약어 2개(…) — …", "unresolved": [{"abbr","kind","sentence",…}]}` → 질문에 답하거나 `unresolved_reason` 에 사유를 넣어 다시 제출(사유는 제출본에 기록).
-- 오류(권한): 같은 org·dept·name·주차 보고를 **다른 계정**이 내면 `403`(처음 제출한 계정·owner 만 고침).
-- 메모: 같은 계정이 같은 org·dept·name·주차로 다시 내면 덮어쓰고 `history` 에 기록이 쌓입니다.
+- 요청: `{"profile": {"org"}, "week", "items": [<item>], "memo", "carry", "remarks": [...], "unresolved_reason": ""}` — 빈 `text` 항목은 버림. 계정 사용자는 `profile.name`·`dept` 를 보내도 무시(포털 계정 값). 관리자는 `profile` 의 `dept`·`name` 필수, 또는 `"id"`(기존 보고 고치기).
+- 응답: `{"ok": true, "id": "<해시>", "week": "2026-W42", "path": "reports/2026-W42/<id>.json", "profile": {"org","dept","name"}}` — `profile` 은 실제로 저장된 값.
+- 오류: `400` (관리자) 이름·부서 없음/항목 없음/소본부 모호. `403` 승인된 부서 없음(`"no_dept": true`)·포털 계정을 못 읽음·남의 보고 `id`. **`409`** 미확인 약어·과제명이 남음: `{"error": "확인되지 않은 약어 2개(…) — …", "unresolved": [{"abbr","kind","sentence",…}]}` → 질문에 답하거나 `unresolved_reason` 에 사유를 넣어 다시 제출(사유는 제출본에 기록).
+- 권한: 남의 보고는 고칠 수 없음(그 계정·owner 만). 다른 사람이 같은 이름을 적어도 자기 보고로 따로 저장되므로 자리를 차지할 수 없음.
+- 메모: 같은 계정이 같은 주·소본부로 다시 내면 덮어쓰고 `history` 에 기록이 쌓입니다(바꾼 계정은 서버에만).
 
 ## 엔드포인트 — 취합
 
@@ -168,6 +172,7 @@
 - 요청: `{"agg": <취합본>}` (`agg.week`·`agg.org` 로 저장 위치 결정) → `{"ok": true}`
 - 오류: 처음 취합한 계정·owner 가 아니면 `403`.
 - `agg.src_reports`(취합에 쓰인 제출 id, `api/aggregate` 가 기록)는 서버 값을 유지합니다 — 보내지 않아도, 다른 값을 보내도 그대로.
+- `agg.history`(`[{"ts","action":"취합|다시 취합|저장"}]`)는 서버가 쌓습니다(보낸 값은 무시, 행위자 계정은 서버에만).
 
 ## 엔드포인트 — 제출 취소·휴지통
 바로 지우지 않고 휴지통(`WORKSPACE/trash/<id>.json`, 원래 레코드 통째로)으로 옮깁니다. 기한(`WEEKLY_TRASH_DAYS`, 기본 30일) 안에 되살릴 수 있고,
@@ -255,7 +260,7 @@
 ## 엔드포인트 — 과제 등록부·약어집
 
 ### POST api/registry/op
-- 요청 공통: `{"op", "org", "dept"(필수), "editor"}` + op 별:
+- 요청 공통: `{"op", "org", "dept"(필수)}` + op 별(`editor` 는 보내도 무시 — 서버가 계정 표시 이름을 기록):
   - `add`: `name` 또는 `names:[…]`, (한 개일 때) `full`, `period`, `person`
   - `update`: `id` + 바꿀 칸
   - `delete` / `restore`: `id`
@@ -264,19 +269,19 @@
   - `alias`: `name`(등록 이름), `alias`(앞으로 이 이름으로 합침)
   - `copy_prev`: `week` — 최근 4주 제출에서 쓴 과제명을 한꺼번에 추가
 - 응답: `api/registry?org=` 와 같은 모양(조직 전체).
-- 권한: `add`·`copy_prev`(새 과제)는 누구나. `update`·`delete`·`restore`·`reorder`(순서가 바뀌는 과제)·`alias`(이미 있는 과제에 별칭을 더하거나 다른 과제를 합쳐 지울 때)는 그 과제를 만든 계정·owner 만, `members` 는 그 실 등록부를 처음 만든 계정·owner 만. 아니면 `403`.
+- 권한: 모든 op 는 **그 실(`dept`) 사람(포털 승인 부서)·그 실 부서장·owner 만**(다른 실 사람은 새 과제·별칭·구성원도 못 바꿈). 그 안에서 `update`·`delete`·`restore`·`reorder`(순서가 바뀌는 과제)·`alias`(이미 있는 과제에 별칭을 더하거나 다른 과제를 합쳐 지울 때)는 그 과제를 만든 계정·그 실 부서장·owner 만, `members` 는 그 실 사람·owner. 아니면 `403`. 이력(`history`)마다 `editor`(계정 표시 이름)·`action`, 바꾼 계정은 서버에만.
 
 ### POST api/registry/template
 - 요청: `{"org", "dept"(비우면 조직 전체), "fmt":"hwpx|docx|pptx|xlsx", "week", "template", "person", "per_person", "prefill", "preview"}`
 - 응답: `preview:true` 면 `{"html": "…", "rows": N}`, 아니면 파일(`주간보고_작성양식_<부서 또는 조직>.<fmt>`).
 
 ### POST api/glossary/save
-- 요청: `{"abbr", "full", "ko", "desc", "field", "note", "editor", "src", "ctx"}` — `abbr` 와 (`full` 또는 `ko`) 필수.
+- 요청: `{"abbr", "full", "ko", "desc", "field", "note", "src", "ctx"}` — `abbr` 와 (`full` 또는 `ko`) 필수. `editor` 는 보내도 무시(서버가 계정 표시 이름을 기록).
 - 응답: 저장된 약어 행.
 - 권한: 이미 있는 사내 항목은 만든 계정·owner 만 고침(기록 없는 예전 항목은 owner 만). 지운 항목은 누구나 다시 만들 수 있음. 아니면 `403`.
 
 ### POST api/glossary/delete · api/glossary/ignore
-- `delete`: `{"abbr", "editor"}` → `{"ok": true}`
+- `delete`: `{"abbr"}` → `{"ok": true}` — 지운 계정·원래 만든 계정을 서버에 남김.
 - `ignore`: `{"abbr", "on": true|false}` → `{"ok": true}` (`true` = 약어 아님으로 표시)
 - 권한: `delete` 는 만든 계정·owner 만. `ignore` 표시는 누구나, 해제(`on:false`)는 표시한 계정·owner 만(기록 없는 예전 것은 owner 만). 아니면 `403`.
 
@@ -284,8 +289,8 @@
 개인 작성 → 제출:
 ```js
 const base = '/t/weekly-local/', post = (p, b) => fetch(base + p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
-const { week } = await fetch(base + 'api/meta').then(r => r.json());
-const profile = { org: '…', dept: '…', name: '…' };
+const { week, me } = await fetch(base + 'api/meta').then(r => r.json());   // 이름·부서는 계정 값(me.name·me.dept)
+const profile = { org: (me.orgs || [])[0] || '…' };
 // SSE 읽기 함수 sse() 는 meeting-local 문서와 같은 방식(POST + fetch 스트림)
 const r = await sse(base + 'api/itemize', { profile, week: week.key, memo }, ev => ev.token && appendRaw(ev.token));
 // r.questions 에 답하기: post('api/glossary/save', {abbr, full}) 또는 post('api/glossary/ignore', {abbr, on: true})
