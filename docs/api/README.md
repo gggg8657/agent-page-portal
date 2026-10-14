@@ -3,8 +3,10 @@
 포털의 모든 도구는 **화면(`ui.html`)과 처리(`app.py`)가 나뉘어 있고, 둘 사이를 JSON HTTP API 로 주고받습니다.**
 지금 화면도 이 API 만 씁니다. 따라서 화면을 새로 만들어도 같은 API 를 부르면 기능은 그대로 쓸 수 있습니다.
 
-- 이 문서: 공통 규칙, 로그인, 연결 방법, 포털 자체 API
+- 이 문서: 공통 규칙, 로그인, 연결 방법, 포털 자체 API, [보안 모델](#9-보안-모델--누가-무엇을-믿나), [버전](#10-버전호환)
 - 도구별 API: 아래 [도구 목록](#도구-목록)의 각 파일
+- 기계가 읽는 명세: `docs/api/openapi/*.json`(OpenAPI 3.1, 포털 + 도구 25개) — [8. OpenAPI](#8-openapi)
+- 지금 서버가 어느 계약 버전인지: `GET /api/version`(로그인 전에도)
 
 > © 2026 gggg8657 · 내부 시험용 · 배포용 아님. 포털 코드는 All rights reserved, 각 도구 라이선스는 도구 저장소의 LICENSE·THIRD_PARTY_NOTICES.md 를 따릅니다.
 > 새 화면에서도 화면 아래쪽의 저작자 표기("© 2026 gggg8657 · 내부 시험용 · 배포용 아님")는 그대로 남겨 주세요.
@@ -18,7 +20,7 @@
 포털  http://<서버>:8700
    │  ① 로그인 확인(쿠키 agsid)  ② X-Agent-User: <계정 id> 를 붙임  ③ 그대로 전달(최대 1시간)
    ▼
-도구 app.py  http://127.0.0.1:<포트>   ← 서버 안에서만 열림. 바깥에서는 반드시 포털을 거침
+도구 app.py  http://127.0.0.1:<포트>   ← 서버 안에서만 열림. 바깥에서는 반드시 포털을 거침(포털 서명 X-Agent-Auth 가 없으면 401)
    │  필요하면
    ▼
 로컬 LLM(vLLM, OpenAI 호환 · 임베딩은 Ollama) · GPU 모델
@@ -26,19 +28,23 @@
 
 - **주소 규칙**: 도구 문서의 경로 `api/xxx` 는 포털에서 `/t/<도구 dir>/api/xxx` 입니다.
   예: 사주 도구의 `api/graph` → `GET /t/saju-local/api/graph?dept=…`
-- **도구 포트로 직접 붙지 마세요.** 도구는 127.0.0.1 에만 열려 있고, 누가 보냈는지는 포털이 붙이는 `X-Agent-User` 로만 정해집니다.
-  화면에서 `X-Agent-User`·`X-User` 헤더를 보내도 포털이 지웁니다.
+- **도구 포트로 직접 붙지 마세요.** 도구는 127.0.0.1(컨테이너면 내부망)에만 열려 있고, 누가 보냈는지는 포털이 붙이고 서명한 `X-Agent-User`·`X-Agent-Auth` 로만 정해집니다.
+  화면에서 `X-Agent-User`·`X-User`·`X-Agent-Auth` 헤더를 보내도 포털이 지우고, 서명 없이 도구에 직접 가면 401 입니다.
+- **쿠키는 도구로 가지 않습니다**(포털 세션 쿠키 포함 전부). 도구가 포털 쿠키(`ag…`)를 덮는 `Set-Cookie` 를 보내도 포털이 버립니다.
 - **사용자별 데이터**: 도구는 `X-Agent-User` 로 사람마다 따로 저장합니다(기록·업로드 등). 일부는 일부러 공유합니다(주간보고 제출함, kordoc 양식, SQL 데모 DB, CAD 지식 보정, 사주 팀 지도) — 도구별 문서에 표시.
 
 ## 2. 로그인
 
 | 호출 | 설명 |
 |---|---|
-| `POST /api/login` `{"id": "아이디", "pin": "PIN", "remember": true}` | 성공 `{"ok": true, "id": …}` + 쿠키 `agsid` (HttpOnly, SameSite=Lax). `remember`(로그인 유지, 없으면 `true`): `true` = 30일, 쓰는 동안 하루에 한 번 연장 · `false` = 쿠키에 Max-Age 없음(브라우저 닫으면 끝) + 서버 만료 12시간, 연장 없음. 틀리면 400 `{"error": …}`. 10분에 5번 틀리면 10분 잠김 |
-| `POST /api/signup` `{"id", "name", "pin", "dept"}` | 가입. id 는 영문 소문자·숫자·`_.-` 2~32자, PIN 은 숫자 4~8자리. 부서는 `GET /api/depts` 목록 중 하나(부서장 승인 뒤 반영). 계정 저장소가 포털 밖(`AUTH_BACKEND=external`)이면 403 + 안내 |
+| `POST /api/login` `{"id": "아이디", "pin": "PIN", "remember": true}` | 성공 `{"ok": true, "id": …}` + 쿠키 `agsid` (HttpOnly, SameSite=Lax — 바꾸기는 아래 3절). `remember`(로그인 유지, 없으면 `true`): `true` = 30일, 쓰는 동안 하루에 한 번 연장 · `false` = 쿠키에 Max-Age 없음(브라우저 닫으면 끝) + 서버 만료 12시간, 연장 없음. 틀리면 400 `{"error", "code": "bad_credentials"}`. 같은 아이디를 같은 접속지에서 10분에 5번 틀리면 **429** `code: "locked"`(10분), 한 접속지가 아이디를 바꿔 가며 10분에 30번 넘게 틀리면 429 `code: "ip_locked"`, 로그인이 몰리면 429 `code: "busy"` — 모두 `Retry-After`(초) 머리 |
+| `POST /api/signup` `{"id", "name", "pin", "dept"}` | 가입. id 는 영문 소문자·숫자·`_.-` 2~32자, PIN 은 숫자 4~8자리. 부서는 `GET /api/depts` 목록 중 하나(부서장 승인 뒤 반영). 계정 저장소가 포털 밖(`AUTH_BACKEND=external`)이면 403 `code: "unsupported"` + 안내. 한 접속지에서 한 시간에 5번까지(넘으면 429 `code: "rate_limited"`) |
 | `GET /api/auth` | 로그인 전에도: `{"signup", "password_change", "guide"}` — 지금(포털 내부 DB)은 둘 다 `true`. `false` 면 가입·PIN 바꾸기 화면을 숨기고 `guide` 를 보여 주세요 |
 | `GET /login` | 로그인 화면(랜딩). 이미 로그인했으면 `next`(같은 사이트 경로만, 아니면 `/`)로 302 |
-| `GET /logout` | 세션 삭제 후 `/login` 으로 302 |
+| `POST /api/logout` | **새 화면은 이것**: 세션 삭제 + 쿠키 지움 → `{"ok": true}`(로그인 안 돼 있어도 200) |
+| `GET /logout` | (예전 화면용) 세션 삭제 후 `/login` 으로 302. 다른 사이트에서 건 링크(`Sec-Fetch-Site: cross-site`)로는 로그아웃하지 않고 `/` 로 |
+| `GET /api/version` | 로그인 전에도: `{"api": "2026.10.14", "build": "<포털 git describe>", "auth": {…/api/auth 와 같음}, "cors": false}` — [10. 버전](#10-버전호환) |
+| `GET /api/landing` | 로그인 전에도: 랜딩의 분류·도구 수 `{"groups": [{name, n, names}], "tools"}` |
 | `GET /api/me` | 지금 사용자 `{"id", "name", "role", "dept", "owner", "onboarded", …}` — `onboarded`: 첫 로그인 둘러보기를 봤거나 건너뜀 |
 
 - **현재 계정 저장소는 임시**(포털 내부 DB)이며, 운영 시 **사내 챗봇 계정 DB 로 대체 예정**입니다(같은 아이디·비밀번호). 그때도 세션 쿠키·`/api/me`·부서·권한은 그대로이고, 가입·PIN 변경만 막힙니다(`GET /api/auth`). 외부 저장소가 응답하지 않으면 `/api/login` 이 503.
@@ -48,7 +54,17 @@
 
 ## 3. 새 화면을 연결하는 방법
 
-포털은 **CORS 헤더를 내보내지 않고**, 로그인 쿠키는 **SameSite=Lax** 입니다. 그래서 다른 주소(다른 포트·도메인)에 올린 화면에서 포털 API 를 바로 부르면 막히거나 로그인이 안 됩니다. 화면이 포털과 **같은 출처**로 보이게 하는 것이 원칙입니다.
+기본 설정에서 포털은 **CORS 헤더를 내보내지 않고**, 로그인 쿠키는 **SameSite=Lax** 입니다. 그래서 다른 주소(다른 포트·도메인)에 올린 화면에서 포털 API 를 바로 부르면 막히거나 로그인이 안 됩니다. 두 가지 방법이 있습니다.
+
+| | A. 같은 출처(권장) | B. 다른 출처(CORS) |
+|---|---|---|
+| 배치 | 앞단 프록시(nginx 등) 하나가 `/` = 새 화면 정적 파일, `/api`·`/t`·`/logout` = 포털 | 새 화면이 `https://front.example` 처럼 따로, 포털은 `https://portal.example` |
+| 포털 설정 | 없음(앞단 프록시가 `Host` 를 바꾸면 `PORTAL_ALLOWED_ORIGINS=<화면 출처>`) | `PORTAL_CORS_ORIGINS=https://front.example`(쉼표로 여럿), 쿠키를 보내려면 `PORTAL_COOKIE_SAMESITE=None` + **HTTPS**(`TLS_CERT·TLS_KEY` 또는 앞단에서 HTTPS 를 끝내면 `PORTAL_COOKIE_SECURE=1`) — 없으면 포털이 기동을 거부 |
+| 화면 코드 | `fetch('/api/…')` 그대로 | `fetch('https://portal.example/api/…', {credentials: 'include'})`. 작업 알림 SSE 는 `new EventSource(url, {withCredentials: true})` |
+| 도구 화면 iframe | 됨 | 됨(`frame-ancestors` 에 CORS 출처가 들어감) — 단 브라우저의 서드파티 쿠키 차단 설정에 따라 iframe 안 로그인이 안 될 수 있음 |
+| 주의 | — | 다른 사이트(도메인이 다름)면 브라우저가 서드파티 쿠키를 막을 수 있음. 가능하면 같은 상위 도메인(같은 사이트)으로 |
+
+**요청 위조 방지(CSRF) — 두 방법 모두**: 상태를 바꾸는 요청(POST·PUT·DELETE·PATCH)은 브라우저가 붙이는 `Origin`(없으면 `Referer`)이 포털과 같은 출처이거나 허용 목록(`PORTAL_CORS_ORIGINS`·`PORTAL_ALLOWED_ORIGINS`)에 있어야 합니다. 아니면 403 `{"code": "csrf"}`. `Origin: null`(sandbox·파일에서 연 화면)도 거부. curl·스크립트처럼 이런 헤더가 없는 요청은 통과합니다.
 
 ### 개발할 때 — 개발 서버 프록시
 자기 PC 에서 개발 서버를 띄우고, `/api`·`/t`·`/login` 요청을 포털로 넘기게 합니다. 브라우저 입장에서는 같은 출처라 쿠키·CORS 문제가 없습니다.
@@ -89,8 +105,10 @@ const g  = await (await fetch('/t/saju-local/api/graph?dept=' + encodeURICompone
 ## 4. 공통 규칙
 
 - **요청**: 대부분 `POST` + JSON 본문(`Content-Type: application/json`). 파일 업로드는 도구마다 다릅니다(JSON 안 base64 또는 multipart) — 도구별 문서 참고.
+- **메서드**: `/t/<도구>/…` 는 GET·POST·PUT·DELETE·PATCH·HEAD·OPTIONS 를 모두 도구로 넘깁니다. 포털 자체 API(`/api/…`)는 GET·POST 만(다른 메서드는 405 + `Allow`). `OPTIONS` 는 포털이 바로 204(CORS 사전 요청).
+- **본문 상한**: 도구로 가는 본문 600MB(`PORTAL_MAX_BODY`), 포털 API JSON 1MB — 넘으면 413. 길이를 모르는(청크) 업로드도 받습니다(8MB 넘으면 포털이 디스크 임시 파일에 모은 뒤 길이를 붙여 넘김).
 - **응답**: JSON. 파일 내려받기는 해당 `Content-Type` 과 `Content-Disposition` 으로 옵니다.
-- **오류**: 본문 `{"error": "사람이 읽을 수 있는 한국어 설명"}` + 상태 코드
+- **오류**: 본문 `{"error": "사람이 읽을 수 있는 한국어 설명"}` + 상태 코드. 포털이 만든 오류에는 기계가 구분할 `code` 가 붙습니다(`bad_request`·`bad_credentials`·`locked`·`ip_locked`·`busy`·`rate_limited`·`unsupported`·`unavailable`·`csrf`·`method_not_allowed`·`starting`·`server_error` 등) — **문구가 아니라 `code`·상태 코드로 분기**하세요(문구는 바뀔 수 있음). 도구 오류는 `{"error": "…"}`(tts 의 OpenAI 호환 `/v1/*` 만 `{"error": {"message", "type"}}`), 서버 경로·내부 주소는 감춰서 나옵니다. 도구의 없는 API 경로(`/t/<도구>/api/<없음>`)는 404 JSON.
 
   | 코드 | 뜻 |
   |---|---|
@@ -98,7 +116,10 @@ const g  = await (await fetch('/t/saju-local/api/graph?dept=' + encodeURICompone
   | 401 | 로그인 필요 |
   | 403 | 권한 없음(관리자·부서장 전용) |
   | 404 | 없는 경로·도구 |
-  | 409 | 이미 실행 중인 도구를 다시 시작하려 함(관리자만 가능) |
+  | 405 | 포털 API 에 GET·POST 말고 다른 메서드 |
+  | 409 | 이미 실행 중인 도구를 다시 시작하려 함(관리자만 가능), 방금 시작을 눌러 켜는 중(`code: "starting"`, 60초) |
+  | 413 | 본문이 상한보다 큼 |
+  | 429 | 로그인 잠금·몰림·가입 제한 — `Retry-After` 초 뒤 다시 |
   | 502 | **도구가 꺼져 있음** → `POST /api/start {"dir": "<도구>"}` 로 켠 뒤 다시 시도 |
 
 - **오래 걸리는 작업**: 포털은 요청 하나를 최대 1시간 기다립니다. 영상·구조 예측처럼 긴 작업은 도구마다 ① 스트리밍(SSE·줄 단위 JSON)으로 진행 상황을 흘리거나 ② 작업 id 를 받고 상태를 폴링합니다 — 도구별 문서의 "오래 걸림" 표시를 보세요.
@@ -121,12 +142,13 @@ const g  = await (await fetch('/t/saju-local/api/graph?dept=' + encodeURICompone
 | `GET /api/guide/<도구>` | 도구 사용법(마크다운 텍스트) | 로그인 |
 | `GET /api/readme/<도구>` | 도구 README(마크다운 텍스트) | 로그인 |
 | `GET /api/depts` | 부서 목록 | 누구나 |
-| `POST /api/start` `{"dir"}` | 꺼진 도구 켜기(켜진 도구 재시작은 관리자만) | 로그인 |
+| `POST /api/start` `{"dir"}` | 꺼진 도구 켜기(켜진 도구 재시작은 관리자만, 같은 도구를 60초 안에 다시 누르면 409 `starting`). 숨긴 도구는 관리자만(일반 사용자는 404) | 로그인 |
 | `POST /api/stop` `{"dir"}` | 도구 끄기 | 관리자 |
 | `POST /api/open` · `/api/like` `{"dir"}` | 사용·좋아요 기록(순위에 반영) | 로그인 |
 | `POST /api/post` · `/api/post_like` | 노하우 게시판 글쓰기·좋아요 | 로그인 |
 | `POST /api/account/theme` `{"theme"}` | 화면 테마 저장(`classic`·`trendy`·`v2` × `light`·`dark`·`auto`) | 로그인 |
 | `POST /api/pin` `{"pin", "new"}` | PIN 바꾸기(다른 기기 세션은 끊김, 지금 세션의 '로그인 유지'는 그대로). 외부 계정 저장소면 403 + 안내 | 로그인 |
+| `POST /api/account/notices` | 승인·반려 알림(안 본 것) + 내가 처리할 승인 수 `{"notices", "approvals"}` 을 받고 본 것으로 표시. `GET /api/account/notices?peek=1` 은 표시하지 않고 보기만(예전 화면의 `GET`(peek 없음)은 표시까지 함 — 호환용) | 로그인 |
 | `POST /api/account/onboarded` `{"done": true}` | 첫 로그인 둘러보기 마침·건너뜀 기록(`/api/me` 의 `onboarded`) | 본인 |
 | `/api/account…` · `/api/approvals…` · `/api/admin…` | 계정 설정·부서 승인·관리. `GET /api/admin` 의 `auth_backend` `{name, label, signup, password_change, guide}` = 계정 저장소(지금 `local` "임시(포털 내부 DB)") | 본인·부서장·관리자 |
 | `POST /api/account/withdraw` `{"reason"?}` | 탈퇴 요청 — 바로 지우지 않고 관리자 승인 목록(kind `withdraw`)으로. 승인하면 비활성화, 본인은 `/api/account/cancel` 로 취소 | 본인 |
@@ -246,10 +268,47 @@ npx @redocly/cli lint docs/api/openapi/openapi.json                             
 ```
 
 읽는 법:
-- **보안**: `cookieAuth`(쿠키 `agsid`)가 전역. 로그인 전에 열린 경로(`/api/login`·`/api/signup`·`/api/depts`·`/api/auth`·`/login`·`/logout`)만 `security: []`.
+- **보안**: `cookieAuth`(쿠키 `agsid`)가 전역. 로그인 전에 열린 경로(`/api/login`·`/api/signup`·`/api/logout`·`/api/depts`·`/api/auth`·`/api/version`·`/api/landing`·`/login`·`/logout`)만 `security: []`. 오류 `Error` 의 `code` enum 과 공통 응답 `TooManyRequests`(429, `Retry-After`)도 있습니다. 도구 태그의 `x-health-path` 는 표준 헬스 `/t/<도구>/healthz`.
 - **오류**: 공통 `Error` = `{"error": "…"}`, 공통 응답 `BadRequest`(400)·`Unauthorized`(401, `login` 포함)·`Forbidden`(403)·`NotFound`(404)·`Conflict`(409)·`PayloadTooLarge`(413)·`ServerError`(500)·`BadGateway`(502 = 도구 꺼짐 → `POST /api/start`). 도구 경로에는 401·502 가 모두 붙어 있습니다. 모양이 다른 곳(tts-local POST 의 `{"error": {"message", "type"}}` = `OpenAIError`)은 그대로 적었습니다.
 - **스트리밍**: `text/event-stream`(SSE)·`application/x-ndjson` 응답은 스키마가 문자열이고, 이벤트별 JSON 모양은 미디어 타입의 **`x-stream-events`** 목록(`[{name, schema}]`)과 operation description 에 있습니다. 생성기는 이 확장을 무시하므로, 이벤트 타입은 `components["schemas"]["<도구>…Event"]` 를 직접 가져다 쓰세요. **도중 오류도 HTTP 200 으로 오고 스트림 안 `error` 이벤트로만 옵니다.**
 - **파일**: 업로드는 대부분 JSON 안 base64(`contentEncoding: base64`), 상한을 넘으면 413 — 상한은 각 operation description. 내려받기는 실제 `Content-Type`(`format: binary`) + `Content-Disposition` 헤더.
 - **확장 필드**: `x-permission`(`admin` 관리자 · `dept-head` 부서장 · `creator` 만든 사람 · `self` 본인), `x-shared-data`(여러 사람이 같이 보는 데이터), `x-gpu`·`x-llm`·`x-long-running`(버튼 연타 막기). 도구 태그(와 도구별 파일의 `info`)에는 등록용 `x-tool-id`·`x-name`·`x-kind`(agent/tool)·`x-category`·`x-entry`·`x-health-path`·`x-docs-input`·`x-external-network`·`x-response-style` 이 있습니다.
 - description 에 **"코드 확인 필요"** 라고 적힌 스키마는 문서·코드로 모양을 확정하지 못한 곳(`additionalProperties: true`)입니다. 실제 응답이 다르면 알려 주세요.
 - 화면 HTML(그 밖의 GET → `ui.html`)과 정적 파일은 넣지 않았습니다.
+
+## 9. 보안 모델 — 누가 무엇을 믿나
+
+새 화면을 만드는 분과 점검하는 분이 같은 그림을 보도록 정리합니다. 근거 코드: `fastportal/`(포털), 각 도구의 `portal_auth.py`(원본 `sdk/portal_auth.py`).
+
+```
+브라우저 ──(쿠키 agsid, 같은 출처 또는 허용한 CORS 출처, Origin 검사)──▶ 포털
+포털 ──(X-Agent-User + X-Agent-Auth 서명, 쿠키 없음)──▶ 도구        도구 ──(같은 서명)──▶ 다른 도구(tts·kordoc 등)
+도구 ──(X-Portal-Jobs-Token, 도구별)──▶ 포털 /api/internal/jobs
+```
+
+| 경계 | 지키는 방법 |
+|---|---|
+| 브라우저 → 포털: 누구인가 | 세션 쿠키 `agsid`(HttpOnly, 서버에는 sha256 만, 30일·12시간). PIN 은 PBKDF2-SHA256 60만 회 + 사용자별 salt. 로그인 잠금: (아이디, 접속지) 10분 5회 · 접속지 10분 30회 · 아이디 전체 10분 20회 · PIN 해시 동시 4개 · 가입 접속지별 시간당 5회 |
+| 브라우저 → 포털: 우리 화면에서 왔나 | 상태를 바꾸는 요청은 Origin/Referer 가 같은 출처·허용 목록이어야 함(3절). CORS 는 허용 목록이 비면 아예 꺼짐 |
+| 포털 → 도구: 사용자 | 포털이 사용자 헤더를 지우고 다시 붙임 + **서명** `X-Agent-Auth: v1.<unix초>.<hex>`, hex = HMAC-SHA256(도구 키, `v1|<초>|<X-Agent-User>`), ±5분. 도구 키(`PORTAL_TOOL_KEY`)는 포털 비밀값에서 만들어 도구를 띄울 때 넘김(다른 컨테이너 도구는 `python -m fastportal.jobs toolkey` 값을 env 로) |
+| 도구가 받는 요청 | 키가 있으면 서명이 맞는 요청만(아니면 401 `code: unauthenticated`). 키가 없으면(포털 없이 띄움) 127.0.0.1 요청만(아니면 403). 예외 `GET /healthz`(데이터 없음). 바인드 기본 127.0.0.1 |
+| 도구 → 포털 응답 | 도구가 포털 쿠키(`ag…`)를 덮는 Set-Cookie 는 버림. `X-Content-Type-Options: nosniff`·`Referrer-Policy: same-origin`·`X-Frame-Options`·CSP `frame-ancestors` 를 붙임. 도구 API 가 주는 HTML·SVG·XML(사용자 내용일 수 있음)은 CSP `sandbox` — 그 안의 스크립트는 포털 쿠키·API 에 못 닿음 |
+| 도구 → 포털 작업 알림 | 도구별 HMAC 토큰 + 접속지(127.0.0.1·tools.json host·`PORTAL_JOBS_ALLOW`) |
+| 관리자 | 계정 `AGENT_OWNERS`, 또는 서버 안(127.0.0.1)에서 비밀 헤더 `X-Local-Owner`(토큰 파일, 600). 관리 API 는 서버에서 권한 확인. 숨긴 도구는 관리자만 쓰고 켬 |
+| 비밀 파일 | `.local_owner_token`·`.portal_jobs_secret`(권한 600) — 기본 `_data/`, 도구가 같은 데이터 폴더를 붙이는 컨테이너 구성에서는 `PORTAL_SECRETS_DIR`(포털만 붙는 볼륨, 700). 값은 로그·응답에 찍지 않음. 백업은 `umask 077` |
+| 오류 응답 | 내부 경로·주소·스택은 응답에 넣지 않음(포털: 로그에만, 도구: `portal_auth.scrub`) |
+| 감사 기록 | `audit` 표: 로그인·로그인 실패·가입·도구 시작/중지/등록·관리 작업(부서·부서장·PIN 초기화·정지·비활성화·익명화)·승인 |
+
+**알려진 한계(설계상, 다음 단계)**
+- 모든 도구가 포털과 같은 출처(`/t/<도구>/`)라, 도구 첫 화면의 XSS 는 포털 API 를 부를 수 있습니다(도구 화면이 인라인 스크립트를 써서 `script-src` 를 조이지 못함). 근본 대책은 도구별 출처 분리(서브도메인) — 지금은 sandbox·nosniff·도구 쪽 입력 정리로 줄임.
+- 관리자 계정이 여럿이어도 도구에는 `X-Agent-User: owner` 하나로 갑니다(도구 쪽 '주인' 작업 폴더 공유).
+- HTTP 로 운영 중이면 쿠키에 Secure 가 없습니다 — 폐쇄망 이전 때 HTTPS(`TLS_CERT·TLS_KEY` 또는 앞단 HTTPS + `PORTAL_COOKIE_SECURE=1`) 권장.
+- 실시간 알림(SSE)은 포털 프로세스 하나 전제(워커 1개).
+
+## 10. 버전·호환
+
+- `GET /api/version` 의 `api`(지금 `2026.10.14`) = 이 문서와 `openapi/*.json` 의 `info.version`. **응답 모양을 바꾸면(필드 삭제·이름 변경·의미 변경) 올립니다.** 필드를 더하는 것은 호환(화면은 모르는 필드를 무시해 주세요).
+- 경로를 없애거나 바꿀 때는 최소 한 판 동안 예전 경로를 같이 둡니다(예: `GET /logout` ↔ `POST /api/logout`, `GET /api/account/notices` ↔ `POST`).
+- `build` = 포털 저장소 `git describe`(태그-커밋) — 문제를 알릴 때 같이 적어 주세요.
+- 바뀐 점(2026.10.14): `POST /api/logout`·`GET /api/version`·`GET /api/landing`·`POST /api/account/notices` 추가, 오류 `code`, 로그인 잠금 429, PUT·DELETE·PATCH·HEAD 프록시, CSRF 검사, 도구 서명·`/healthz`, CORS 설정(기본 꺼짐).
+
