@@ -653,6 +653,128 @@ s_a.close()
 logs = "".join(open(os.path.join(T, f)).read() for f in os.listdir(T) if f.endswith(".log"))
 check("로그에 도구 토큰·비밀값 없음", SEC.decode() not in logs and jtok("bind-local") not in logs and jtok("down-local") not in logs, kind="보안")
 
+print("\n## 삭제 대신 — 비활성화·익명화·탈퇴 요청·부서 보관 (새 포털)")
+import sqlite3 as _sq
+DBF = os.path.join(DATA, "portal.db")
+
+
+def jpost(port, path, body, hd=None, tok=True):
+    st, h_, b_ = req(port, "POST", path, {**(hd or {}), "Content-Type": "application/json"}, json.dumps(body).encode(), tok=tok)
+    try:
+        return st, json.loads(b_), h_
+    except ValueError:
+        return st, {}, h_
+
+
+def jget(port, path, hd=None, tok=True):
+    st, _, b_ = req(port, "GET", path, hd or {}, tok=tok)
+    return st, (json.loads(b_) if b_[:1] in (b"{", b"[") else {}), b_
+
+
+def ck_of(h_):
+    return {"Cookie": "agsid=" + hdr(h_, "set-cookie")[0].split(";")[0].split("=", 1)[1]}
+
+
+def urow(uid):
+    con = _sq.connect(DBF); con.row_factory = _sq.Row
+    r = con.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone(); con.close()
+    return r
+
+
+DD = "보관시험부"
+st, _, _ = jpost(NEW, "/api/admin/dept", {"op": "add", "name": DD})
+check(f"부서 추가 {DD} → {st}", st == 200, kind="새 기능")
+st, j, h_ = jpost(NEW, "/api/signup", {"id": "wd-a", "name": "탈퇴시험", "pin": "4321", "dept": DD}, tok=False)
+CKA = ck_of(h_)
+jpost(NEW, "/api/signup", {"id": "wd-b", "name": "정리시험", "pin": "4321"}, tok=False)
+st, j, _ = jpost(NEW, "/api/admin/dept", {"op": "archive", "name": DD})
+check(f"대기 요청이 있으면 보관 막음 → {st} {j.get('error', '')[:40]}", st == 400 and "대기 요청 1건" in j.get("error", ""), kind="새 기능")
+rid = next(r["id"] for r in jget(NEW, "/api/admin")[1]["pending"] if r["uid"] == "wd-a")
+jpost(NEW, "/api/approvals/decide", {"id": rid, "ok": True})
+st, j, _ = jpost(NEW, "/api/admin/dept", {"op": "archive", "name": DD})
+check(f"소속 인원이 있으면 보관 막음(이름 표시) → {st}", st == 400 and "소속 인원 1명(탈퇴시험)" in j.get("error", ""), j.get("error", ""), kind="새 기능")
+st, j, _ = jpost(NEW, "/api/account/withdraw", {"reason": "퇴사"}, CKA, tok=False)
+check(f"본인 탈퇴 요청 → {st}", st == 200, kind="새 기능")
+st, j, _ = jpost(NEW, "/api/account/withdraw", {}, CKA, tok=False)
+check(f"탈퇴 요청 두 번 → {st}", st == 400 and "이미 대기 중" in j.get("error", ""), kind="새 기능")
+acc = jget(NEW, "/api/account", CKA, tok=False)[1]
+wr = [r for r in acc["requests"] if r["kind"] == "withdraw" and r["status"] == "pending"]
+check("내 요청에 탈퇴 요청(관리자에게, 지우지 않음)", len(wr) == 1 and wr[0]["label"] == "탈퇴 요청" and wr[0]["route"] == "관리자" and urow("wd-a")["disabled"] == 0, str(wr), kind="새 기능")
+check("탈퇴 요청은 부서장이 아니라 관리자 목록에", any(r["kind"] == "withdraw" for r in jget(NEW, "/api/admin")[1]["pending"]), kind="새 기능")
+st, j, _ = jpost(NEW, "/api/admin/account", {"op": "deactivate", "uid": "wd-b"}, CK, tok=False)
+check(f"일반 계정이 비활성화 시도 → {st}", st == 403, kind="보안")
+st, j, _ = jpost(NEW, "/api/approvals/decide", {"id": wr[0]["id"], "ok": True, "note": ""})
+r = urow("wd-a")
+check(f"탈퇴 승인 → 비활성화(로그인 불가·지우지 않음) {st}", st == 200 and r and r["disabled"] == 1 and r["deactivated"] and "탈퇴 요청" in r["deact_reason"] and r["name"] == "탈퇴시험", kind="새 기능")
+check("비활성화 → 세션 끊김(401)", jget(NEW, "/api/me", CKA, tok=False)[0] == 401, kind="새 기능")
+st, j, _ = jpost(NEW, "/api/login", {"id": "wd-a", "pin": "4321"}, tok=False)
+sto, jo, _ = jpost(OLD, "/api/login", {"id": "wd-a", "pin": "4321"})
+check(f"비활성 계정 로그인 거절 — 새 {st}·예전 portal.py {sto}", st == 400 and sto == 400, kind="새 기능")
+ad = jget(NEW, "/api/admin")[1]
+ua = next(u for u in ad["users"] if u["id"] == "wd-a")
+check("관리 목록: 비활성 표시(deactivated·사유)", ua["deactivated"] and ua["deact_reason"].startswith("본인 탈퇴") and not ua["anonymized"], str(ua), kind="새 기능")
+st, j, _ = jpost(NEW, "/api/admin/disable", {"uid": "wd-a", "disabled": False})
+check(f"비활성 계정은 '정지 해제'로 못 풂 → {st}", st == 400, kind="새 기능")
+st, _, _ = jpost(NEW, "/api/admin/account", {"op": "reactivate", "uid": "wd-a"})
+st2, _, h_ = jpost(NEW, "/api/login", {"id": "wd-a", "pin": "4321"}, tok=False)
+check(f"다시 활성화 → 로그인 됨 {st}/{st2}", st == 200 and st2 == 200 and urow("wd-a")["deactivated"] is None, kind="새 기능")
+CKA = ck_of(h_)
+st, _, _ = jpost(NEW, "/api/admin/account", {"op": "anonymize", "uid": "wd-a", "reason": "시험", "confirm": "wd-a"})
+check(f"활성 계정은 바로 익명화 못 함 → {st}", st == 400 and urow("wd-a")["anonymized"] is None, kind="새 기능")
+st, _, _ = jpost(NEW, "/api/admin/account", {"op": "deactivate", "uid": "wd-a", "reason": "시험 정리"})
+check(f"관리자 비활성화 → {st}, 세션 끊김", st == 200 and jget(NEW, "/api/me", CKA, tok=False)[0] == 401, kind="새 기능")
+st, j, _ = jpost(NEW, "/api/admin/account", {"op": "anonymize", "uid": "wd-a", "reason": "시험"})
+check(f"익명화 확인값 없음 → {st}", st == 400 and "아이디를 그대로" in j.get("error", ""), kind="새 기능")
+st, j, _ = jpost(NEW, "/api/admin/account", {"op": "anonymize", "uid": "wd-a", "reason": " ", "confirm": "wd-a"})
+check(f"익명화 이유 없음 → {st}", st == 400 and "이유" in j.get("error", ""), kind="새 기능")
+st, j, _ = jpost(NEW, "/api/admin/account", {"op": "anonymize", "uid": "wd-a", "reason": "시험 익명화", "confirm": "wd-a"})
+r = urow("wd-a")
+check(f"익명화 → {st}: 이름·부서·PIN 해시 지움, 아이디는 내부 키로 남음", st == 200 and r["name"] == "탈퇴한 사용자" and r["dept"] == "" and r["anonymized"] and r["anon_id"].startswith("deleted-") and r["theme"] is None, kind="새 기능")
+st, _, b_ = jget(NEW, "/api/admin")
+ad = json.loads(b_)
+check("관리 화면 응답에 원래 아이디가 안 나옴(계정·감사 기록 모두 deleted-…)", b"wd-a" not in b_ and "탈퇴시험".encode() not in b_
+      and any(u["id"] == r["anon_id"] and u["anonymized"] for u in ad["users"]) and any(a["action"] == "anonymize" and a["target"] == r["anon_id"] for a in ad["audit"]), kind="새 기능")
+con = _sq.connect(DBF)
+n_aud = con.execute("SELECT COUNT(*) FROM audit WHERE target='wd-a' OR actor='wd-a'").fetchone()[0]; n_req = con.execute("SELECT COUNT(*) FROM requests WHERE uid='wd-a'").fetchone()[0]; con.close()
+check(f"감사 기록·요청 연결은 그대로(DB 안 {n_aud}건·{n_req}건)", n_aud >= 5 and n_req == 2, kind="새 기능")
+st, _, _ = jpost(NEW, "/api/login", {"id": "wd-a", "pin": "4321"}, tok=False)
+sto, _, _ = jpost(OLD, "/api/login", {"id": "wd-a", "pin": "4321"})
+st2, j2, _ = jpost(NEW, "/api/signup", {"id": "wd-a", "name": "새사람", "pin": "1111"}, tok=False)
+check(f"익명화 계정: 로그인 {st}·예전 포털 {sto}·같은 아이디 재가입 {st2}(남이 데이터를 물려받지 못함)", st == 400 and sto == 400 and st2 == 400, kind="보안")
+for op in ("reactivate", "deactivate"):
+    st, _, _ = jpost(NEW, "/api/admin/account", {"op": op, "uid": "wd-a"})
+    check(f"익명화 계정 {op} → {st}(되돌릴 수 없음)", st == 400, kind="새 기능")
+st, _, _ = jpost(NEW, "/api/admin/reset", {"uid": "wd-a"})
+check(f"익명화 계정 PIN 초기화 → {st}", st == 400, kind="새 기능")
+st, j, _ = jpost(NEW, "/api/admin/dept", {"op": "archive", "name": DD})
+dl = jget(NEW, "/api/depts", tok=False)[1]["depts"]; dlo = jget(OLD, "/api/depts")[1]["depts"]
+check(f"소속·대기 없으면 보관 {st} — 가입 목록에서 빠짐(새·예전 포털)", st == 200 and DD not in dl and DD not in dlo, kind="새 기능")
+ad = jget(NEW, "/api/admin")[1]
+check("관리 목록: 보관 표시(archived)", any(d["name"] == DD and d["archived"] and d["hidden"] for d in ad["depts"]), kind="새 기능")
+st, j, _ = jpost(NEW, "/api/signup", {"id": "wd-c", "name": "x", "pin": "1234", "dept": DD}, tok=False)
+check(f"보관 부서로 가입 → {st}", st == 400, kind="새 기능")
+for op in ("add", "show", "archive"):
+    st, j, _ = jpost(NEW, "/api/admin/dept", {"op": op, "name": DD})
+    check(f"보관 부서 {op} → {st} {j.get('error', '')[:30]}", st == 400, kind="새 기능")
+st, _, _ = jpost(NEW, "/api/admin/dept", {"op": "restore", "name": DD})
+check(f"되살리기 → {st}, 가입 목록에 다시", st == 200 and DD in jget(NEW, "/api/depts", tok=False)[1]["depts"], kind="새 기능")
+st, _, _ = jpost(NEW, "/api/admin/dept", {"op": "restore", "name": DD})
+check(f"보관 안 된 부서 되살리기 → {st}", st == 400, kind="새 기능")
+st, _, _ = jpost(NEW, "/api/admin/dept", {"op": "archive", "name": DD}, CK, tok=False)
+check(f"일반 계정 부서 보관 → {st}", st == 403, kind="보안")
+jpost(NEW, "/api/admin/account", {"op": "deactivate", "uid": "wd-b", "reason": "정리 시험"})
+time.sleep(0.5)
+check("정리 작업은 기본 꺼짐(비활성 계정 그대로)", urow("wd-b")["anonymized"] is None, kind="새 기능")
+ANP = free_port()
+launch("anon", ANP, {"PORTAL_ANON_AUTO": "1", "PORTAL_ANON_AFTER_DAYS": "0"})
+for _ in range(50):
+    if urow("wd-b")["anonymized"]:
+        break
+    time.sleep(0.1)
+con = _sq.connect(DBF); sysa = con.execute("SELECT detail FROM audit WHERE actor='system' AND action='anonymize' AND target='wd-b'").fetchone(); con.close()
+check("PORTAL_ANON_AUTO=1(기한 0일로 시험) → 비활성 계정 익명화, 감사 기록 actor=system", urow("wd-b")["anonymized"] and sysa and "자동 정리" in sysa[0], str(sysa), kind="새 기능")
+check("정리 작업은 활성 계정을 건드리지 않음", urow("tester")["anonymized"] is None and urow("tester")["name"] == "시험", kind="새 기능")
+
 if A.slow:
     print("\n## 1분 넘는 POST → /api/events (61초)")
     since0 = json.loads(req(NEW, "GET", "/api/events", CK)[2])["last"]   # 앞 시험(작업 알림 센터)이 같은 DB 에 남긴 것은 빼고 비교

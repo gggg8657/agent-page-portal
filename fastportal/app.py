@@ -62,6 +62,9 @@ async def lifespan(_app):
     if os.environ.get("BACKUP", "0") == "1":
         import threading
         threading.Thread(target=core.backup_loop, daemon=True).start()
+    if core.ANON_AUTO:   # 비활성 계정 익명화 정리 — 기본 꺼짐(PORTAL_ANON_AUTO=1 로 켬, 기한 PORTAL_ANON_AFTER_DAYS)
+        import threading
+        threading.Thread(target=core.anon_loop, daemon=True).start()
     print(f"fastportal → {'https' if TLS else 'http'} data={core.DATA} owners={sorted(OWNERS)} max_body={MAX_BODY} backup={os.environ.get('BACKUP', '0')}  {core._SIG}", flush=True)
     yield
     await CLIENT["c"].aclose()
@@ -287,12 +290,15 @@ def manage_get(ctx, p):
             heads = {}
             for r in c.execute("SELECT dept, uid FROM dept_heads"):
                 heads.setdefault(r["uid"], []).append(r["dept"])
-            users = [dict(r) | {"role": "관리자" if r["id"] in OWNERS else "부서장" if r["id"] in heads else "일반", "heads": heads.get(r["id"], [])}
-                     for r in c.execute("SELECT id, name, dept, ts, seen, disabled FROM users ORDER BY ts")]
+            dis = core.display_ids(c)   # 익명화된 계정은 아이디도 deleted-… 로만 내보냄(감사 기록의 누가·대상 포함)
+            users = [dict(r) | {"id": dis.get(r["id"], r["id"]), "role": "관리자" if r["id"] in OWNERS else "부서장" if r["id"] in heads else "일반", "heads": heads.get(r["id"], [])}
+                     for r in c.execute("SELECT id, name, dept, ts, seen, disabled, deactivated, deact_reason, anonymized FROM users ORDER BY ts")]
             depts = [dict(r) | {"members": c.execute("SELECT COUNT(*) FROM users WHERE dept=?", (r["name"],)).fetchone()[0], "heads": core.heads_of(c, r["name"])}
-                     for r in c.execute("SELECT name, hidden FROM depts ORDER BY hidden, name")]
+                     for r in c.execute("SELECT name, hidden, archived FROM depts ORDER BY hidden, name")]
+            audit = [dict(r) | {"actor": dis.get(r["actor"], r["actor"]), "target": dis.get(r["target"], r["target"])}
+                     for r in c.execute("SELECT * FROM audit ORDER BY rowid DESC LIMIT 60")]
             return ctx.send({"users": users, "depts": depts, "pending": core.req_rows(c, "status='pending'"), "owners": sorted(OWNERS),
-                             "audit": [dict(r) for r in c.execute("SELECT * FROM audit ORDER BY rowid DESC LIMIT 60")]})
+                             "audit": audit, "anon_after_days": core.ANON_AFTER_DAYS, "anon_auto": core.ANON_AUTO})
     return ctx.send({"error": "not found"}, code=404)
 
 
@@ -328,6 +334,8 @@ def manage_post(ctx, c, p, req):
             core.new_request(c, uid, "dept_head", d)
         elif p == "/api/account/onboarded":
             c.execute("UPDATE users SET onboarded=? WHERE id=?", (1 if req.get("done", True) else 0, uid))
+        elif p == "/api/account/withdraw":   # 탈퇴 요청 — 관리자 승인 목록으로(바로 지우지 않음). 승인되면 비활성화
+            core.withdraw_request(c, uid, req.get("reason", ""))
         elif p == "/api/account/cancel":
             if not c.execute("UPDATE requests SET status='cancelled', decided_ts=? WHERE id=? AND uid=? AND status='pending'", (core.now(), int(req.get("id") or 0), uid)).rowcount:
                 raise ValueError("취소할 수 있는 요청이 아닙니다")
@@ -346,6 +354,8 @@ def manage_post(ctx, c, p, req):
         if op == "add":
             if not name or re.search(r"[<>\"'&]", name):
                 raise ValueError("부서 이름을 확인하세요")
+            if core.dept_archived(c, name):
+                raise ValueError("보관된 부서입니다 — '보관' 탭에서 되살리세요")
             c.execute("INSERT INTO depts(name, ts) VALUES(?,?) ON CONFLICT(name) DO UPDATE SET hidden=0", (name, core.now()))
         elif op == "rename":
             if not new or re.search(r"[<>\"'&]", new) or c.execute("SELECT 1 FROM depts WHERE name=?", (new,)).fetchone():
@@ -355,13 +365,22 @@ def manage_post(ctx, c, p, req):
             for t in ("users", "dept_heads", "requests"):
                 c.execute(f"UPDATE {t} SET dept=? WHERE dept=?", (new, name))
         elif op in ("hide", "show"):
+            if op == "show" and core.dept_archived(c, name):
+                raise ValueError("보관된 부서입니다 — '되살리기'로")
             c.execute("UPDATE depts SET hidden=? WHERE name=?", (op == "hide", name))
+        elif op == "archive":   # 보관: 소속 인원·대기 요청이 있으면 막음. 가입 목록·선택지에서 빠짐(hidden=1), 되살리기 가능
+            core.archive_dept(c, uid, name)
+        elif op == "restore":
+            if not c.execute("UPDATE depts SET archived=NULL, hidden=0 WHERE name=? AND archived IS NOT NULL", (name,)).rowcount:
+                raise ValueError("보관된 부서가 아닙니다")
         else:
             raise ValueError("op")
         core.audit(c, uid, "dept_" + op, name, new)
     elif p == "/api/admin/head":
         d, u = str(req.get("dept", "")), str(req.get("uid", ""))
         if req.get("op") == "grant":
+            if core.dept_archived(c, d):
+                raise ValueError("보관된 부서입니다")
             if not c.execute("SELECT 1 FROM users WHERE id=? AND dept=?", (u, d)).fetchone():
                 raise ValueError("그 부서 소속(승인된) 계정만 부서장이 될 수 있습니다")
             c.execute("INSERT OR IGNORE INTO dept_heads VALUES(?,?,?)", (d, u, core.now()))
@@ -375,16 +394,33 @@ def manage_post(ctx, c, p, req):
         if not c.execute("SELECT 1 FROM users WHERE id=?", (u,)).fetchone():
             raise ValueError("없는 계정")
         if p.endswith("reset"):
+            if c.execute("SELECT anonymized FROM users WHERE id=?", (u,)).fetchone()[0]:
+                raise ValueError("익명화된 계정입니다")
             pin = f"{core.secrets.randbelow(10**6):06d}"
             core.set_pin(c, u, pin); c.execute("DELETE FROM sessions WHERE uid=?", (u,)); core.audit(c, uid, "pin_reset", u)
             return ctx.send({"ok": True, "pin": pin})
         off = bool(req.get("disabled"))
         if off and u in OWNERS:
             raise ValueError("관리자 계정은 정지할 수 없습니다")
+        st = c.execute("SELECT deactivated, anonymized FROM users WHERE id=?", (u,)).fetchone()
+        if st["anonymized"] or st["deactivated"]:
+            raise ValueError("비활성·익명화된 계정입니다 — 정지·해제 대신 '다시 활성화'(비활성만)")
         c.execute("UPDATE users SET disabled=? WHERE id=?", (off, u))
         if off:
             c.execute("DELETE FROM sessions WHERE uid=?", (u,))
         core.audit(c, uid, "disable" if off else "enable", u)
+    elif p == "/api/admin/account":   # 비활성화 → (되돌릴 수 없는) 익명화, 다시 활성화. 익명화는 이유 + confirm(아이디 그대로) 필수
+        op, u = req.get("op"), str(req.get("uid", ""))
+        if op == "deactivate":
+            core.deactivate(c, uid, u, req.get("reason", ""))
+        elif op == "reactivate":
+            core.reactivate(c, uid, u)
+        elif op == "anonymize":
+            if req.get("confirm") != u:
+                raise ValueError("되돌릴 수 없습니다 — 확인란에 아이디를 그대로 적어 주세요")
+            core.anonymize(c, uid, u, req.get("reason", ""))
+        else:
+            raise ValueError("op")
     else:
         return ctx.send({"error": "not found"}, code=404)
     return ctx.send({"ok": True})

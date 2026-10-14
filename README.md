@@ -201,6 +201,7 @@ bash agent-page-portal/scripts/start-fastportal.sh stop
 | `WEB_DIST` | 없음(꺼짐) — 운영은 `portal-env.sh` 가 `<상위>/_web/app` 링크가 있으면 자동 | React 화면(agent-page-web) 빌드 폴더(링크면 요청마다 따라감 — 배포는 링크 바꿔 끼우기, 재시작 없음). 있으면 포털이 `WEB_PREFIX` 아래에서 같은 출처로 내보냄(아래 'React 화면') — 없으면 예전과 완전히 같음 |
 | `WEB_PREFIX` | /app | React 화면 주소. `/app` 처럼 하위 경로만 |
 | `WEB_ROOT`·`WEB_ROOT_DIST` | 꺼짐 | **'/' 전환(준비만, 운영에선 꺼 둠)**: `WEB_ROOT=1` 이면 `/`·`/login`·`/all`·`/fav`·`/recent`·`/account`·`/approvals`·`/admin`·`/tool/*`·`/assets/*` 를 `WEB_ROOT_DIST`(WEB_BASE=/ 빌드)에서 내보냄. `/api`·`/t`·`/theme`·`/guide`·`/logout`·`/landing` 은 그대로. 절차·되돌리기: agent-page-web `CUTOVER.md` |
+| `PORTAL_ANON_AUTO`·`PORTAL_ANON_AFTER_DAYS` | 0(꺼짐)·365 | 계정 정리 작업: `1` 이면 비활성화한 지 N일 지난 계정을 하루 한 번 익명화(감사 기록 actor=`system`). 기본 꺼짐 — 관리 화면에서 손으로만 |
 | 나머지 | | `AGENT_DATA`·`AGENT_OWNERS`·`HOST`·`SHOW_HIDDEN`·`TLS_CERT`/`TLS_KEY`(TLS 1.2 이상) 는 위 표와 같음 |
 
 로컬 주인 토큰 쓰기(스크립트·관리 작업): `curl -H "X-Local-Owner: $(cat ~/agent-page/_data/.local_owner_token)" …` — 예: `curl -X POST -H "X-Local-Owner: $(cat ~/agent-page/_data/.local_owner_token)" localhost:8700/api/start -d '{"dir":"writer-local"}'`(`autostart.sh` 가 이렇게 부름). 토큰 값은 출력·커밋하지 말 것. 바꾸려면 파일을 지우고 포털 재시작(새로 만듦), 그 뒤 쓰는 스크립트는 파일을 다시 읽으면 됨. 포털은 이 헤더를 도구로 넘기지 않고, React 시범 서버(:8710)는 브라우저가 보낸 것도 버림.
@@ -209,6 +210,8 @@ bash agent-page-portal/scripts/start-fastportal.sh stop
 빈 `agsid=`·형식이 틀린 `agsid`·여러 줄 `Cookie` 도 '쿠키 있음 → 무효 → 401'(예전엔 로컬이면 주인) · 청크 업로드 본문도 전달(예전엔 버림) · 업로드 상한 413 ·
 도구의 리디렉트는 같은 도구 안에서만 따라감(예전엔 아무 주소나) · 도구가 준 쿠키를 포털이 기억하지 않음 · 예상 못 한 오류는 연결을 끊는 대신 500 `{"error": "서버 오류"}` ·
 `/docs`·`/openapi.json` 은 열지 않음 · `Server` 헤더 없음.
+
+**삭제 대신 비활성화·익명화·보관**(새 포털만 — `portal.py` 는 모르는 열이지만 `disabled=1`·`hidden=1` 로 같이 막힘): 계정은 지우지 않습니다. 관리자가 **비활성화**(로그인 불가·세션 끊김·부서장 회수·대기 요청 취소, `다시 활성화` 가능) → 필요하면 **익명화**(되돌릴 수 없음 — 이유 입력 + 아이디 그대로 적기, 이름·부서·PIN 해시를 지우고 화면·API 에는 `deleted-…` 로만). 아이디는 내부 키로 남아 감사 기록·요청·작업 기록·도구 데이터(`_by`, `WORKSPACE/u/<id>`)의 '만든 사람' 연결이 깨지지 않고, 같은 아이디로 다시 가입할 수 없습니다(남이 그 데이터를 물려받지 못함). 본인은 계정 설정 **탈퇴 요청** → 관리자 승인 목록(승인 = 비활성화). 부서는 **보관**(소속 인원·대기 요청이 있으면 막고 이유 표시, 가입 목록에서 빠짐, '보관' 탭에서 되살리기). DB: `users.deactivated·deact_reason·anonymized·anon_id`, `depts.archived` 열(처음 기동 때 추가), `requests.kind='withdraw'`.
 
 **혼합형 — 도구가 다른 컨테이너·서버에 있을 때**: `tools.json` 항목에 `"host"`(예: `"tools-gpu"`, `"10.0.0.5"`)를 넣으면 그 도구는 켜짐 확인·`/t/<dir>/` 프록시를 `http://<host>:<port>` 로 하고, 포털은 띄우거나 끄지 않습니다(`/api/start`·`/api/stop` → 409 `{"error": "다른 컨테이너에서 항상 켜져 있는 도구입니다"}`; 그 컨테이너가 늘 켜 둠, 도구는 `BIND=0.0.0.0` 로). `host` 가 없으면 예전과 같습니다(127.0.0.1, 포털이 띄움).
 `host` 는 관리자만 고치는 `tools.json` 에서만 옵니다(`/api/tool_add` 는 `host` 를 받지 않음). 호스트명·IPv4 글자만 허용 — 스킴(`http://`)·경로(`/`)·포트(`:`)·`@`·공백·IPv6 는 형식 오류로 보고 접속하지 않습니다(목록에서 꺼짐, `/t/<dir>/` 는 502). 프록시 규칙은 그대로 — `X-Agent-User` 를 포털 값으로 붙이고, 브라우저가 보낸 사용자 헤더·포털 쿠키(`agsid`·`agtheme`)·`X-Local-Owner` 는 빼고 보냅니다. 리디렉트도 같은 `host:port` 안에서만 따라갑니다.
@@ -222,7 +225,7 @@ React 랜딩이 읽는 `GET /web/landing.json`·`/app/web/landing.json`(분류·
 
 워커는 **1개**(비동기)로 씁니다. 작업 알림 SSE 구독(작업 표는 DB 지만 실시간 전달은 프로세스 안 큐)·도구 켜짐 캐시·GPU 캐시가 프로세스 메모리라, 워커를 늘리면 이 셋을 공유 저장소(예: Redis pub/sub)로 옮겨야 합니다(세션·잠금·계정은 이미 DB). 막히는 일(DB·PIN 해시·nvidia-smi)은 스레드 풀에서 돌아 이벤트 루프를 막지 않습니다.
 
-계약 시험(`fastportal/tests/`): `contract_live.py --demo <id>:<pin> [--old <portal.py 포트>] [--new <fastportal 포트>]` 은 같은 요청을 예전 portal.py 와 새 포털에 보내(전환 뒤에는 portal.py 를 시험 포트에 따로 띄워 `--old` 로; 로컬 주인 요청엔 새 포털에만 토큰을 붙이고, 토큰 없는 로컬 = 401 도 확인) 상태·헤더·본문을 비교(읽기와 되돌리는 POST 만), `contract_fake.py` 는 임시 폴더에 두 포털과 가짜 도구를 띄워 프록시 헤더 규칙·본문·SSE·동시 스트림·끊김·잠금·프록시 뒤 판정·혼합형 `host`(127.0.0.2 에만 연 가짜 도구, 틀린 형식 7가지, start·stop 409)·`TOOL_BIND`·`WEB_DIST`(SPA 폴백·캐시·경로 넘기기·로그인 리디렉트·링크 바꿔 끼우기)·`WEB_ROOT`('/' 전환, 켠 경우·끈 경우)를 확인, `ui_compare.js` 는 Playwright 로 화면을 캡처해 비교합니다.
+계약 시험(`fastportal/tests/`): `contract_live.py --demo <id>:<pin> [--old <portal.py 포트>] [--new <fastportal 포트>]` 은 같은 요청을 예전 portal.py 와 새 포털에 보내(전환 뒤에는 portal.py 를 시험 포트에 따로 띄워 `--old` 로; 로컬 주인 요청엔 새 포털에만 토큰을 붙이고, 토큰 없는 로컬 = 401 도 확인) 상태·헤더·본문을 비교(읽기와 되돌리는 POST 만), `contract_fake.py` 는 임시 폴더에 두 포털과 가짜 도구를 띄워 프록시 헤더 규칙·본문·SSE·동시 스트림·끊김·잠금·프록시 뒤 판정·혼합형 `host`(127.0.0.2 에만 연 가짜 도구, 틀린 형식 7가지, start·stop 409)·`TOOL_BIND`·`WEB_DIST`(SPA 폴백·캐시·경로 넘기기·로그인 리디렉트·링크 바꿔 끼우기)·`WEB_ROOT`('/' 전환, 켠 경우·끈 경우)·삭제 대신 비활성화·익명화·탈퇴 요청·부서 보관·자동 정리(`PORTAL_ANON_AUTO`)를 확인, `ui_compare.js` 는 Playwright 로 화면을 캡처해 비교합니다.
 의존성 라이선스는 모두 MIT·BSD·Apache-2.0 계열(certifi 만 MPL-2.0)로 상업 이용 가능 — 정확한 목록은 `fastportal/requirements.txt` 의 각 패키지.
 
 ## 출처·감사 (Credits)

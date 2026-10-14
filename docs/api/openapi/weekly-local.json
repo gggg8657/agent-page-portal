@@ -1377,7 +1377,7 @@
     ],
     "operationId": "weeklyAggSave",
     "summary": "취합본 저장(화면에서 고친 것)",
-    "description": "agg.week·agg.org 로 저장 위치 결정. 처음 취합한 계정·관리자가 아니면 403. POST 본문 전체 상한 160MB(넘으면 413 {\"error\":\"요청이 너무 큽니다(최대 160MB)\"}).",
+    "description": "agg.week·agg.org 로 저장 위치 결정. 처음 취합한 계정·관리자가 아니면 403. POST 본문 전체 상한 160MB(넘으면 413 {\"error\":\"요청이 너무 큽니다(최대 160MB)\"}). src_reports(취합에 쓰인 제출 목록)는 서버 값을 유지(보낸 값은 무시).",
     "requestBody": {
      "required": true,
      "content": {
@@ -2586,6 +2586,368 @@
      }
     }
    }
+  },
+  "/t/weekly-local/api/trash": {
+   "get": {
+    "tags": [
+     "weekly-local"
+    ],
+    "operationId": "weeklyTrash",
+    "summary": "휴지통 목록",
+    "description": "owner 는 전부(제출·취합본), 그 밖의 계정은 자기가 처음 낸 제출만. 최근 것부터.",
+    "x-shared-data": true,
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WeeklyTrash"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/weekly-local/api/report/cancel": {
+   "post": {
+    "tags": [
+     "weekly-local"
+    ],
+    "operationId": "weeklyReportCancel",
+    "summary": "제출 취소(내 제출 → 휴지통)",
+    "description": "처음 제출한 계정 또는 owner 만(아니면 403). 같은 주·소본부 취합본에 쓰인 제출은 잠김 → 409 {error, locked:true}. 휴지통에서 기한(기본 30일) 안에 되살릴 수 있음. id 대신 profile{org,dept,name} 로도 지정.",
+    "x-shared-data": true,
+    "x-permission": "creator",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "week": {
+          "type": "string",
+          "pattern": "^\\d{4}-W\\d{2}$",
+          "example": "2026-W42"
+         },
+         "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{12}$"
+         },
+         "profile": {
+          "$ref": "#/components/schemas/WeeklyProfile"
+         },
+         "reason": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "week"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WeeklyTrashOk"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "취합본에 쓰여 잠김(locked: true)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "locked": {
+           "type": "boolean"
+          }
+         },
+         "required": [
+          "error"
+         ]
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/weekly-local/api/trash/put": {
+   "post": {
+    "tags": [
+     "weekly-local"
+    ],
+    "operationId": "weeklyTrashPut",
+    "summary": "휴지통으로 보내기(관리자 — 제출·취합본)",
+    "description": "owner 만(아니면 403). kind=report 는 week+id, kind=agg 는 week+org. 취합본을 보내면 그 취합에 쓰인 제출의 잠김이 풀림. 취합본에 쓰인 제출을 보내면 note 로 알림(취합본은 그대로).",
+    "x-shared-data": true,
+    "x-permission": "admin",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "kind": {
+          "type": "string",
+          "enum": [
+           "report",
+           "agg"
+          ]
+         },
+         "week": {
+          "type": "string",
+          "pattern": "^\\d{4}-W\\d{2}$",
+          "example": "2026-W42"
+         },
+         "id": {
+          "type": "string"
+         },
+         "org": {
+          "type": "string"
+         },
+         "reason": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "kind",
+         "week"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WeeklyTrashOk"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/weekly-local/api/trash/restore": {
+   "post": {
+    "tags": [
+     "weekly-local"
+    ],
+    "operationId": "weeklyTrashRestore",
+    "summary": "휴지통에서 되살리기",
+    "description": "owner, 또는 자기가 처음 낸 제출(kind=report). 기한이 지났거나 원래 자리에 새 제출·취합본이 있으면 409.",
+    "x-shared-data": true,
+    "x-permission": "creator",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "id"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "kind": {
+           "type": "string",
+           "enum": [
+            "report",
+            "agg"
+           ]
+          },
+          "week": {
+           "type": "string"
+          }
+         },
+         "required": [
+          "ok",
+          "kind"
+         ]
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "기한 지남 또는 자리에 새 것이 있음",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "locked": {
+           "type": "boolean"
+          }
+         },
+         "required": [
+          "error"
+         ]
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/weekly-local/api/trash/purge": {
+   "post": {
+    "tags": [
+     "weekly-local"
+    ],
+    "operationId": "weeklyTrashPurge",
+    "summary": "기한 지난 휴지통 비우기(관리자, 되돌릴 수 없음)",
+    "description": "owner 만(아니면 403). 기한(WEEKLY_TRASH_DAYS, 기본 30일)이 지난 것만 영구히 지움. 자동 비우기는 WEEKLY_TRASH_AUTO_PURGE=1 일 때만(기본 꺼짐).",
+    "x-shared-data": true,
+    "x-permission": "admin",
+    "requestBody": {
+     "required": false,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "purged": {
+           "type": "integer"
+          }
+         },
+         "required": [
+          "ok",
+          "purged"
+         ]
+        }
+       }
+      }
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
   }
  },
  "components": {
@@ -2853,9 +3215,21 @@
      },
      "unresolved_reason": {
       "type": "string"
+     },
+     "locked": {
+      "type": "boolean",
+      "description": "같은 주·소본부 취합본(휴지통에 없는 것)에 쓰였으면 true — 제출 취소 불가"
+     },
+     "lock_reason": {
+      "type": "string",
+      "description": "잠긴 이유(잠기지 않았으면 \"\")"
+     },
+     "mine": {
+      "type": "boolean",
+      "description": "요청한 계정이 처음 제출한 계정이면 true(owner 는 만든 계정 기록 없는 예전 제출도 true)"
      }
     },
-    "description": "제출 레코드. 없으면 {} (모든 필드 없음)"
+    "description": "제출 레코드. 없으면 {} (모든 필드 없음). 있으면 locked·lock_reason·mine 도 옴"
    },
    "WeeklyCarry": {
     "type": "object",
@@ -3035,13 +3409,28 @@
            },
            "n": {
             "type": "integer"
+           },
+           "locked": {
+            "type": "boolean",
+            "description": "같은 주·소본부 취합본(휴지통에 없는 것)에 쓰였으면 true — 제출 취소 불가"
+           },
+           "lock_reason": {
+            "type": "string",
+            "description": "잠긴 이유(잠기지 않았으면 \"\")"
+           },
+           "mine": {
+            "type": "boolean",
+            "description": "요청한 계정이 처음 제출한 계정이면 true(owner 는 만든 계정 기록 없는 예전 제출도 true)"
            }
           },
           "required": [
            "id",
            "name",
            "ts",
-           "n"
+           "n",
+           "locked",
+           "lock_reason",
+           "mine"
           ]
          }
         },
@@ -3151,6 +3540,13 @@
         "$ref": "#/components/schemas/WeeklyMergeSuggestion"
        }
       }
+     },
+     "src_reports": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "이 취합에 쓰인 제출 id(취합 때 서버가 기록 — agg/save 로 바꿀 수 없음, 보내지 않으면 그대로). 이 목록의 제출은 잠김"
      }
     },
     "additionalProperties": true,
@@ -3981,6 +4377,120 @@
     },
     "required": [
      "error"
+    ]
+   },
+   "WeeklyTrashItem": {
+    "type": "object",
+    "description": "휴지통 항목(원래 레코드는 WORKSPACE/trash/<id>.json 에 통째로 보관)",
+    "properties": {
+     "id": {
+      "type": "string",
+      "pattern": "^\\d{14}-[0-9a-f]{8}$"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "report",
+       "agg"
+      ]
+     },
+     "week": {
+      "type": "string"
+     },
+     "org": {
+      "type": "string"
+     },
+     "dept": {
+      "type": "string",
+      "description": "report 만"
+     },
+     "name": {
+      "type": "string",
+      "description": "report 만"
+     },
+     "ts": {
+      "type": "string",
+      "description": "휴지통에 넣은 시각"
+     },
+     "reason": {
+      "type": "string"
+     },
+     "mine": {
+      "type": "boolean"
+     },
+     "n": {
+      "type": "integer",
+      "description": "항목(제출) 또는 행(취합본) 수"
+     },
+     "days_left": {
+      "type": "integer",
+      "description": "되살릴 수 있는 남은 날(기한 지나면 0)"
+     },
+     "expired": {
+      "type": "boolean"
+     },
+     "restorable": {
+      "type": "boolean",
+      "description": "요청한 계정이 지금 되살릴 수 있으면 true"
+     }
+    },
+    "required": [
+     "id",
+     "kind",
+     "week",
+     "org",
+     "dept",
+     "name",
+     "ts",
+     "reason",
+     "mine",
+     "n",
+     "days_left",
+     "expired",
+     "restorable"
+    ]
+   },
+   "WeeklyTrash": {
+    "type": "object",
+    "properties": {
+     "items": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/WeeklyTrashItem"
+      }
+     },
+     "days": {
+      "type": "integer",
+      "description": "보관 기한(일, WEEKLY_TRASH_DAYS 기본 30)"
+     },
+     "auto_purge": {
+      "type": "boolean",
+      "description": "기한 지난 것 자동 비우기(WEEKLY_TRASH_AUTO_PURGE=1, 기본 꺼짐)"
+     }
+    },
+    "required": [
+     "items",
+     "days",
+     "auto_purge"
+    ]
+   },
+   "WeeklyTrashOk": {
+    "type": "object",
+    "properties": {
+     "ok": {
+      "type": "boolean"
+     },
+     "trash_id": {
+      "type": "string"
+     },
+     "note": {
+      "type": "string",
+      "description": "관리자가 취합본에 쓰인 제출을 보낼 때 알림"
+     }
+    },
+    "required": [
+     "ok",
+     "trash_id"
     ]
    }
   },

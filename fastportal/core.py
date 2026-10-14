@@ -157,11 +157,15 @@ def init_db():
         CREATE TABLE IF NOT EXISTS login_fails(uid TEXT, ts REAL);
         CREATE INDEX IF NOT EXISTS login_fails_uid ON login_fails(uid);""")
         cols = {r[1] for r in c.execute("PRAGMA table_info(users)")}
-        for col, ddl in (("iters", "INTEGER DEFAULT 200000"), ("disabled", "INTEGER DEFAULT 0"), ("seen", "TEXT"), ("theme", "TEXT"), ("onboarded", "INTEGER DEFAULT 0")):
+        # deactivated·deact_reason·anonymized·anon_id: 삭제 대신 비활성화 → 익명화(새 포털만 씀 — portal.py 는 모르는 열, disabled=1 로 같이 막힘)
+        for col, ddl in (("iters", "INTEGER DEFAULT 200000"), ("disabled", "INTEGER DEFAULT 0"), ("seen", "TEXT"), ("theme", "TEXT"), ("onboarded", "INTEGER DEFAULT 0"),
+                         ("deactivated", "TEXT"), ("deact_reason", "TEXT"), ("anonymized", "TEXT"), ("anon_id", "TEXT")):
             if col not in cols:
                 c.execute(f"ALTER TABLE users ADD COLUMN {col} {ddl}")
                 if col == "onboarded":
                     c.execute("UPDATE users SET onboarded=1")
+        if "archived" not in {r[1] for r in c.execute("PRAGMA table_info(depts)")}:   # 부서 보관(보관하면 hidden=1 도 — portal.py 목록에서도 빠짐)
+            c.execute("ALTER TABLE depts ADD COLUMN archived TEXT")
         if not c.execute("SELECT 1 FROM depts").fetchone():
             seed = {r[0] for r in c.execute("SELECT DISTINCT dept FROM users")} | {t.get("dept") for t in tools()}
             c.executemany("INSERT OR IGNORE INTO depts(name, ts) VALUES(?, datetime('now','localtime'))", [(d.strip(),) for d in seed if d and d.strip() and d.strip() != "개인"])
@@ -289,7 +293,7 @@ def user_theme(uid, cookie_header):
 
 
 # ── 부서·역할·요청 ───────────────────────────────────────────────────────
-KIND = {"dept_join": "부서 소속", "dept_head": "부서장 권한"}
+KIND = {"dept_join": "부서 소속", "dept_head": "부서장 권한", "withdraw": "탈퇴 요청"}
 
 
 def audit(c, actor, action, target, detail=""):
@@ -318,8 +322,9 @@ def names(c):
 
 def req_rows(c, where, args=()):
     nm = names(c) | {"owner": "관리자(로컬)"}
-    return [dict(r) | {"uname": nm.get(r["uid"], r["uid"]), "approver_name": nm.get(r["approver"] or "", r["approver"] or ""), "label": KIND.get(r["kind"], r["kind"]),
-                       "route": ("관리자" if r["kind"] == "dept_head" or not heads_of(c, r["dept"]) else "부서장 " + ", ".join(nm.get(h, h) for h in heads_of(c, r["dept"])))}
+    dis = display_ids(c)   # 익명화된 계정의 아이디는 deleted-… 로만
+    return [dict(r) | {"uid": dis.get(r["uid"], r["uid"]), "approver": dis.get(r["approver"], r["approver"]), "uname": nm.get(r["uid"], r["uid"]), "approver_name": nm.get(r["approver"] or "", r["approver"] or ""), "label": KIND.get(r["kind"], r["kind"]),
+                       "route": ("관리자" if r["kind"] != "dept_join" or not heads_of(c, r["dept"]) else "부서장 " + ", ".join(nm.get(h, h) for h in heads_of(c, r["dept"])))}
             for r in c.execute(f"SELECT * FROM requests WHERE {where} ORDER BY id DESC LIMIT 200", args)]
 
 
@@ -350,8 +355,148 @@ def decide(c, actor, rid, ok, note=""):
             if d != r["dept"]:
                 c.execute("DELETE FROM dept_heads WHERE dept=? AND uid=?", (d, r["uid"])); audit(c, actor, "head_revoke", r["uid"], f"{d} (부서 이동)")
     if ok and r["kind"] == "dept_head":
+        if dept_archived(c, r["dept"]):
+            raise ValueError("보관된 부서입니다 — 되살린 뒤 처리하세요")
         c.execute("INSERT OR IGNORE INTO dept_heads VALUES(?,?,?)", (r["dept"], r["uid"], now()))
     audit(c, actor, ("approve" if ok else "reject") + ":" + r["kind"], r["uid"], f"{r['dept']} #{rid} {note[:200]}".strip())
+    if ok and r["kind"] == "withdraw":   # 탈퇴 승인 = 비활성화(바로 지우지 않음). 익명화는 관리자가 따로 또는 기한 뒤 정리 작업
+        deactivate(c, actor, r["uid"], f"본인 탈퇴 요청 #{rid}")
+
+
+# ── 삭제 대신: 비활성화 → 익명화 · 탈퇴 요청 · 부서 보관 ─────────────────────
+# 비활성화: 로그인 불가(disabled=1 — portal.py 도 막힘)·세션 끊김·부서장 회수·대기 요청 취소. 관리자가 '다시 활성화'로 되돌릴 수 있음.
+# 익명화(되돌릴 수 없음, 비활성 계정만): 이름·부서·PIN 해시·테마·접속 시각을 지우고 화면에는 deleted-<무작위> 로만 보임.
+#   아이디(users.id)는 내부 키로 남김 — 감사 기록·요청·작업 기록·도구 데이터(_by, WORKSPACE/u/<id>)의 '만든 사람' 연결이 그대로이고,
+#   같은 아이디로 다시 가입할 수 없어(행이 남음) 남이 그 데이터를 물려받지 못함.
+# 정리 작업: PORTAL_ANON_AUTO=1 일 때만, 비활성화한 지 PORTAL_ANON_AFTER_DAYS(기본 365)일 지난 계정을 익명화(하루 한 번, 기본 꺼짐)
+ANON_NAME = "탈퇴한 사용자"
+ANON_AFTER_DAYS = int(os.environ.get("PORTAL_ANON_AFTER_DAYS") or 365)
+ANON_AUTO = os.environ.get("PORTAL_ANON_AUTO", "0") == "1"
+
+
+def _user(c, uid):
+    r = c.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+    if not r:
+        raise ValueError("없는 계정")
+    return r
+
+
+def _drop_ties(c, actor, uid, why):
+    """세션·로그인 실패 기록·부서장 권한·대기 요청 정리(비활성화·익명화 공통)"""
+    c.execute("DELETE FROM sessions WHERE uid=?", (uid,))
+    c.execute("DELETE FROM sess_short WHERE token NOT IN (SELECT token FROM sessions)")
+    for d in my_heads(c, uid):
+        c.execute("DELETE FROM dept_heads WHERE dept=? AND uid=?", (d, uid)); audit(c, actor, "head_revoke", uid, f"{d} ({why})")
+    c.execute("UPDATE requests SET status='cancelled', decided_ts=?, note=? WHERE uid=? AND status='pending'", (now(), why, uid))
+
+
+def deactivate(c, actor, uid, reason=""):
+    r = _user(c, uid)
+    if uid in OWNERS:
+        raise ValueError("관리자 계정은 비활성화할 수 없습니다")
+    if r["anonymized"]:
+        raise ValueError("이미 익명화된 계정입니다")
+    if r["deactivated"]:
+        raise ValueError("이미 비활성 계정입니다")
+    reason = str(reason or "").strip()[:200]
+    c.execute("UPDATE users SET disabled=1, deactivated=?, deact_reason=? WHERE id=?", (now(), reason, uid))
+    _drop_ties(c, actor, uid, "계정 비활성화")
+    audit(c, actor, "deactivate", uid, reason)
+
+
+def reactivate(c, actor, uid):
+    r = _user(c, uid)
+    if r["anonymized"]:
+        raise ValueError("익명화된 계정은 되살릴 수 없습니다")
+    if not r["deactivated"]:
+        raise ValueError("비활성 계정이 아닙니다")
+    c.execute("UPDATE users SET disabled=0, deactivated=NULL, deact_reason=NULL WHERE id=?", (uid,))
+    audit(c, actor, "reactivate", uid)
+
+
+def anonymize(c, actor, uid, reason):
+    r = _user(c, uid)
+    reason = str(reason or "").strip()[:200]
+    if not reason:
+        raise ValueError("익명화 이유를 적어 주세요")
+    if r["anonymized"]:
+        raise ValueError("이미 익명화된 계정입니다")
+    if not r["deactivated"]:
+        raise ValueError("먼저 비활성화한 계정만 익명화할 수 있습니다")
+    if uid in OWNERS:
+        raise ValueError("관리자 계정은 익명화할 수 없습니다")
+    while True:
+        aid = "deleted-" + secrets.token_hex(5)
+        if not c.execute("SELECT 1 FROM users WHERE anon_id=? OR id=?", (aid, aid)).fetchone():
+            break
+    junk = secrets.token_bytes(16)   # PIN 해시를 무작위로 — 어떤 PIN 으로도 로그인 안 됨
+    c.execute("UPDATE users SET name=?, dept='', salt=?, hash=?, iters=?, theme=NULL, seen=NULL, disabled=1, deact_reason=NULL, anonymized=?, anon_id=? WHERE id=?",
+              (ANON_NAME, junk, secrets.token_bytes(32), ITERS, now(), aid, uid))
+    c.execute("DELETE FROM login_fails WHERE uid=?", (uid,))
+    _drop_ties(c, actor, uid, "계정 익명화")
+    audit(c, actor, "anonymize", uid, f"{aid} {reason}")
+
+
+def display_ids(c):
+    """화면에 보일 아이디: 익명화된 계정은 deleted-…"""
+    return {r[0]: r[1] for r in c.execute("SELECT id, anon_id FROM users WHERE anonymized IS NOT NULL AND anon_id IS NOT NULL")}
+
+
+def anon_sweep(days=None, actor="system"):
+    """비활성화한 지 days 일 지난 계정 익명화 — 정리 작업(PORTAL_ANON_AUTO=1 일 때만 app 이 하루 한 번 부름). 익명화한 아이디 목록"""
+    days = ANON_AFTER_DAYS if days is None else days
+    cut = (datetime.datetime.now() - datetime.timedelta(days=days)).isoformat(timespec="seconds")
+    done = []
+    with db() as c:
+        for r in c.execute("SELECT id FROM users WHERE deactivated IS NOT NULL AND deactivated<=? AND anonymized IS NULL", (cut,)).fetchall():
+            if r[0] in OWNERS:
+                continue
+            anonymize(c, actor, r[0], f"비활성 {days}일 지남(자동 정리)")
+            done.append(r[0])
+    return done
+
+
+def anon_loop():
+    while True:
+        try:
+            n = anon_sweep()
+            if n:
+                print(f"anon_sweep: {len(n)}개 계정 익명화(비활성 {ANON_AFTER_DAYS}일 지남)", flush=True)
+        except Exception as e:
+            print("anon_sweep:", type(e).__name__, e, flush=True)
+        time.sleep(86400)
+
+
+def withdraw_request(c, uid, reason=""):
+    if uid in OWNERS or uid == "owner":
+        raise ValueError("관리자 계정은 탈퇴 요청할 수 없습니다")
+    r = _user(c, uid)
+    if c.execute("SELECT 1 FROM requests WHERE uid=? AND kind='withdraw' AND status='pending'", (uid,)).fetchone():
+        raise ValueError("이미 대기 중인 탈퇴 요청이 있습니다 — 취소는 '내 요청'에서")
+    reason = str(reason or "").strip()[:200]
+    c.execute("INSERT INTO requests(kind,uid,dept,status,note,ts) VALUES(?,?,?,?,?,?)", ("withdraw", uid, r["dept"] or "", "pending", reason, now()))
+    audit(c, uid, "withdraw_request", uid, reason)
+
+
+def dept_archived(c, name):
+    r = c.execute("SELECT archived FROM depts WHERE name=?", (name,)).fetchone()
+    return bool(r and r[0])
+
+
+def archive_dept(c, actor, name):
+    r = c.execute("SELECT archived FROM depts WHERE name=?", (name,)).fetchone()
+    if not r:
+        raise ValueError("없는 부서")
+    if r[0]:
+        raise ValueError("이미 보관된 부서입니다")
+    mem = [x[0] for x in c.execute("SELECT name FROM users WHERE dept=? AND deactivated IS NULL AND anonymized IS NULL ORDER BY name", (name,))]
+    pend = c.execute("SELECT COUNT(*) FROM requests WHERE dept=? AND status='pending'", (name,)).fetchone()[0]
+    why = ([f"소속 인원 {len(mem)}명({', '.join(mem[:5])}{' …' if len(mem) > 5 else ''})"] if mem else []) + ([f"대기 요청 {pend}건"] if pend else [])
+    if why:
+        raise ValueError(" · ".join(why) + " 이 있어 보관할 수 없습니다 — 다른 부서로 옮기거나 요청을 처리한 뒤 다시 하세요")
+    for h in heads_of(c, name):
+        c.execute("DELETE FROM dept_heads WHERE dept=? AND uid=?", (name, h)); audit(c, actor, "head_revoke", h, f"{name} (부서 보관)")
+    c.execute("UPDATE depts SET archived=?, hidden=1 WHERE name=?", (now(), name))
 
 
 def usage(c):

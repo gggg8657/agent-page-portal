@@ -76,7 +76,7 @@ def view(st, hd, b):
 RESULTS = []
 
 
-def same(name, method, path, who="demo", headers=None, body=None, note="", expect=None):
+def same(name, method, path, who="demo", headers=None, body=None, note="", expect=None, norm=None):
     hd = dict(headers or {})
     host = EXT if who == "anon" else "127.0.0.1"
     if who == "demo":
@@ -86,6 +86,8 @@ def same(name, method, path, who="demo", headers=None, body=None, note="", expec
     hd_new = dict(hd, **{"X-Local-Owner": LOCAL_TOK}) if who == "local" and LOCAL_TOK else hd   # 새 포털(PORTAL_LOCAL_OWNER=token)은 헤더가 있어야 로컬 주인
     a = view(*req(A.old, method, path, host, hd, body))
     b = view(*req(A.new, method, path, host, hd_new, body))
+    if norm:   # 새 포털만 더한 값(삭제 대신 비활성화·익명화·보관)을 맞춰 놓고 비교 — 의도한 차이
+        a, b = norm(a, "old"), norm(b, "new")
     ok = a == b and (expect is None or a["status"] == expect)
     diff = "" if ok else describe(a, b, expect)
     RESULTS.append({"name": name, "req": f"{method} {path}", "who": who, "status": f"{a['status']}/{b['status']}", "ok": ok, "diff": diff, "note": note})
@@ -127,6 +129,40 @@ def demo_row():
 
 
 orig = demo_row()
+
+
+# 삭제 대신(새 포털만): /api/admin 에 deactivated·deact_reason·anonymized(계정)·archived(부서)·anon_after_days·anon_auto 를 더하고,
+# 익명화된 계정의 아이디는 deleted-… 로 내보냄(감사 기록·요청 포함). 예전 portal.py 응답에 같은 바꾸기를 해서 나머지가 같은지 본다.
+NEW_KEYS = {"deactivated", "deact_reason", "anonymized", "archived", "anon_after_days", "anon_auto"}
+
+
+def anon_map():
+    con = sqlite3.connect(f"file:{os.path.abspath(A.db)}?mode=ro", uri=True)
+    try:
+        return dict(con.execute("SELECT id, anon_id FROM users WHERE anonymized IS NOT NULL AND anon_id IS NOT NULL").fetchall())
+    except sqlite3.OperationalError:   # 열이 아직 없음(새 포털을 한 번도 안 띄움)
+        return {}
+    finally:
+        con.close()
+
+
+def norm_admin(v, side):
+    body = v["body"]
+    if not isinstance(body, dict):
+        return v
+    m = anon_map() if side == "old" else {}
+    KIND_LABEL = {"withdraw": "탈퇴 요청"}
+
+    def fix(o, key=None):
+        if isinstance(o, dict):
+            o = {k: fix(x, k) for k, x in o.items() if k not in NEW_KEYS}
+            if side == "old" and o.get("kind") in KIND_LABEL:
+                o["label"], o["route"] = KIND_LABEL[o["kind"]], "관리자"
+            return o
+        if isinstance(o, list):
+            return [fix(x) for x in o]
+        return m.get(o, o) if key in ("id", "uid", "approver", "actor", "target") and isinstance(o, str) else o
+    return {**v, "body": fix(body)}
 print("demo 원래 값(theme, onboarded):", orig[:2])
 
 print("\n## 로그인 전 · 손님(바깥 주소)")
@@ -240,8 +276,8 @@ same("onboarded 켬", "POST", "/api/account/onboarded", body={"done": True})
 
 print("\n## 서버 주인(127.0.0.1, 쿠키 없음)")
 same("/api/me 주인", "GET", "/api/me", "local")
-same("/api/admin 주인", "GET", "/api/admin", "local")
-same("/api/approvals 주인", "GET", "/api/approvals", "local")
+same("/api/admin 주인", "GET", "/api/admin", "local", norm=norm_admin, note="새 값(비활성·익명화·보관)은 빼고 비교")
+same("/api/approvals 주인", "GET", "/api/approvals", "local", norm=norm_admin)
 same("/admin 주인", "GET", "/admin", "local")
 same("/login 주인(접속 중 표시)", "GET", "/login", "local")
 for th in ("classic-light", "v2-dark", "v2-light", "trendy-dark"):
@@ -267,6 +303,47 @@ new_only("틀린 토큰 로컬 /api/me = 401", "GET", "/api/me", {"X-Local-Owner
 new_only("헤더 없는 로컬 / → 로그인으로", "GET", "/", {"Accept": "text/html"}, 302)
 if LOCAL_TOK:
     new_only("토큰 맞는 로컬 /api/me = 200", "GET", "/api/me", {"X-Local-Owner": LOCAL_TOK}, 200)
+
+print("\n## 삭제 대신 — 비활성화·익명화·탈퇴 요청·부서 보관(새 포털만, 거절·읽기만 — 실제 계정·부서는 안 바꿈)")
+
+
+def dcheck(name, ok, detail="", who="local"):
+    RESULTS.append({"name": name, "req": "delete-lifecycle", "who": who, "status": "-", "ok": bool(ok), "diff": "" if ok else detail, "note": "새 기능"})
+    print(("  OK  " if ok else "  !!  ") + f"{name}" + ("" if ok else f"  — {detail}"))
+
+
+DCK0 = {"Cookie": "agsid=" + DEMO_TOK, "Content-Type": "application/json"}
+for path, body in (("/api/admin/account", {"op": "deactivate", "uid": "no-such-user-x"}), ("/api/admin/account", {"op": "anonymize", "uid": "no-such-user-x", "reason": "x", "confirm": "no-such-user-x"}),
+                   ("/api/admin/dept", {"op": "archive", "name": "없는부서-x"}), ("/api/admin/dept", {"op": "restore", "name": "없는부서-x"})):
+    st, _, b = req(A.new, "POST", path, headers=DCK0, body=json.dumps(body).encode())
+    dcheck(f"데모 계정 {path} {body['op']} → {st}", st == 403, f"{st} {b[:100]!r}", who="demo")
+if LOCAL_TOK:
+    OWN = {"X-Local-Owner": LOCAL_TOK, "Content-Type": "application/json"}
+    for body, want in (({"op": "anonymize", "uid": "no-such-user-x", "reason": "x"}, "아이디를 그대로"), ({"op": "anonymize", "uid": "no-such-user-x", "reason": "x", "confirm": "no-such-user-x"}, "없는 계정"),
+                       ({"op": "deactivate", "uid": "no-such-user-x"}, "없는 계정"), ({"op": "bogus", "uid": "no-such-user-x"}, "op")):
+        st, _, b = req(A.new, "POST", "/api/admin/account", headers=OWN, body=json.dumps(body).encode())
+        dcheck(f"주인 /api/admin/account {body['op']}(없는 계정) → {st}", st == 400 and want in json.loads(b).get("error", ""), f"{st} {b[:120]!r}")
+    for op in ("archive", "restore"):
+        st, _, b = req(A.new, "POST", "/api/admin/dept", headers=OWN, body=json.dumps({"op": op, "name": "없는부서-x"}).encode())
+        dcheck(f"주인 부서 {op}(없는 부서) → {st}", st == 400, f"{st} {b[:120]!r}")
+    st, _, b = req(A.new, "POST", "/api/account/withdraw", headers=OWN, body=b"{}")
+    dcheck(f"로컬 주인 탈퇴 요청 → {st}(계정 없음)", st == 400, f"{st} {b[:120]!r}")
+    st, _, b = req(A.new, "GET", "/api/admin", headers={"X-Local-Owner": LOCAL_TOK})
+    ad = json.loads(b) if st == 200 else {}
+    dcheck("/api/admin 새 값(계정 deactivated·anonymized, 부서 archived, anon_auto 꺼짐)", st == 200 and all({"deactivated", "deact_reason", "anonymized"} <= set(u) for u in ad["users"])
+           and all("archived" in d for d in ad["depts"]) and ad.get("anon_auto") is False and isinstance(ad.get("anon_after_days"), int), f"{st} {str(ad)[:200]}")
+    am = anon_map()
+    dcheck(f"익명화된 계정 {len(am)}개 — /api/admin·/api/approvals 응답에 원래 아이디 없음",
+           all(f'"{k}"'.encode() not in b and f'"{k}"'.encode() not in req(A.new, "GET", "/api/approvals", headers={"X-Local-Owner": LOCAL_TOK})[2] for k in am)
+           and all(any(u["id"] == v for u in ad["users"]) for v in am.values()), str(sorted(am.values())))
+st, _, b = req(A.new, "GET", "/api/depts")
+con = sqlite3.connect(f"file:{os.path.abspath(A.db)}?mode=ro", uri=True)
+try:
+    arch = [r[0] for r in con.execute("SELECT name FROM depts WHERE archived IS NOT NULL")]
+except sqlite3.OperationalError:
+    arch = []
+con.close()
+dcheck(f"보관된 부서 {len(arch)}개는 가입 목록(/api/depts)에 없음", st == 200 and not set(arch) & set(json.loads(b)["depts"]), str(arch), who="anon")
 
 print("\n## 작업 알림 센터(새 포털만 — /api/jobs·/api/jobs/stream·/api/jobs/read·/api/internal/jobs). 쓰기 없음(거절만)")
 import hmac as _hmac, hashlib as _hashlib, socket as _socket

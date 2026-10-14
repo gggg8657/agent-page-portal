@@ -1025,6 +1025,45 @@
     ]
    }
   },
+  "/api/account/withdraw": {
+   "post": {
+    "operationId": "portalAccountWithdraw",
+    "summary": "탈퇴 요청(관리자 승인 목록으로 — 바로 지우지 않음)",
+    "x-permission": "self",
+    "description": "본인 계정의 탈퇴를 요청. requests 에 kind=withdraw·pending 으로 들어가 관리자 승인 목록(/api/approvals·/api/admin pending)에 보임. 승인하면 계정이 비활성화(로그인 불가)되고, 거절·본인 취소(/api/account/cancel)도 됨. 이미 대기 중이면 400, 관리자 계정·로컬 접속은 400.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "reason": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "이유(선택)"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
   "/api/account/onboarded": {
    "post": {
     "operationId": "portalAccountOnboarded",
@@ -1258,7 +1297,7 @@
     "operationId": "portalApprovalsDecide",
     "summary": "요청 승인·반려(부서장·관리자)",
     "x-permission": "dept-head",
-    "description": "그 요청을 처리할 권한이 없으면 403. 부서 소속 요청은 그 부서장(없으면 관리자), 부서장 요청은 관리자.",
+    "description": "그 요청을 처리할 권한이 없으면 403. 부서 소속 요청은 그 부서장(없으면 관리자), 부서장 요청은 관리자.\n\nkind=withdraw(탈퇴 요청)는 관리자만 처리 — 승인하면 그 계정이 비활성화됨(/api/admin/account deactivate 와 같음).",
     "requestBody": {
      "required": true,
      "content": {
@@ -1353,12 +1392,20 @@
           },
           "audit": {
            "type": "array",
-           "description": "최근 60건 감사 기록",
+           "description": "최근 60건 감사 기록(익명화된 계정의 누가·대상은 deleted-…). action 예: deactivate·reactivate·anonymize·withdraw_request·dept_archive·dept_restore",
            "items": {
             "type": "object",
             "additionalProperties": true,
             "description": "audit 테이블 한 줄(코드 확인 필요)"
            }
+          },
+          "anon_after_days": {
+           "type": "integer",
+           "description": "비활성 계정 자동 익명화 기한(일, PORTAL_ANON_AFTER_DAYS — 기본 365)"
+          },
+          "anon_auto": {
+           "type": "boolean",
+           "description": "자동 익명화 정리 작업이 켜졌는지(PORTAL_ANON_AUTO=1, 기본 꺼짐)"
           }
          }
         }
@@ -1380,9 +1427,9 @@
   "/api/admin/dept": {
    "post": {
     "operationId": "portalAdminDept",
-    "summary": "부서 추가·이름 바꾸기·숨기기·보이기",
+    "summary": "부서 추가·이름 바꾸기·숨기기·보이기·보관·되살리기",
     "x-permission": "admin",
-    "description": "관리자만(아니면 403). 감사 기록에 남음.",
+    "description": "관리자만(아니면 403). 감사 기록에 남음.\n\n- archive(보관): 소속 인원(비활성·익명화 계정 제외)이나 대기 요청이 있으면 400 + 이유(예: '소속 인원 2명(김○○, 이○○) · 대기 요청 1건 이 있어 보관할 수 없습니다'). 보관하면 가입·변경 목록(/api/depts)에서 빠지고(hidden=1) 그 부서의 부서장 권한은 회수.\n- restore(되살리기): 보관을 풂(다시 목록에). 보관된 부서에 add·show·부서장 지정은 400.",
     "requestBody": {
      "required": true,
      "content": {
@@ -1400,7 +1447,9 @@
            "add",
            "rename",
            "hide",
-           "show"
+           "show",
+           "archive",
+           "restore"
           ]
          },
          "name": {
@@ -1559,7 +1608,7 @@
     "operationId": "portalAdminDisable",
     "summary": "계정 정지·해제(정지하면 세션 끊김, 관리자 계정은 불가)",
     "x-permission": "admin",
-    "description": "관리자만(아니면 403). 감사 기록에 남음.",
+    "description": "관리자만(아니면 403). 감사 기록에 남음. 비활성·익명화된 계정은 400 — '다시 활성화'는 /api/admin/account.",
     "requestBody": {
      "required": true,
      "content": {
@@ -1575,6 +1624,67 @@
          },
          "disabled": {
           "type": "boolean"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/admin/account": {
+   "post": {
+    "operationId": "portalAdminAccount",
+    "summary": "계정 비활성화·다시 활성화·익명화(삭제 대신)",
+    "x-permission": "admin",
+    "description": "관리자만(아니면 403). 모두 감사 기록에 남음.\n\n- deactivate: 로그인 불가(disabled=1)·세션 모두 끊김·부서장 권한 회수·대기 요청 취소. 관리자(AGENT_OWNERS) 계정은 400. reason 은 선택(200자).\n- reactivate: 비활성 계정을 되살림(익명화된 계정은 400).\n- anonymize: **되돌릴 수 없음.** 비활성 계정만(아니면 400). reason 필수, confirm 에 uid 를 그대로(아니면 400). 이름을 '탈퇴한 사용자'로, 부서·PIN 해시·테마·접속 시각을 지우고 화면·API 에는 deleted-<무작위> 로만 보임. 아이디는 내부 키로 남아 감사 기록·요청·작업 기록·도구 데이터의 만든 사람 연결이 그대로이고, 같은 아이디로 다시 가입할 수 없음.\n\n자동 정리: PORTAL_ANON_AUTO=1 이면 비활성화한 지 PORTAL_ANON_AFTER_DAYS(기본 365)일 지난 계정을 하루 한 번 익명화(감사 기록 actor=system). 기본 꺼짐.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "op",
+         "uid"
+        ],
+        "properties": {
+         "op": {
+          "type": "string",
+          "enum": [
+           "deactivate",
+           "reactivate",
+           "anonymize"
+          ]
+         },
+         "uid": {
+          "type": "string"
+         },
+         "reason": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "이유(anonymize 는 필수)"
+         },
+         "confirm": {
+          "type": "string",
+          "description": "anonymize 때 uid 를 그대로 — 되돌릴 수 없음을 확인"
          }
         }
        }
@@ -2222,11 +2332,14 @@
       "type": "string",
       "enum": [
        "dept_join",
-       "dept_head"
-      ]
+       "dept_head",
+       "withdraw"
+      ],
+      "description": "withdraw = 본인 탈퇴 요청(관리자만 처리, 승인하면 비활성화)"
      },
      "uid": {
-      "type": "string"
+      "type": "string",
+      "description": "요청한 계정(익명화된 계정은 deleted-…)"
      },
      "dept": {
       "type": "string"
@@ -2352,7 +2465,8 @@
     ],
     "properties": {
      "id": {
-      "type": "string"
+      "type": "string",
+      "description": "아이디. 익명화된 계정은 deleted-… (원래 아이디는 내보내지 않음)"
      },
      "name": {
       "type": "string"
@@ -2377,7 +2491,8 @@
       "enum": [
        0,
        1
-      ]
+      ],
+      "description": "1 = 로그인 막힘(정지·비활성·익명화 모두)"
      },
      "role": {
       "type": "string",
@@ -2392,6 +2507,27 @@
       "items": {
        "type": "string"
       }
+     },
+     "deactivated": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "비활성화한 시각(탈퇴·퇴사 — 로그인 불가, '다시 활성화'로 되돌릴 수 있음). 없으면 null"
+     },
+     "deact_reason": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "비활성화 이유(익명화하면 지움)"
+     },
+     "anonymized": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "익명화한 시각(되돌릴 수 없음 — 이름 '탈퇴한 사용자', 부서·PIN 지움). 없으면 null"
      }
     }
    },
@@ -2422,6 +2558,13 @@
       "items": {
        "type": "string"
       }
+     },
+     "archived": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "보관한 시각(가입·변경 목록에서 빠짐, hidden=1). 없으면 null"
      }
     }
    },

@@ -127,6 +127,9 @@ const g  = await (await fetch('/t/saju-local/api/graph?dept=' + encodeURICompone
 | `POST /api/pin` `{"pin", "new"}` | PIN 바꾸기(다른 기기 세션은 끊김, 지금 세션의 '로그인 유지'는 그대로) | 로그인 |
 | `POST /api/account/onboarded` `{"done": true}` | 첫 로그인 둘러보기 마침·건너뜀 기록(`/api/me` 의 `onboarded`) | 본인 |
 | `/api/account…` · `/api/approvals…` · `/api/admin…` | 계정 설정·부서 승인·관리 | 본인·부서장·관리자 |
+| `POST /api/account/withdraw` `{"reason"?}` | 탈퇴 요청 — 바로 지우지 않고 관리자 승인 목록(kind `withdraw`)으로. 승인하면 비활성화, 본인은 `/api/account/cancel` 로 취소 | 본인 |
+| `POST /api/admin/account` `{"op", "uid", "reason"?, "confirm"?}` | 삭제 대신: `deactivate`(로그인 불가·세션 끊김·부서장 회수·대기 요청 취소, 되살릴 수 있음) · `reactivate` · `anonymize`(**되돌릴 수 없음** — 비활성 계정만, `reason` 필수, `confirm` = uid 그대로. 이름·부서·PIN 을 지우고 화면·API 에는 `deleted-…` 로만, 아이디는 내부 키로 남아 감사 기록·도구 데이터의 만든 사람 연결 유지·재가입 불가). 자동 정리 `PORTAL_ANON_AUTO=1`(기한 `PORTAL_ANON_AFTER_DAYS`, 기본 365일·기본 꺼짐) | 관리자 |
+| `POST /api/admin/dept` `{"op": "archive" \| "restore", "name"}` | 부서 보관·되살리기 — 소속 인원(비활성·익명화 제외)·대기 요청이 있으면 400 + 이유. 보관하면 가입·변경 목록에서 빠짐(`/api/admin` 의 `archived`) | 관리자 |
 
 ### 도구가 작업 상태를 알리는 법(개발 가이드)
 오래 걸리는 작업(대기열·폴링·스트리밍)을 하는 도구는 상태를 포털에 알려 주세요 — 사용자는 다른 화면에 있어도 🔔·토스트·브라우저 알림으로 받고, '결과 보기'로 그 결과 화면에 바로 갑니다.

@@ -35,6 +35,11 @@
 | POST | `api/aggregate` | 부서별 합치기 → 취합본 (SSE) | 예(LLM, 부서 수 × 수십 초) | 공유(저장) |
 | POST | `api/compress` | 취합본 1쪽 압축 (SSE) | 예(LLM) | 아니오(결과만 반환) |
 | POST | `api/agg/save` | 취합본 저장(화면에서 고친 것) | 아니오 | 공유(저장) |
+| POST | `api/report/cancel` | 내 제출 취소(휴지통으로, 취합에 쓰였으면 잠김 409) | 아니오 | 공유(본인·owner) |
+| GET | `api/trash` | 휴지통 목록(owner 전부, 그 밖 자기 제출만) | 아니오 | 공유 |
+| POST | `api/trash/put` | 제출·취합본을 휴지통으로 (owner) | 아니오 | 공유(owner) |
+| POST | `api/trash/restore` | 휴지통에서 되살리기(기한 안) | 아니오 | 공유(owner·본인) |
+| POST | `api/trash/purge` | 기한 지난 것 비우기 (owner, 되돌릴 수 없음) | 아니오 | 공유(owner) |
 | POST | `api/preview` | 미리보기 HTML·점검·분량 추정·텍스트 | 아니오 | 아니오 |
 | POST | `api/check` | 규칙 점검 + 분량 추정만 | 아니오 | 아니오 |
 | POST | `api/export` | 파일 내보내기 | 아니오(수 초) | 아니오 |
@@ -85,12 +90,13 @@
  "history": [{"ts": "…", "n": 7}], "unresolved": [{"abbr": "…", "kind": "abbr", "sentence": "…"}], "unresolved_reason": ""}
 ```
   - `prev`: 지난 4주 안의 가장 최근 제출(같은 org·dept·name).
+  - `report` 는 제출이 있으면 `"locked": bool, "lock_reason": "…", "mine": bool` 도 붙음(아래 '제출 취소·휴지통').
 
 ### GET api/reports?week=&org=
 - 응답: 그 주 제출 레코드 배열. `org` 를 주면 그 조직만.
 
 ### GET api/status?week=&org=
-- 응답: `{"week": <주 정보>, "org": "…", "depts": [{"dept": "…", "reports": [{"id","name","ts","n"}], "missing": false}], "agg": <저장된 취합본 또는 null>}`
+- 응답: `{"week": <주 정보>, "org": "…", "depts": [{"dept": "…", "reports": [{"id","name","ts","n","locked","lock_reason","mine"}], "missing": false}], "agg": <저장된 취합본 또는 null>}`
   - 부서 목록 = 조직 설정(`api/orgs`)의 부서 + 실제 제출이 있는 부서.
 
 ### GET api/projects
@@ -161,6 +167,31 @@
 ### POST api/agg/save
 - 요청: `{"agg": <취합본>}` (`agg.week`·`agg.org` 로 저장 위치 결정) → `{"ok": true}`
 - 오류: 처음 취합한 계정·owner 가 아니면 `403`.
+- `agg.src_reports`(취합에 쓰인 제출 id, `api/aggregate` 가 기록)는 서버 값을 유지합니다 — 보내지 않아도, 다른 값을 보내도 그대로.
+
+## 엔드포인트 — 제출 취소·휴지통
+바로 지우지 않고 휴지통(`WORKSPACE/trash/<id>.json`, 원래 레코드 통째로)으로 옮깁니다. 기한(`WEEKLY_TRASH_DAYS`, 기본 30일) 안에 되살릴 수 있고,
+기한이 지난 것은 owner 가 `api/trash/purge` 로 비웁니다. 자동 비우기는 `WEEKLY_TRASH_AUTO_PURGE=1` 일 때만(기본 꺼짐, 하루 한 번).
+- **잠김**: 같은 주·소본부의 (휴지통에 없는) 취합본 `src_reports` 에 든 제출. `src_reports` 가 없는 예전 취합본은 부서 행(`label`)의 `people` 에 이름이 있으면 잠김.
+  잠긴 제출은 본인이 취소할 수 없음(owner 는 휴지통으로 보낼 수 있고 취합본은 그대로). 취합본을 휴지통으로 보내면 잠김이 풀림.
+
+### POST api/report/cancel
+- 요청: `{"week": "2026-W42", "id": "<제출 id 12자리>"}` (또는 `id` 대신 `"profile": {"org","dept","name"}`, 선택 `reason`) → `{"ok": true, "trash_id": "…"}`
+- 오류: 처음 제출한 계정·owner 가 아니면 `403`, 잠기면 `409 {"error": "<소본부> <주> 취합본(취합 …)에 쓰였습니다 — …", "locked": true}`, 없으면 `404`.
+
+### GET api/trash
+- 응답: `{"items": [{"id","kind":"report|agg","week","org","dept","name","ts"(버린 시각),"reason","mine","n","days_left","expired","restorable"}], "days": 30, "auto_purge": false}`
+  - owner 는 전부, 그 밖의 계정은 자기가 처음 낸 제출만(관리자가 보낸 것 포함).
+
+### POST api/trash/put  (owner)
+- 요청: `{"kind": "report", "week", "id"}` 또는 `{"kind": "agg", "week", "org"}` (+ `reason`) → `{"ok": true, "trash_id": "…", "note"?: "취합본에 쓰인 제출입니다 — …"}`. owner 가 아니면 `403`.
+
+### POST api/trash/restore
+- 요청: `{"id": "<trash_id>"}` → `{"ok": true, "kind", "week"}`. owner, 또는 자기가 처음 낸 제출만(`403`).
+- `409`: 기한이 지남, 또는 원래 자리에 새 제출·취합본이 있음(먼저 정리).
+
+### POST api/trash/purge  (owner, 되돌릴 수 없음)
+- 요청: `{}` → `{"ok": true, "purged": <지운 수>}` — 기한 지난 것만. owner 가 아니면 `403`.
 
 ### POST api/orgs
 - 요청: `{"orgs": {"<상위조직>": ["부서1", "부서2"] 또는 "부서1,부서2"}}` → 정리된 객체. **전체를 덮어씁니다.** **owner 만**(그 밖 `403 {"error": "조직 설정은 관리자만 바꿀 수 있습니다"}`).
