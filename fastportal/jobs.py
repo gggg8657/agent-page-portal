@@ -10,15 +10,20 @@
        받는 곳: 127.0.0.1/::1, tools.json 의 host 주소(다른 컨테이너 도구), PORTAL_JOBS_ALLOW(쉼표 IP) — 그 밖은 403
   전달: 프로세스 안 asyncio 큐 구독(연결마다 큐 하나, 스레드 없음). 쓰기는 스레드 풀에서 하고 call_soon_threadsafe 로 루프에 넘김.
   보기 규칙: /api/events 와 같음 — 본인 작업만, 주인(owner)은 전부. 읽음은 보는 사람마다(job_reads)."""
-import asyncio, hashlib, hmac, json, os, re, secrets, socket, time
+import asyncio, hashlib, hmac, json, os, re, secrets, socket, time, urllib.parse
 
-from . import core
+import anyio
+from starlette.concurrency import run_in_threadpool
+from starlette.responses import Response
+
+from . import config, tools
+from .db import db
 
 AUTO_S = float(os.environ.get("PORTAL_JOBS_AUTO_S", "60"))
 KEEP_DAYS = 30
 STATUSES = ("queued", "running", "done", "failed", "canceled")
 TERMINAL = ("done", "failed", "canceled")
-SECRET_FILE = os.path.join(core.DATA, ".portal_jobs_secret")
+SECRET_FILE = os.path.join(config.DATA, ".portal_jobs_secret")
 USER_RE = re.compile(r"[A-Za-z0-9_.@-]{1,64}")
 ID_RE = re.compile(r"[A-Za-z0-9_.:-]{1,80}")
 
@@ -51,7 +56,7 @@ def token_for(tool_dir):
 
 
 def tool_env(t, port=None):
-    """core.start 가 도구에 넘기는 환경변수. URL 은 PORTAL_JOBS_URL(컨테이너 등) 또는 이 포털의 127.0.0.1:PORT"""
+    """tools.start 가 도구에 넘기는 환경변수. URL 은 PORTAL_JOBS_URL(컨테이너 등) 또는 이 포털의 127.0.0.1:PORT"""
     url = os.environ.get("PORTAL_JOBS_URL") or f"http://127.0.0.1:{port or os.environ.get('PORT', '8720')}/api/internal/jobs"
     return {"PORTAL_JOBS_URL": url, "PORTAL_JOBS_TOKEN": token_for(t["dir"]), "PORTAL_JOBS_TOOL": t["dir"]}
 
@@ -63,8 +68,8 @@ def _allowed_ips(tool_dir):
     """이 도구를 받아도 되는 바깥 주소: 그 도구의 tools.json host 주소 + PORTAL_JOBS_ALLOW(모든 도구) — 이름 풀이는 60초 캐시(스레드 풀에서만 부름)"""
     if time.monotonic() - _ALLOW["t"] > 60:
         m = {}
-        for t in core.tools():
-            h = core.tool_host(t) if core.is_remote(t) else None
+        for t in tools.tools():
+            h = tools.tool_host(t) if tools.is_remote(t) else None
             if h:
                 try:
                     m[t["dir"]] = {ai[4][0] for ai in socket.getaddrinfo(h, None)}
@@ -78,7 +83,7 @@ def internal_ok(client, header, tool_dir):
     """내부 경로 허용: 접속지(로컬, 또는 그 도구의 host 주소·허용 목록) + 그 도구의 토큰"""
     if not header or not tool_dir:
         return False
-    if client not in core.LOCAL and client not in _allowed_ips(tool_dir):
+    if client not in config.LOCAL and client not in _allowed_ips(tool_dir):
         return False
     return hmac.compare_digest(header.strip().encode(), token_for(tool_dir).encode())
 
@@ -97,12 +102,12 @@ SELF_REPORT = set()   # 직접 알리는 도구(자동 기록 건너뜀) — 기
 
 
 def load_self_report():
-    with core.db() as c:
+    with db() as c:
         SELF_REPORT.update(r[0] for r in c.execute("SELECT DISTINCT tool FROM jobs WHERE id NOT LIKE 'auto:%'"))
 
 
 def _name(tool_dir):
-    t = core.tool(tool_dir)
+    t = tools.tool(tool_dir)
     return (t or {}).get("name", tool_dir)
 
 
@@ -145,7 +150,7 @@ def upsert(user, tool_dir, status, jid=None, title="", link="", message="", prog
     title, message = str(title or "")[:200], str(message or "")[:500]
     link = clean_link(tool_dir, link) if link else ""
     prog = None if progress is None else max(0, min(100, int(progress)))
-    with core.db() as c:
+    with db() as c:
         old = c.execute("SELECT * FROM jobs WHERE id=?", (key,)).fetchone()
         if old:
             if old["user"] != user or old["tool"] != tool_dir:
@@ -180,7 +185,7 @@ def _vis(viewer):
 
 def listing(viewer, unread_only=False, limit=50, since=0):
     w, a = _vis(viewer)
-    with core.db() as c:
+    with db() as c:
         rows = c.execute(f"SELECT j.*, (j.status IN ('done','failed','canceled') AND NOT EXISTS(SELECT 1 FROM job_reads r WHERE r.job=j.id AND r.user=?)) AS ur "
                          f"FROM jobs j WHERE {w} AND seq>? ORDER BY seq DESC LIMIT ?", (viewer, *a, since, max(1, min(200, limit)))).fetchall()
         n = c.execute(f"SELECT COUNT(*) FROM jobs j WHERE {w} AND status IN ('done','failed','canceled') "
@@ -194,7 +199,7 @@ def listing(viewer, unread_only=False, limit=50, since=0):
 
 def mark_read(viewer, ids=None):
     w, a = _vis(viewer)
-    with core.db() as c:
+    with db() as c:
         if ids is None:
             q, qa = f"SELECT id FROM jobs WHERE {w} AND status IN ('done','failed','canceled')", a
         else:
@@ -208,7 +213,7 @@ def mark_read(viewer, ids=None):
 def legacy_events(viewer, since):
     """예전 /api/events 모양 — 끝난(done·failed) 작업 {id(seq), dir, name, user, ok, sec, t}"""
     w, a = _vis(viewer)
-    with core.db() as c:
+    with db() as c:
         rows = c.execute(f"SELECT * FROM jobs WHERE {w} AND status IN ('done','failed') AND seq>? ORDER BY seq DESC LIMIT 30", (*a, since)).fetchall()
         last = c.execute("SELECT COALESCE(MAX(seq), 0) FROM jobs").fetchone()[0]
     ev = [{"id": r["seq"], "dir": r["tool"], "name": _name(r["tool"]), "user": r["user"], "ok": r["status"] == "done",
@@ -263,8 +268,90 @@ def sse(kind, data, eid=None):
     return ((f"id: {eid}\n" if eid is not None else "") + f"event: {kind}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n").encode()
 
 
+# ── HTTP: 도구 → 포털(내부 경로) · 화면 ← 포털(SSE). ctx 는 app 이 넘김(ctx.Ctx) ─────────
+def internal_post(ctx, body):
+    """POST /api/internal/jobs — 쿠키 없음, 접속지 + 도구 토큰(internal_ok)"""
+    from .ctx import parse_json
+    try:
+        req = parse_json(body)
+    except ValueError:
+        return ctx.send({"error": "요청 본문은 JSON 객체여야 합니다"}, code=400)
+    d = str(req.get("tool") or "")
+    if not tools.tool(d) or not internal_ok(ctx.client, ctx.headers.get("x-portal-jobs-token"), d):   # 없는 도구도 같은 403(목록을 알려 주지 않게)
+        return ctx.send({"error": "forbidden"}, code=403)
+    try:
+        j = upsert(req.get("user"), d, req.get("status"), req.get("id"), req.get("title"), req.get("link"), req.get("message"), req.get("progress"))
+    except PermissionError as e:
+        return ctx.send({"error": str(e)}, code=403)
+    except (ValueError, TypeError) as e:
+        return ctx.send({"error": str(e) if isinstance(e, ValueError) else "요청 값 형식이 틀립니다"}, code=400)
+    if j:
+        HUB.publish("job", j, j["user"])
+    return ctx.send({"ok": True, "id": j["id"] if j else None, "ignored": j is None})
+
+
+class JobStream(Response):
+    """GET /api/jobs/stream — text/event-stream. 연결마다 asyncio 큐 하나(스레드 없음). 처음에 hello{last, unread},
+    since(?since= 또는 Last-Event-ID) 뒤에 바뀐 작업을 다시 보내고, 그다음 바뀔 때마다 event: job / event: read. 빈 줄 주석으로 연결 유지"""
+
+    def __init__(self, ctx, since):
+        self.status_code, self.background, self.ctx, self.since = 200, None, ctx, since
+        from .ctx import hval   # 늦게: python -m fastportal.jobs token 은 화면 모듈을 안 읽게
+        from .pages import _SIG_A
+        hd = [("X-Author", hval(_SIG_A)), ("Content-Type", "text/event-stream; charset=utf-8"), ("Cache-Control", "no-cache"),
+              ("X-Accel-Buffering", "no"), ("X-Content-Type-Options", "nosniff")]
+        if ctx.setcookie:
+            hd.append(("Set-Cookie", ctx.setcookie))
+        self.raw_headers = [(k.lower().encode("latin-1"), v if isinstance(v, bytes) else v.encode("latin-1")) for k, v in hd]
+
+    async def __call__(self, scope, receive, send):
+        viewer = self.ctx.agent_user
+        q = HUB.subscribe(viewer)   # 다시 보내기 전에 구독 — 그 사이 바뀐 것도 놓치지 않음(화면은 seq·id 로 중복을 걸러냄)
+        try:
+            async with anyio.create_task_group() as tg:
+                async def pump():
+                    try:
+                        await send({"type": "http.response.start", "status": 200, "headers": self.raw_headers})
+                        head = await run_in_threadpool(listing, viewer, False, 100, self.since)
+                        buf = b"retry: 3000\n\n" + sse("hello", {"last": head["last"], "unread": head["unread"]})
+                        if self.since:
+                            buf += b"".join(sse("job", j, j["seq"]) for j in reversed(head["jobs"]))
+                        await send({"type": "http.response.body", "body": buf, "more_body": True})
+                        while not q.dead:
+                            try:
+                                kind, data = await asyncio.wait_for(q.get(), config.JOBS_KEEPALIVE)
+                                chunk = sse(kind, data, data.get("seq") if kind == "job" else None)
+                            except asyncio.TimeoutError:
+                                chunk = b": ping\n\n"
+                            await send({"type": "http.response.body", "body": chunk, "more_body": True})
+                    except OSError:
+                        pass
+                    finally:
+                        tg.cancel_scope.cancel()
+
+                async def watch():
+                    while (await receive())["type"] != "http.disconnect":
+                        pass
+                    tg.cancel_scope.cancel()
+
+                tg.start_soon(pump)
+                tg.start_soon(watch)
+        finally:
+            HUB.unsubscribe(q)
+
+
+def stream(ctx):
+    """GET /api/jobs/stream 응답"""
+    q = urllib.parse.parse_qs(urllib.parse.urlsplit(ctx.raw).query)
+    try:
+        since = int(ctx.headers.get("last-event-id") or q.get("since", ["0"])[0] or 0)
+    except ValueError:
+        since = 0
+    return JobStream(ctx, since)
+
+
 if __name__ == "__main__":   # 다른 컨테이너 도구에 넣을 토큰 만들기(관리자만 — 출력값은 그 컨테이너 환경변수로만, 커밋·로그 금지)
     import sys
-    if len(sys.argv) != 3 or sys.argv[1] != "token" or not core.tool(sys.argv[2]):
+    if len(sys.argv) != 3 or sys.argv[1] != "token" or not tools.tool(sys.argv[2]):
         raise SystemExit("python -m fastportal.jobs token <tools.json 의 dir>")
     print(token_for(sys.argv[2]))
