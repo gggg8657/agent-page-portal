@@ -198,7 +198,10 @@ const show = (t, focus = true) => {
 };
 document.querySelectorAll('.lp-tabs button').forEach(b => b.onclick = () => show(b.dataset.t));
 document.querySelectorAll('[data-go]').forEach(a => a.onclick = e => { e.preventDefault(); show(a.dataset.go); document.getElementById('login').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }); });
-if (location.hash === '#pin') location.replace('/account#pin'); else if (location.hash === '#up') show('up', false);   // PIN 바꾸기는 계정 설정으로 옮김
+const AU = window.AG_AUTH;   // 계정 저장소가 포털 밖(AUTH_BACKEND=external)이면 가입을 숨기고 안내 — 포털 내부 DB(지금, 임시)면 없음
+if (AU && !AU.signup) { document.querySelectorAll('[data-t=up],[data-go=up]').forEach(x => x.style.display = 'none'); document.getElementById('up').remove();
+  const g = document.querySelector('#in .note'); if (g) g.textContent = AU.guide; }
+if (location.hash === '#pin') location.replace('/account#pin'); else if (location.hash === '#up' && document.getElementById('up')) show('up', false);   // PIN 바꾸기는 계정 설정으로 옮김
 fetch('/api/depts').then(r => r.json()).then(j => { for (const d of j.depts || []) dept.add(new Option(d, d)); }).catch(() => {});
 document.querySelectorAll('#login form').forEach(f => f.onsubmit = async e => {
   e.preventDefault(); const k = f.getAttribute('id'), err = f.querySelector('.err'); err.textContent = '';

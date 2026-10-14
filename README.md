@@ -175,6 +175,24 @@ openssl x509 -req -in portal.csr -CA ca.crt -CAkey ca.key -CAcreateserial -days 
 `fastportal/` 은 같은 포털을 **FastAPI + uvicorn(비동기)** 로 옮긴 판이고, 2026-10-13 부터 운영 :8700 은 이것으로 돕니다(`start-portal.sh`). 되돌리기: 떠 있는 포털을 그 PID 로 끄고 `PORTAL_IMPL=classic ./start-portal.sh`(같은 DB·쿠키라 로그인 세션 유지). 같은 HTML·`theme/`·`guide/`·`tools.json`·`_data/portal.db` 를 그대로 쓰고(운영 포털과 동시에 같은 DB 를 써도 됨), 주소·응답은 `portal.py` 와 같게 맞췄습니다.
 바뀌는 점은 **스트리밍(SSE) 연결 수백 개를 스레드 없이 중계**하는 것 — `portal.py` 는 연결마다 스레드 하나, 새 포털은 이벤트 루프 하나가 중계하고 브라우저가 끊으면 도구 쪽 연결도 바로 닫습니다.
 
+구조(`fastportal/`, 기능별 모듈 — 순환 import 없음, 바꿔 끼울 경계인 계정 저장소만 클래스):
+
+| 파일 | 맡는 일 |
+|---|---|
+| `config.py` | 설정값·환경변수 한곳(경로·관리자·로컬 주인·상한·WEB_*·AUTH_BACKEND 등) |
+| `db.py` | portal.db 연결·표 만들기·마이그레이션·매일 백업 |
+| `auth/` | **계정 저장소**: `base.py` 공통 틀(`AuthBackend` — verify·get_user·create_user·set_password·supports_*), `local.py` 지금 동작(포털 내부 DB, PBKDF2 60만 번), `external.py` 챗봇 계정 DB 틀(TODO) — 바꾸는 법 [`fastportal/auth/README.md`](fastportal/auth/README.md) |
+| `sessions.py` | 세션·쿠키·로그인 유지·실패 잠금·로컬 주인 토큰·접속지 판정(`resolve` = 누가 요청했나) |
+| `accounts.py` | 부서·부서장·요청/승인·관리·감사·비활성화/익명화·탈퇴·보관 + `/api/account`·`/api/approvals`·`/api/admin` |
+| `tools.py` | tools.json·시작·중지·등록·켜짐 캐시·혼합형 host·GPU 현황·홈 목록 자료 |
+| `proxy.py` | `/t/<도구>/` 중계(헤더 규칙·스트리밍·리디렉트·첫 화면 끼워 넣기·오래 걸리는 POST 자동 기록) |
+| `pages.py` | 화면·테마·저작자 표기·랜딩·사용법·정적 파일(`/guide`·`/theme`)·React 빌드(`WEB_DIST`·`WEB_ROOT`) |
+| `jobs.py` | 작업 알림 센터(작업 표·SSE 허브·도구 토큰·내부 경로) |
+| `ctx.py` | 요청 하나의 상태(`Ctx`)·응답(`Raw`)·본문 읽기·상한 |
+| `app.py` | 라우팅·조립만(주소 판정 순서는 portal.py 의 do_GET·do_POST 와 같음) |
+
+**계정 저장소(`AUTH_BACKEND`)**: 현재 계정 저장소는 **임시**(포털 내부 DB `portal.db` 의 `users`)이며, 운영 시 **사내 챗봇 계정 DB 로 대체 예정**입니다(아이디·비밀번호 하나로). `AUTH_BACKEND=local`(기본) | `external`(챗봇 DB — 틀만, 연결 정보가 오면 `auth/external.py` 를 채움) | `<모듈>:<클래스>`. external 이면 가입·PIN 바꾸기·PIN 초기화 화면을 숨기고 API 는 403 + 안내, 로그인은 외부 저장소로 확인하고 부서·권한·세션·사용자별 데이터는 포털이 아이디를 키로 그대로 가짐. 관리 화면(관리자만)에 "계정 저장소: 임시(포털 내부 DB)" 표시.
+
 ```bash
 # 설치(사용자 영역 venv) — 인터넷 되는 곳
 python3 -m venv ~/.local/fastportal-venv
@@ -201,6 +219,7 @@ bash agent-page-portal/scripts/start-fastportal.sh stop
 | `WEB_DIST` | 없음(꺼짐) — 운영은 `portal-env.sh` 가 `<상위>/_web/app` 링크가 있으면 자동 | React 화면(agent-page-web) 빌드 폴더(링크면 요청마다 따라감 — 배포는 링크 바꿔 끼우기, 재시작 없음). 있으면 포털이 `WEB_PREFIX` 아래에서 같은 출처로 내보냄(아래 'React 화면') — 없으면 예전과 완전히 같음 |
 | `WEB_PREFIX` | /app | React 화면 주소. `/app` 처럼 하위 경로만 |
 | `WEB_ROOT`·`WEB_ROOT_DIST` | 꺼짐 | **'/' 전환(준비만, 운영에선 꺼 둠)**: `WEB_ROOT=1` 이면 `/`·`/login`·`/all`·`/fav`·`/recent`·`/account`·`/approvals`·`/admin`·`/tool/*`·`/assets/*` 를 `WEB_ROOT_DIST`(WEB_BASE=/ 빌드)에서 내보냄. `/api`·`/t`·`/theme`·`/guide`·`/logout`·`/landing` 은 그대로. 절차·되돌리기: agent-page-web `CUTOVER.md` |
+| `AUTH_BACKEND` | local | 계정 저장소 — `local`(포털 내부 DB, 임시) · `external`(사내 챗봇 계정 DB, `AUTH_EXTERNAL_*` — [`fastportal/auth/README.md`](fastportal/auth/README.md)) · `<모듈>:<클래스>`. 틀린 값이면 기동 안 함 |
 | `PORTAL_ANON_AUTO`·`PORTAL_ANON_AFTER_DAYS` | 0(꺼짐)·365 | 계정 정리 작업: `1` 이면 비활성화한 지 N일 지난 계정을 하루 한 번 익명화(감사 기록 actor=`system`). 기본 꺼짐 — 관리 화면에서 손으로만 |
 | 나머지 | | `AGENT_DATA`·`AGENT_OWNERS`·`HOST`·`SHOW_HIDDEN`·`TLS_CERT`/`TLS_KEY`(TLS 1.2 이상) 는 위 표와 같음 |
 
@@ -225,7 +244,7 @@ React 랜딩이 읽는 `GET /web/landing.json`·`/app/web/landing.json`(분류·
 
 워커는 **1개**(비동기)로 씁니다. 작업 알림 SSE 구독(작업 표는 DB 지만 실시간 전달은 프로세스 안 큐)·도구 켜짐 캐시·GPU 캐시가 프로세스 메모리라, 워커를 늘리면 이 셋을 공유 저장소(예: Redis pub/sub)로 옮겨야 합니다(세션·잠금·계정은 이미 DB). 막히는 일(DB·PIN 해시·nvidia-smi)은 스레드 풀에서 돌아 이벤트 루프를 막지 않습니다.
 
-계약 시험(`fastportal/tests/`): `contract_live.py --demo <id>:<pin> [--old <portal.py 포트>] [--new <fastportal 포트>]` 은 같은 요청을 예전 portal.py 와 새 포털에 보내(전환 뒤에는 portal.py 를 시험 포트에 따로 띄워 `--old` 로; 로컬 주인 요청엔 새 포털에만 토큰을 붙이고, 토큰 없는 로컬 = 401 도 확인) 상태·헤더·본문을 비교(읽기와 되돌리는 POST 만), `contract_fake.py` 는 임시 폴더에 두 포털과 가짜 도구를 띄워 프록시 헤더 규칙·본문·SSE·동시 스트림·끊김·잠금·프록시 뒤 판정·혼합형 `host`(127.0.0.2 에만 연 가짜 도구, 틀린 형식 7가지, start·stop 409)·`TOOL_BIND`·`WEB_DIST`(SPA 폴백·캐시·경로 넘기기·로그인 리디렉트·링크 바꿔 끼우기)·`WEB_ROOT`('/' 전환, 켠 경우·끈 경우)·삭제 대신 비활성화·익명화·탈퇴 요청·부서 보관·자동 정리(`PORTAL_ANON_AUTO`)를 확인, `ui_compare.js` 는 Playwright 로 화면을 캡처해 비교합니다.
+계약 시험(`fastportal/tests/`): `contract_live.py --demo <id>:<pin> [--old <portal.py 포트>] [--new <fastportal 포트>]` 은 같은 요청을 예전 portal.py 와 새 포털에 보내(전환 뒤에는 portal.py 를 시험 포트에 따로 띄워 `--old` 로; 로컬 주인 요청엔 새 포털에만 토큰을 붙이고, 토큰 없는 로컬 = 401 도 확인) 상태·헤더·본문을 비교(읽기와 되돌리는 POST 만), `contract_fake.py` 는 임시 폴더에 두 포털과 가짜 도구를 띄워 프록시 헤더 규칙·본문·SSE·동시 스트림·끊김·잠금·프록시 뒤 판정·혼합형 `host`(127.0.0.2 에만 연 가짜 도구, 틀린 형식 7가지, start·stop 409)·`TOOL_BIND`·`WEB_DIST`(SPA 폴백·캐시·경로 넘기기·로그인 리디렉트·링크 바꿔 끼우기)·`WEB_ROOT`('/' 전환, 켠 경우·끈 경우)·삭제 대신 비활성화·익명화·탈퇴 요청·부서 보관·자동 정리(`PORTAL_ANON_AUTO`)·계정 저장소 바꿔 끼우기(`AUTH_BACKEND` — 가짜 외부 저장소로 로그인, 가입·PIN 변경 막힘, 설정 없는 external 503)를 확인, `ui_compare.js` 는 Playwright 로 화면을 캡처해 비교합니다.
 의존성 라이선스는 모두 MIT·BSD·Apache-2.0 계열(certifi 만 MPL-2.0)로 상업 이용 가능 — 정확한 목록은 `fastportal/requirements.txt` 의 각 패키지.
 
 ## 출처·감사 (Credits)

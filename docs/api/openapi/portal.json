@@ -61,6 +61,9 @@
      },
      "400": {
       "$ref": "#/components/responses/BadRequest"
+     },
+     "503": {
+      "description": "외부 계정 저장소가 응답하지 않거나 연결 설정이 없음(AUTH_BACKEND=external) — {error: 안내}"
      }
     },
     "tags": [
@@ -96,6 +99,16 @@
      },
      "400": {
       "$ref": "#/components/responses/BadRequest"
+     },
+     "403": {
+      "description": "계정 저장소가 포털 밖(AUTH_BACKEND=external)이라 할 수 없음 — {error: 안내}",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
      }
     },
     "tags": [
@@ -124,6 +137,48 @@
            "items": {
             "type": "string"
            }
+          }
+         }
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "portal"
+    ]
+   }
+  },
+  "/api/auth": {
+   "get": {
+    "operationId": "portalAuthInfo",
+    "summary": "계정 저장소가 가입·PIN 변경을 받는지(로그인 전에도)",
+    "security": [],
+    "description": "AUTH_BACKEND=local(기본 — 포털 내부 DB, 임시)이면 둘 다 true. external(사내 챗봇 계정 DB, 운영 예정)이면 false + guide — 화면은 가입·PIN 바꾸기를 숨기고 guide 를 보임.",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "signup",
+          "password_change",
+          "guide"
+         ],
+         "properties": {
+          "signup": {
+           "type": "boolean",
+           "description": "포털에서 가입 가능(local 만 true)"
+          },
+          "password_change": {
+           "type": "boolean",
+           "description": "포털에서 PIN 바꾸기·초기화 가능(local 만 true)"
+          },
+          "guide": {
+           "type": "string",
+           "description": "막혔을 때 보여 줄 안내(local 이면 빈 글)"
           }
          }
         }
@@ -1133,6 +1188,16 @@
      },
      "401": {
       "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "description": "계정 저장소가 포털 밖(AUTH_BACKEND=external)이라 할 수 없음 — {error: 안내}",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
      }
     },
     "tags": [
@@ -1406,6 +1471,29 @@
           "anon_auto": {
            "type": "boolean",
            "description": "자동 익명화 정리 작업이 켜졌는지(PORTAL_ANON_AUTO=1, 기본 꺼짐)"
+          },
+          "auth_backend": {
+           "type": "object",
+           "description": "계정 저장소(관리자만): local = 임시(포털 내부 DB), 운영 시 사내 챗봇 계정 DB(external)로 대체 예정",
+           "properties": {
+            "name": {
+             "type": "string",
+             "description": "local | external"
+            },
+            "label": {
+             "type": "string",
+             "description": "표시 이름 예: 임시(포털 내부 DB)"
+            },
+            "signup": {
+             "type": "boolean"
+            },
+            "password_change": {
+             "type": "boolean"
+            },
+            "guide": {
+             "type": "string"
+            }
+           }
           }
          }
         }
@@ -1592,7 +1680,14 @@
       "$ref": "#/components/responses/BadRequest"
      },
      "403": {
-      "$ref": "#/components/responses/Forbidden"
+      "description": "계정 저장소가 포털 밖(AUTH_BACKEND=external)이라 할 수 없음 — {error: 안내}",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
      },
      "401": {
       "$ref": "#/components/responses/Unauthorized"

@@ -35,11 +35,13 @@
 | 호출 | 설명 |
 |---|---|
 | `POST /api/login` `{"id": "아이디", "pin": "PIN", "remember": true}` | 성공 `{"ok": true, "id": …}` + 쿠키 `agsid` (HttpOnly, SameSite=Lax). `remember`(로그인 유지, 없으면 `true`): `true` = 30일, 쓰는 동안 하루에 한 번 연장 · `false` = 쿠키에 Max-Age 없음(브라우저 닫으면 끝) + 서버 만료 12시간, 연장 없음. 틀리면 400 `{"error": …}`. 10분에 5번 틀리면 10분 잠김 |
-| `POST /api/signup` `{"id", "name", "pin", "dept"}` | 가입. id 는 영문 소문자·숫자·`_.-` 2~32자, PIN 은 숫자 4~8자리. 부서는 `GET /api/depts` 목록 중 하나(부서장 승인 뒤 반영) |
+| `POST /api/signup` `{"id", "name", "pin", "dept"}` | 가입. id 는 영문 소문자·숫자·`_.-` 2~32자, PIN 은 숫자 4~8자리. 부서는 `GET /api/depts` 목록 중 하나(부서장 승인 뒤 반영). 계정 저장소가 포털 밖(`AUTH_BACKEND=external`)이면 403 + 안내 |
+| `GET /api/auth` | 로그인 전에도: `{"signup", "password_change", "guide"}` — 지금(포털 내부 DB)은 둘 다 `true`. `false` 면 가입·PIN 바꾸기 화면을 숨기고 `guide` 를 보여 주세요 |
 | `GET /login` | 로그인 화면(랜딩). 이미 로그인했으면 `next`(같은 사이트 경로만, 아니면 `/`)로 302 |
 | `GET /logout` | 세션 삭제 후 `/login` 으로 302 |
 | `GET /api/me` | 지금 사용자 `{"id", "name", "role", "dept", "owner", "onboarded", …}` — `onboarded`: 첫 로그인 둘러보기를 봤거나 건너뜀 |
 
+- **현재 계정 저장소는 임시**(포털 내부 DB)이며, 운영 시 **사내 챗봇 계정 DB 로 대체 예정**입니다(같은 아이디·비밀번호). 그때도 세션 쿠키·`/api/me`·부서·권한은 그대로이고, 가입·PIN 변경만 막힙니다(`GET /api/auth`). 외부 저장소가 응답하지 않으면 `/api/login` 이 503.
 - 로그인 안 된 요청: API 는 **401** `{"error": "로그인이 필요합니다", "login": "/login"}`, 화면 요청(`Accept: text/html` 인 GET)은 `/login?next=…` 로 302.
 - 쿠키가 HttpOnly 라 JS 에서 읽을 수 없습니다. **같은 출처에서 `fetch(…, {credentials: "same-origin"})`(기본값)로 부르면 브라우저가 알아서 붙입니다.**
 - 서버 안(127.0.0.1)에서 쿠키 없이 + 비밀 헤더 `X-Local-Owner: <토큰>` 을 붙여 부르면 "서버 주인(owner)"으로 처리됩니다(관리·스크립트용). 토큰은 서버의 `_data/.local_owner_token`(포털이 처음 뜰 때 만듦, 권한 600) — 예: `curl -H "X-Local-Owner: $(cat ~/agent-page/_data/.local_owner_token)" …`. 헤더가 없으면 127.0.0.1 이어도 일반 비로그인(401)이라, SSH 포트포워딩으로 붙은 브라우저도 로그아웃하면 다시 로그인해야 합니다(포털 = FastAPI `fastportal`, 2026-10-13~. `PORTAL_LOCAL_OWNER=1` 이면 예전처럼 헤더 없이 주인).
@@ -124,9 +126,9 @@ const g  = await (await fetch('/t/saju-local/api/graph?dept=' + encodeURICompone
 | `POST /api/open` · `/api/like` `{"dir"}` | 사용·좋아요 기록(순위에 반영) | 로그인 |
 | `POST /api/post` · `/api/post_like` | 노하우 게시판 글쓰기·좋아요 | 로그인 |
 | `POST /api/account/theme` `{"theme"}` | 화면 테마 저장(`classic`·`trendy`·`v2` × `light`·`dark`·`auto`) | 로그인 |
-| `POST /api/pin` `{"pin", "new"}` | PIN 바꾸기(다른 기기 세션은 끊김, 지금 세션의 '로그인 유지'는 그대로) | 로그인 |
+| `POST /api/pin` `{"pin", "new"}` | PIN 바꾸기(다른 기기 세션은 끊김, 지금 세션의 '로그인 유지'는 그대로). 외부 계정 저장소면 403 + 안내 | 로그인 |
 | `POST /api/account/onboarded` `{"done": true}` | 첫 로그인 둘러보기 마침·건너뜀 기록(`/api/me` 의 `onboarded`) | 본인 |
-| `/api/account…` · `/api/approvals…` · `/api/admin…` | 계정 설정·부서 승인·관리 | 본인·부서장·관리자 |
+| `/api/account…` · `/api/approvals…` · `/api/admin…` | 계정 설정·부서 승인·관리. `GET /api/admin` 의 `auth_backend` `{name, label, signup, password_change, guide}` = 계정 저장소(지금 `local` "임시(포털 내부 DB)") | 본인·부서장·관리자 |
 | `POST /api/account/withdraw` `{"reason"?}` | 탈퇴 요청 — 바로 지우지 않고 관리자 승인 목록(kind `withdraw`)으로. 승인하면 비활성화, 본인은 `/api/account/cancel` 로 취소 | 본인 |
 | `POST /api/admin/account` `{"op", "uid", "reason"?, "confirm"?}` | 삭제 대신: `deactivate`(로그인 불가·세션 끊김·부서장 회수·대기 요청 취소, 되살릴 수 있음) · `reactivate` · `anonymize`(**되돌릴 수 없음** — 비활성 계정만, `reason` 필수, `confirm` = uid 그대로. 이름·부서·PIN 을 지우고 화면·API 에는 `deleted-…` 로만, 아이디는 내부 키로 남아 감사 기록·도구 데이터의 만든 사람 연결 유지·재가입 불가). 자동 정리 `PORTAL_ANON_AUTO=1`(기한 `PORTAL_ANON_AFTER_DAYS`, 기본 365일·기본 꺼짐) | 관리자 |
 | `POST /api/admin/dept` `{"op": "archive" \| "restore", "name"}` | 부서 보관·되살리기 — 소속 인원(비활성·익명화 제외)·대기 요청이 있으면 400 + 이유. 보관하면 가입·변경 목록에서 빠짐(`/api/admin` 의 `archived`) | 관리자 |
@@ -244,7 +246,7 @@ npx @redocly/cli lint docs/api/openapi/openapi.json                             
 ```
 
 읽는 법:
-- **보안**: `cookieAuth`(쿠키 `agsid`)가 전역. 로그인 전에 열린 경로(`/api/login`·`/api/signup`·`/api/depts`·`/login`·`/logout`)만 `security: []`.
+- **보안**: `cookieAuth`(쿠키 `agsid`)가 전역. 로그인 전에 열린 경로(`/api/login`·`/api/signup`·`/api/depts`·`/api/auth`·`/login`·`/logout`)만 `security: []`.
 - **오류**: 공통 `Error` = `{"error": "…"}`, 공통 응답 `BadRequest`(400)·`Unauthorized`(401, `login` 포함)·`Forbidden`(403)·`NotFound`(404)·`Conflict`(409)·`PayloadTooLarge`(413)·`ServerError`(500)·`BadGateway`(502 = 도구 꺼짐 → `POST /api/start`). 도구 경로에는 401·502 가 모두 붙어 있습니다. 모양이 다른 곳(tts-local POST 의 `{"error": {"message", "type"}}` = `OpenAIError`)은 그대로 적었습니다.
 - **스트리밍**: `text/event-stream`(SSE)·`application/x-ndjson` 응답은 스키마가 문자열이고, 이벤트별 JSON 모양은 미디어 타입의 **`x-stream-events`** 목록(`[{name, schema}]`)과 operation description 에 있습니다. 생성기는 이 확장을 무시하므로, 이벤트 타입은 `components["schemas"]["<도구>…Event"]` 를 직접 가져다 쓰세요. **도중 오류도 HTTP 200 으로 오고 스트림 안 `error` 이벤트로만 옵니다.**
 - **파일**: 업로드는 대부분 JSON 안 base64(`contentEncoding: base64`), 상한을 넘으면 413 — 상한은 각 operation description. 내려받기는 실제 `Content-Type`(`format: binary`) + `Content-Disposition` 헤더.

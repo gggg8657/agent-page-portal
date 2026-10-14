@@ -85,10 +85,10 @@ async function viewAccount() {
       <h3 style="margin-top:16px">부서장 권한 <small>관리자 승인</small></h3>
       <div class="row"><button class="btn ghost" onclick="reqHead(this)" ${!me.dept || me.heads.includes(me.dept) || ph ? 'disabled' : ''}>${me.heads.includes(me.dept) ? '이미 부서장' : ph ? '요청 대기 중' : (me.dept ? E(me.dept) + ' 부서장 권한 요청' : '부서 승인 뒤 요청 가능')}</button></div>
       <p class="note">부서장은 자기 부서 가입 요청을 승인·거절하고, 부서 구성원 목록과 포털 사용 횟수를 볼 수 있습니다.</p><p class="msg" id="headMsg"></p></div>
-    <div class="box" id="pin"><h3>PIN 바꾸기</h3><form onsubmit="return changePin(event)">
+    ${window.AG_AUTH && !AG_AUTH.password_change ? `<div class="box" id="pin"><h3>PIN 바꾸기</h3><p class="note">${E(AG_AUTH.guide)}</p></div>` : `<div class="box" id="pin"><h3>PIN 바꾸기</h3><form onsubmit="return changePin(event)">
       <div class="row" style="flex-direction:column;align-items:stretch"><input name="pin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="지금 PIN" required>
       <input name="new" type="password" inputmode="numeric" autocomplete="new-password" placeholder="새 PIN (숫자 4~8자리)" pattern="[0-9]{4,8}" required><button class="btn">PIN 바꾸기</button></div>
-      <p class="note">PIN 은 서버에 해시로만 저장됩니다. 바꾸면 다른 기기의 로그인은 풀립니다. 잊으면 관리자에게 초기화를 부탁하세요.</p><p class="msg"></p></form></div>
+      <p class="note">PIN 은 서버에 해시로만 저장됩니다. 바꾸면 다른 기기의 로그인은 풀립니다. 잊으면 관리자에게 초기화를 부탁하세요.</p><p class="msg"></p></form></div>`}
     ${theme}<div class="box wide"><h3>내 요청</h3>${reqTable(j.requests, true)}</div>
     <div class="box" id="withdraw"><h3>탈퇴 요청 <small>관리자 승인 뒤 비활성화</small></h3>${me.owner ? '<p class="note">관리자 계정은 탈퇴 요청할 수 없습니다.</p>' : pw ? `<p class="note">${tag('승인 대기', 'pending')} ${T(pw.ts)} 에 요청함 — 관리자가 승인하면 로그인할 수 없게 됩니다(바로 지우지 않음). 마음이 바뀌면 위 '내 요청'에서 취소하세요.</p>` :
       `<p class="note">바로 지워지지 않습니다. 관리자가 승인하면 계정이 <b>비활성화</b>(로그인 불가)되고, 일정 기간 뒤 이름·부서가 지워진 익명 계정으로 남습니다. 도구에 남긴 기록(주간보고 제출 등)은 지워지지 않으니 필요하면 먼저 정리하세요.</p>
@@ -117,12 +117,12 @@ async function viewAdmin() {
   if (j.error) return `<div class="box wide">${E(j.error)}</div>`;
   const live = j.depts.filter(d => !d.archived), arch = j.depts.filter(d => d.archived), ds = DT === 'archived' ? arch : live;
   return `<div class="box wide"><h3>대기 중인 요청 <small>전체</small></h3>${decideTable(j.pending)}</div>
-    <div class="box wide"><h3>계정 <small>${j.users.length}개 · 관리자: ${j.owners.map(E).join(', ')} (AGENT_OWNERS)</small></h3><div class="tbl"><table>
+    <div class="box wide"><h3>계정 <small>${j.users.length}개 · 관리자: ${j.owners.map(E).join(', ')} (AGENT_OWNERS)${j.auth_backend ? ` · 계정 저장소: ${E(j.auth_backend.label)}` : ''}</small></h3><div class="tbl"><table>
       <tr><th>아이디</th><th>이름</th><th>부서</th><th>역할</th><th>가입</th><th>마지막 접속</th><th></th></tr>` + j.users.map(u => `<tr>
       <td>${E(u.id)}</td><td>${E(u.name)}</td><td>${E(u.dept) || '<span style="color:var(--faint)">-</span>'}</td><td>${tag(u.role)}${u.anonymized ? ' ' + tag('익명화', 'off') : u.deactivated ? ` <span class="tag off" title="${E(u.deact_reason || '')}">비활성</span>` : u.disabled ? ' ' + tag('정지', 'off') : ''}</td><td>${T(u.ts)}</td><td>${T(u.seen)}</td>
       <td><div class="row">${u.anonymized ? `<span class="note">익명화 ${T(u.anonymized)}</span>` : u.deactivated ? `<button class="btn ghost sm" onclick="acct('reactivate','${E(u.id)}')">다시 활성화</button><button class="btn red sm" onclick="anonymize('${E(u.id)}')">익명화</button>` :
         `${u.dept && !u.heads.includes(u.dept) ? `<button class="btn ghost sm" onclick="setHead('grant','${E(u.dept)}','${E(u.id)}')">부서장 지정</button>` : ''}
-        <button class="btn ghost sm" onclick="resetPin('${E(u.id)}')">PIN 초기화</button>${u.role === '관리자' ? '' : `<button class="btn red sm" onclick="disable('${E(u.id)}',${!u.disabled})">${u.disabled ? '정지 해제' : '정지'}</button><button class="btn red sm" onclick="acct('deactivate','${E(u.id)}')">비활성화</button>`}`}</div></td></tr>`).join('') + `</table></div>
+        ${j.auth_backend && !j.auth_backend.password_change ? '' : `<button class="btn ghost sm" onclick="resetPin('${E(u.id)}')">PIN 초기화</button>`}${u.role === '관리자' ? '' : `<button class="btn red sm" onclick="disable('${E(u.id)}',${!u.disabled})">${u.disabled ? '정지 해제' : '정지'}</button><button class="btn red sm" onclick="acct('deactivate','${E(u.id)}')">비활성화</button>`}`}</div></td></tr>`).join('') + `</table></div>
       <p class="note">정지는 잠깐 막기, <b>비활성화</b>는 탈퇴·퇴사(로그인 불가·세션 끊김·부서장 회수, 되살릴 수 있음). <b>익명화</b>는 비활성 계정의 이름·부서·PIN 을 지우고 deleted-… 로만 남김 — 되돌릴 수 없음${j.anon_auto ? ` · 비활성 ${j.anon_after_days}일 지나면 자동 익명화(켜짐)` : ''}.</p><p class="msg" id="userMsg"></p></div>
     <div class="box"><h3>부서 <small>가입·변경 목록</small></h3><div class="row" role="tablist" style="margin-bottom:8px"><button class="btn ${DT === 'archived' ? 'ghost' : ''} sm" role="tab" aria-selected="${DT !== 'archived'}" onclick="DT='live';render()">사용 중 ${live.length}</button><button class="btn ${DT === 'archived' ? '' : 'ghost'} sm" role="tab" aria-selected="${DT === 'archived'}" onclick="DT='archived';render()">보관 ${arch.length}</button></div>
       <div class="tbl"><table><tr><th>부서</th><th>인원</th><th>${DT === 'archived' ? '보관한 날' : '부서장'}</th><th></th></tr>` + (ds.map(d => DT === 'archived' ? `<tr>
