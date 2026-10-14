@@ -218,7 +218,7 @@ bash agent-page-portal/scripts/start-fastportal.sh stop
 | `TOOL_BIND` | 127.0.0.1 | 포털이 도구를 띄울 때 넘기는 `BIND`(도구가 열 주소). 컨테이너에서 다른 컨테이너의 포털이 붙어야 하면 `0.0.0.0` |
 | `WEB_DIST` | 없음(꺼짐) — 운영은 `portal-env.sh` 가 `<상위>/_web/app` 링크가 있으면 자동 | React 화면(agent-page-web) 빌드 폴더(링크면 요청마다 따라감 — 배포는 링크 바꿔 끼우기, 재시작 없음). 있으면 포털이 `WEB_PREFIX` 아래에서 같은 출처로 내보냄(아래 'React 화면') — 없으면 예전과 완전히 같음 |
 | `WEB_PREFIX` | /app | React 화면 주소. `/app` 처럼 하위 경로만 |
-| `WEB_ROOT`·`WEB_ROOT_DIST` | 꺼짐 | **'/' 전환(준비만, 운영에선 꺼 둠)**: `WEB_ROOT=1` 이면 `/`·`/login`·`/all`·`/fav`·`/recent`·`/account`·`/approvals`·`/admin`·`/tool/*`·`/assets/*` 를 `WEB_ROOT_DIST`(WEB_BASE=/ 빌드)에서 내보냄. `/api`·`/t`·`/theme`·`/guide`·`/logout`·`/landing` 은 그대로. 절차·되돌리기: agent-page-web `CUTOVER.md` |
+| `WEB_ROOT`·`WEB_ROOT_DIST` | 꺼짐 — 운영은 `portal-env.sh` 에서 켬(2026-10-14~, `/` = React) | **'/' 전환**: `WEB_ROOT=1` 이면 `/`·`/login`·`/all`·`/fav`·`/recent`·`/account`·`/approvals`·`/admin`·`/tool/*`·`/assets/*` 를 `WEB_ROOT_DIST`(WEB_BASE=/ 빌드)에서 내보냄. `/api`·`/t`·`/theme`·`/guide`·`/logout`·`/landing` 은 그대로. 절차·되돌리기: agent-page-web `CUTOVER.md` |
 | `AUTH_BACKEND` | local | 계정 저장소 — `local`(포털 내부 DB, 임시) · `external`(사내 챗봇 계정 DB, `AUTH_EXTERNAL_*` — [`fastportal/auth/README.md`](fastportal/auth/README.md)) · `<모듈>:<클래스>`. 틀린 값이면 기동 안 함 |
 | `PORTAL_ANON_AUTO`·`PORTAL_ANON_AFTER_DAYS` | 0(꺼짐)·365 | 계정 정리 작업: `1` 이면 비활성화한 지 N일 지난 계정을 하루 한 번 익명화(감사 기록 actor=`system`). 기본 꺼짐 — 관리 화면에서 손으로만 |
 | 나머지 | | `AGENT_DATA`·`AGENT_OWNERS`·`HOST`·`SHOW_HIDDEN`·`TLS_CERT`/`TLS_KEY`(TLS 1.2 이상) 는 위 표와 같음 |

@@ -17,5 +17,5 @@ export TTS_VOICE=KR TTS_MODEL=melo TTS_DEVICE=cuda DEVICE=cuda WHISPER_DEVICE=cu
 [ -z "${WEB_DIST+x}" ] && [ -e "$_PE_TOP/_web/app" ] && export WEB_DIST="$_PE_TOP/_web/app"
 # '/' 를 React 로 바꾸기(준비만 — 사용자 확인 전에는 켜지 말 것). 켜기: agent-page-web/scripts/deploy.sh --root 로 루트 빌드를 _web/root 에 둔 뒤
 # 아래 줄의 # 를 지우고 start-portal.sh. 되돌리기: 다시 # 를 붙이고 start-portal.sh(예전 포털 화면이 바로 돌아옴). 절차: agent-page-web/CUTOVER.md
-# export WEB_ROOT=1 WEB_ROOT_DIST="$_PE_TOP/_web/root"
+export WEB_ROOT=1 WEB_ROOT_DIST="$_PE_TOP/_web/root"
 unset _PE_TOP
