@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """계약 시험(가짜 도구): 임시 폴더에 portal.py 사본과 fastportal 을 같은 임시 DB·가짜 tools.json 으로 띄우고, 이 시험이 띄운
 가짜 도구(받은 헤더·본문을 그대로 돌려줌, SSE)를 거쳐 프록시 규칙·스트리밍·끊김·잠금·동시 스트림을 확인한다. 실제 데이터·도구·LLM 은 안 씀.
+계정 저장소(AUTH_BACKEND)는 가짜 외부 저장소(임시 모듈 fake_ext_auth:FakeExternal)·설정 없는 external 포털을 따로 띄워 확인.
   python3 fastportal/tests/contract_fake.py [--streams 50] [--slow]      # --slow: 1분 넘는 POST → /api/events 기록까지(1분 더 걸림)
 환경: FASTPORTAL_VENV(기본 ~/.local/fastportal-venv)"""
 import argparse, hashlib, http.client, json, os, select, shutil, signal, socket, subprocess, sys, tempfile, threading, time
@@ -775,6 +776,62 @@ con = _sq.connect(DBF); sysa = con.execute("SELECT detail FROM audit WHERE actor
 check("PORTAL_ANON_AUTO=1(기한 0일로 시험) → 비활성 계정 익명화, 감사 기록 actor=system", urow("wd-b")["anonymized"] and sysa and "자동 정리" in sysa[0], str(sysa), kind="새 기능")
 check("정리 작업은 활성 계정을 건드리지 않음", urow("tester")["anonymized"] is None and urow("tester")["name"] == "시험", kind="새 기능")
 
+print("\n## 계정 저장소 바꿔 끼우기(AUTH_BACKEND) — 가짜 외부 저장소·설정 없는 external (새 포털)")
+check("/api/auth(local): 가입·PIN 변경 받음", jget(NEW, "/api/auth", tok=False)[1] == {"signup": True, "password_change": True, "guide": ""}, kind="새 기능")
+ab = jget(NEW, "/api/admin")[1].get("auth_backend") or {}
+check("/api/admin.auth_backend(local) = 임시(포털 내부 DB)", ab.get("name") == "local" and ab.get("label") == "임시(포털 내부 DB)", str(ab), kind="새 기능")
+check("local 이면 화면에 AG_AUTH 안 끼움(화면 그대로)", b"AG_AUTH=" not in req(NEW, "GET", "/login", tok=False)[2] and b"AG_AUTH=" not in req(NEW, "GET", "/account", CK, tok=False)[2], kind="새 기능")
+FAKEMOD = os.path.join(T, "fakeauth")
+os.makedirs(FAKEMOD)
+open(os.path.join(FAKEMOD, "fake_ext_auth.py"), "w").write(
+    "from fastportal.auth.external import ExternalBackend\n"
+    "USERS = {'chat.kim': {'id': 'chat.kim', 'name': '챗봇김', 'pw': 'Chat-pw-1'}, 'chat.off': {'id': 'chat.off', 'name': '꺼짐', 'pw': 'x', 'disabled': True},\n"
+    "         'boss': {'id': 'boss', 'name': '외부보스', 'pw': 'b'}, 'owner': {'id': 'owner', 'name': 'x', 'pw': 'o'}}\n"
+    "class FakeExternal(ExternalBackend):\n"
+    "    label = '외부(시험용 가짜)'\n"
+    "    def ready(self): return True\n"
+    "    def _lookup(self, uid): return USERS.get(uid)\n"
+    "    def _check(self, row, secret): return secret == row['pw']\n")
+EXT, EXT0 = free_port(), free_port()
+launch("ext", EXT, {"AUTH_BACKEND": "fake_ext_auth:FakeExternal", "PYTHONPATH": FAKEMOD})
+launch("ext0", EXT0, {"AUTH_BACKEND": "external"})
+TOK_PORTS.add(EXT)
+au = jget(EXT, "/api/auth", tok=False)[1]
+check("/api/auth(external): 가입·PIN 변경 끔 + 안내", au.get("signup") is False and au.get("password_change") is False and "챗봇" in au.get("guide", ""), str(au), kind="새 기능")
+st, j, _ = jpost(EXT, "/api/signup", {"id": "ext-new", "name": "x", "pin": "1234"}, tok=False)
+check(f"external: 가입 막힘 → {st} + 안내", st == 403 and "챗봇" in j.get("error", "") and urow("ext-new") is None, str(j), kind="새 기능")
+st, j, _ = jpost(EXT, "/api/login", {"id": "chat.kim", "pin": "wrong"}, tok=False)
+check(f"external: 틀린 비밀번호 → {st}", st == 400 and "틀립니다" in j.get("error", ""), kind="새 기능")
+st, j, h_ = jpost(EXT, "/api/login", {"id": " Chat.Kim ", "pin": "Chat-pw-1"}, tok=False)
+r = urow("chat.kim")
+check(f"external: 가짜 저장소로 로그인 성공 → {st}, 포털 쪽 행 생성(PIN 열 비움)", st == 200 and j.get("id") == "chat.kim" and r and r["name"] == "챗봇김" and r["hash"] is None, f"{st} {j}", kind="새 기능")
+CKE = ck_of(h_) if st == 200 else {}
+me = jget(EXT, "/api/me", CKE, tok=False)[1]
+check("external: 세션·/api/me 는 포털 그대로(아이디 키, 일반 역할)", me.get("id") == "chat.kim" and me.get("role") == "일반" and me.get("agent_user") == "chat.kim", str(me), kind="새 기능")
+pr = json.loads(req(EXT, "GET", "/t/fake-local/echo", CKE, tok=False)[2])
+check("external: 도구로 X-Agent-User=chat.kim", dict(pr["headers"]).get("x-agent-user") == "chat.kim", kind="새 기능")
+st, j, _ = jpost(EXT, "/api/pin", {"pin": "Chat-pw-1", "new": "5678"}, CKE, tok=False)
+check(f"external: PIN 변경 막힘 → {st} + 안내", st == 403 and "챗봇" in j.get("error", ""), str(j), kind="새 기능")
+st, j, _ = jpost(EXT, "/api/admin/reset", {"uid": "chat.kim"})
+check(f"external: 관리자 PIN 초기화 막힘 → {st}", st == 403, str(j), kind="새 기능")
+ab = jget(EXT, "/api/admin")[1].get("auth_backend") or {}
+check("external: /api/admin.auth_backend 표시(관리자)", ab.get("name") == "external" and ab.get("label") == "외부(시험용 가짜)" and ab.get("password_change") is False, str(ab), kind="새 기능")
+lg, ac = req(EXT, "GET", "/login", tok=False)[2], req(EXT, "GET", "/account", CKE, tok=False)[2]
+check("external: 로그인·계정 화면에 AG_AUTH(가입·PIN 변경 숨김) — doctype 앞이 아님", b"window.AG_AUTH=" in lg and b"window.AG_AUTH=" in ac and lg.lstrip()[:9].lower() == b"<!doctype", kind="새 기능")
+st, _, _ = jpost(EXT, "/api/login", {"id": "chat.off", "pin": "x"}, tok=False)
+check(f"external: 저장소에서 막힌 계정 → {st}", st == 400, kind="새 기능")
+st, _, _ = jpost(EXT, "/api/login", {"id": "owner", "pin": "o"}, tok=False)
+check(f"external: 아이디 owner(로컬 주인 자리) 거절 → {st}", st == 400, kind="보안")
+jpost(EXT, "/api/admin/account", {"op": "deactivate", "uid": "chat.kim", "reason": "시험"})
+st, _, _ = jpost(EXT, "/api/login", {"id": "chat.kim", "pin": "Chat-pw-1"}, tok=False)
+check(f"external: 포털에서 비활성화하면 비밀번호가 맞아도 거절 → {st}", st == 400 and jget(EXT, "/api/me", CKE, tok=False)[0] == 401, kind="새 기능")
+st, j, _ = jpost(EXT0, "/api/login", {"id": "someone", "pin": "x"}, tok=False)
+check(f"external(설정 없음): 로그인 → {st} 연결 안 됨 안내(내부 정보 없음)", st == 503 and "아직 연결되지" in j.get("error", ""), str(j), kind="새 기능")
+st, j, _ = jpost(EXT0, "/api/signup", {"id": "someone", "name": "x", "pin": "1234"}, tok=False)
+check(f"external(설정 없음): 가입 → {st}", st == 403, kind="새 기능")
+bad = subprocess.run([os.path.join(VENV, "bin", "python"), "-c", "import fastportal.app"], cwd=REPO, env={**env, "AUTH_BACKEND": "nope"}, capture_output=True, text=True, timeout=60)
+check("AUTH_BACKEND 틀리면 기동 안 함", bad.returncode != 0 and "AUTH_BACKEND" in bad.stderr, bad.stderr[-200:], kind="새 기능")
+
 if A.slow:
     print("\n## 1분 넘는 POST → /api/events (61초)")
     since0 = json.loads(req(NEW, "GET", "/api/events", CK)[2])["last"]   # 앞 시험(작업 알림 센터)이 같은 DB 에 남긴 것은 빼고 비교
@@ -792,7 +849,7 @@ for p in procs.values():
     except subprocess.TimeoutExpired:
         p.kill()
 tool_srv.shutdown(); remote_srv.shutdown()
-errs = [l for l in open(os.path.join(T, "new.log")) if "Traceback" in l or "error:" in l]
+errs = [l for f in ("new.log", "ext.log") for l in open(os.path.join(T, f)) if "Traceback" in l or "error:" in l]
 check("새 포털 로그에 예외 없음", not errs, "".join(errs[:5]))
 shutil.rmtree(T, ignore_errors=True)
 n_ok = sum(r["ok"] for r in RESULTS)

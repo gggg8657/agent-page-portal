@@ -1,8 +1,8 @@
 """화면: HTML 틀·테마 끼워 넣기·저작자 표기·랜딩·사용법(?)·정적 파일(/guide · /theme · /landing) · React 빌드(WEB_DIST·WEB_ROOT).
 응답은 넘겨받은 ctx(app.Ctx: send·bare·redirect·auth·html_page)로만 만든다 — 이 모듈은 ctx 를 import 하지 않음(순환 없음)."""
-import base64, os, re, time, urllib.parse
+import base64, json, os, re, time, urllib.parse
 
-from . import accounts, config, sessions, tools
+from . import accounts, auth, config, sessions, tools
 from .config import THEME_DIR, V2_DIR, WEB_DIST, WEB_PREFIX, WEB_ROOT, WEB_ROOT_DIST
 from .db import db
 
@@ -119,13 +119,23 @@ def landing(html, who=""):
             .replace("%FOOT%", f'지금 <b>{esc(who)}</b> 로 접속 중 · <a href="/">포털로</a> · <a href="/account">계정 설정·PIN 바꾸기</a> · <a href="/logout">로그아웃</a>' if who else ""))
 
 
+def with_auth(html):
+    """계정 저장소가 local 이 아니면 화면 첫 <script> 앞에 설정을 끼움(window.AG_AUTH — 가입·PIN 변경 숨기기·안내). local 이면 그대로"""
+    if auth.is_local():
+        return html
+    i = auth.backend().info()
+    v = json.dumps({"signup": i["signup"], "password_change": i["password_change"], "guide": i["guide"]}, ensure_ascii=False).replace("<", "\\u003c")
+    i = html.find("<script>")
+    return html[:i] + f"<script>window.AG_AUTH={v}</script>" + html[i:] if i >= 0 else html
+
+
 def login_page(ctx):
     """GET /login — 이미 로그인(계정)이면 next 로, 아니면 랜딩(로컬 주인이면 '접속 중' 표시)"""
     if ctx.auth() and ctx.uid != "owner":
         return ctx.redirect(sessions.safe_next(urllib.parse.parse_qs(urllib.parse.urlsplit(ctx.raw).query).get("next", ["/"])[0]))
     who = ctx.uname if ctx.uid == "owner" else ""
     ctx.setcookie, ctx.uid = None, None
-    return ctx.send(ctx.html_page(landing(LOGIN, who), "portal"), "text/html; charset=utf-8")
+    return ctx.send(ctx.html_page(with_auth(landing(LOGIN, who)), "portal"), "text/html; charset=utf-8")
 
 
 def home(ctx):
@@ -139,7 +149,7 @@ def account_page(ctx, p):
         ok = p == "/account" or ctx.is_owner or (p == "/approvals" and accounts.my_heads(c, ctx.uid))
     if not ok:
         return ctx.bare(302, [("Location", "/account")])
-    return ctx.send(ctx.html_page(ACCOUNT + ctx.help_html("portal"), "portal", v2="account"), "text/html; charset=utf-8")
+    return ctx.send(ctx.html_page(with_auth(ACCOUNT) + ctx.help_html("portal"), "portal", v2="account"), "text/html; charset=utf-8")
 
 
 # ── 정적 파일 (/guide · /theme · /landing/home.png) ─────────────────────────

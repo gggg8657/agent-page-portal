@@ -1,51 +1,22 @@
 """부서·부서장·요청/승인·관리·감사·비활성화/익명화·탈퇴 요청·부서 보관 + 계정 설정·승인·관리 API(/api/account·/api/approvals·/api/admin).
 포털 쪽 사용자 정보(users 표의 이름·부서·테마·비활성 등)는 계정 저장소가 무엇이든 여기서 다룬다 — 사용자 키는 아이디."""
-import datetime, hashlib, hmac, re, secrets, time
+import datetime, re, secrets, time
 
-from . import config, sessions
+from . import auth, config, sessions
+from .auth.local import ITERS
 from .config import OWNERS, ANON_AFTER_DAYS
 from .db import db, now
 
-# ── 계정 만들기·PIN (계정 저장소 local) ─────────────────────────────────────
-ID_RE, PIN_RE = re.compile(r"^[a-z0-9][a-z0-9_.-]{1,31}$"), re.compile(r"^[0-9]{4,8}$")
-ITERS = 600_000
 
-
-def _hash(pin, salt, iters=ITERS):
-    return hashlib.pbkdf2_hmac("sha256", pin.encode(), salt, iters)
-
-
-def set_user(c, uid, name, dept, pin):
-    salt = secrets.token_bytes(16)
-    c.execute("INSERT INTO users(id,name,dept,salt,hash,iters,ts) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, dept=excluded.dept, "
-              "salt=excluded.salt, hash=excluded.hash, iters=excluded.iters", (uid, name, dept, salt, _hash(pin, salt), ITERS, now()))
-
-
-def set_pin(c, uid, pin):
-    salt = secrets.token_bytes(16)
-    c.execute("UPDATE users SET salt=?, hash=?, iters=? WHERE id=?", (salt, _hash(pin, salt), ITERS, uid))
-
-
-def check_pin(c, uid, pin):
-    r = c.execute("SELECT salt, hash, iters, disabled FROM users WHERE id=?", (uid,)).fetchone()
-    h = _hash(pin, r["salt"] if r else b"x" * 16, (r["iters"] or 200_000) if r else ITERS)
-    ok = bool(r) and hmac.compare_digest(h, r["hash"]) and not r["disabled"]
-    if ok and (r["iters"] or 0) < ITERS:
-        set_pin(c, uid, pin)
-    return ok
-
-
-def check_new(c, uid, name, pin, local):
-    if not ID_RE.match(uid):
-        raise ValueError("아이디는 영문 소문자·숫자로 시작하고 영문 소문자·숫자·_.- 2~32자")
-    if uid == "owner" or (uid in OWNERS and not local):
-        raise ValueError("쓸 수 없는 아이디입니다")
-    if not name.strip():
-        raise ValueError("이름을 적어 주세요")
-    if not PIN_RE.match(pin):
-        raise ValueError("PIN 은 숫자 4~8자리")
-    if c.execute("SELECT 1 FROM users WHERE id=?", (uid,)).fetchone():
-        raise ValueError("이미 있는 아이디입니다")
+# ── 외부 계정 저장소 로그인 → 포털 쪽 사용자 정보 ─────────────────────────────
+def ensure_profile(c, user):
+    """외부 저장소로 로그인한 사람의 포털 쪽 행(users)을 만들거나(처음) 그대로 둠 — PIN 열은 비움, 이름은 처음에만(포털에서 바꿀 수 있음).
+    포털에서 비활성·정지·익명화한 계정이면 False(로그인 불가)"""
+    r = c.execute("SELECT disabled FROM users WHERE id=?", (user.id,)).fetchone()
+    if r:
+        return not r["disabled"]
+    c.execute("INSERT INTO users(id, name, dept, ts, onboarded) VALUES(?,?,?,?,0)", (user.id, (user.name or user.id)[:40], "", now()))
+    return True
 
 
 # ── 부서·역할·요청 ───────────────────────────────────────────────────────
@@ -305,7 +276,8 @@ def manage_get(ctx, p):
             aud = [dict(r) | {"actor": dis.get(r["actor"], r["actor"]), "target": dis.get(r["target"], r["target"])}
                    for r in c.execute("SELECT * FROM audit ORDER BY rowid DESC LIMIT 60")]
             return ctx.send({"users": users, "depts": depts, "pending": req_rows(c, "status='pending'"), "owners": sorted(OWNERS),
-                             "audit": aud, "anon_after_days": config.ANON_AFTER_DAYS, "anon_auto": config.ANON_AUTO})
+                             "audit": aud, "anon_after_days": config.ANON_AFTER_DAYS, "anon_auto": config.ANON_AUTO,
+                             "auth_backend": auth.backend().info()})   # 계정 저장소(관리자만 봄): local = 임시(포털 내부 DB)
     return ctx.send({"error": "not found"}, code=404)
 
 
@@ -403,8 +375,11 @@ def manage_post(ctx, c, p, req):
         if p.endswith("reset"):
             if c.execute("SELECT anonymized FROM users WHERE id=?", (u,)).fetchone()[0]:
                 raise ValueError("익명화된 계정입니다")
+            b = auth.backend()
+            if not b.supports_password_change:
+                raise auth.Unsupported(b.guide)
             pin = f"{secrets.randbelow(10**6):06d}"
-            set_pin(c, u, pin); sessions.drop_user_sessions(c, u); audit(c, uid, "pin_reset", u)
+            b.set_password(c, u, pin); sessions.drop_user_sessions(c, u); audit(c, uid, "pin_reset", u)
             return ctx.send({"ok": True, "pin": pin})
         off = bool(req.get("disabled"))
         if off and u in OWNERS:

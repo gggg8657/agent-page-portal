@@ -13,6 +13,7 @@ env: portal.py 와 같음(PORT 기본 8720, AGENT_DATA, AGENT_OWNERS, TLS_CERT·
      PORTAL_MAX_JSON(포털 API JSON 본문 상한, 기본 1MB) TOOLS_ALIVE_TTL(도구 켜짐 확인 캐시 초, 기본 5)
      TOOL_BIND(포털이 띄우는 도구의 BIND, 기본 127.0.0.1 — 컨테이너에선 0.0.0.0) WEB_DIST·WEB_PREFIX(React 빌드를 같은 출처로, 기본 꺼짐·/app)
      WEB_ROOT=1·WEB_ROOT_DIST('/' 를 React 로 — 준비만, 기본 꺼짐) PORTAL_ANON_AUTO·PORTAL_ANON_AFTER_DAYS(비활성 계정 익명화 정리, 기본 꺼짐·365)
+     AUTH_BACKEND(계정 저장소: local 기본 — 포털 내부 DB, 임시 | external — 사내 챗봇 계정 DB, auth/README.md | <모듈>:<클래스>)
      작업 알림 센터(jobs.py): PORTAL_JOBS_AUTO_S(자동 기록 기준 초, 60) PORTAL_JOBS_URL(도구에 넘길 내부 주소, 기본 http://127.0.0.1:PORT/api/internal/jobs)
      PORTAL_JOBS_SECRET(도구 토큰을 만드는 비밀값 — 없으면 _data/.portal_jobs_secret) PORTAL_JOBS_ALLOW(내부 경로를 더 받을 IP, 쉼표) PORTAL_JOBS_KEEPALIVE(SSE 빈 줄 초, 25)
      (모두 config.py 한곳에서 읽음)
@@ -23,7 +24,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from starlette.concurrency import run_in_threadpool
 
-from . import accounts, config, db, jobs, pages, proxy, sessions, tools
+from . import accounts, auth, config, db, jobs, pages, proxy, sessions, tools
 from .config import OWNERS, TLS
 from .ctx import Ctx, TooBig, drain, length, not_implemented, parse_json, read_body, too_big
 
@@ -31,6 +32,9 @@ db.init_db(t.get("dept") for t in tools.tools())
 with db.db() as _c:
     jobs.init(_c)   # 작업 알림 센터(jobs 표) — 예전 메모리 EVENTS 를 대체(재시작해도 남음)
 jobs.load_self_report()
+_AB = auth.backend()   # 계정 저장소(AUTH_BACKEND) — 설정이 틀리면 여기서 멈춤
+if not auth.is_local() and hasattr(_AB, "ready") and not _AB.ready():
+    print(f"경고: AUTH_BACKEND={config.AUTH_BACKEND} 연결 설정이 없음 — 로그인이 503 으로 실패함(fastportal/auth/README.md)", flush=True)
 
 
 @asynccontextmanager
@@ -41,7 +45,7 @@ async def lifespan(_app):
         threading.Thread(target=db.backup_loop, daemon=True).start()
     if config.ANON_AUTO:   # 비활성 계정 익명화 정리 — 기본 꺼짐(PORTAL_ANON_AUTO=1 로 켬, 기한 PORTAL_ANON_AFTER_DAYS)
         threading.Thread(target=accounts.anon_loop, daemon=True).start()
-    print(f"fastportal → {'https' if TLS else 'http'} data={config.DATA} owners={sorted(OWNERS)} max_body={config.MAX_BODY} backup={os.environ.get('BACKUP', '0')}  {pages._SIG}", flush=True)
+    print(f"fastportal → {'https' if TLS else 'http'} data={config.DATA} owners={sorted(OWNERS)} max_body={config.MAX_BODY} auth={_AB.name} backup={os.environ.get('BACKUP', '0')}  {pages._SIG}", flush=True)
     yield
     await proxy.close_client()
 
@@ -59,6 +63,8 @@ def get_sync(ctx):
         return pages.login_page(ctx)
     if p == config.LANDING_IMG[0] or p.startswith("/theme/"):
         return pages.theme_file(ctx, p)
+    if p == "/api/auth":   # 계정 저장소가 가입·PIN 변경을 받는지(로그인 전에도)
+        return ctx.send(auth_public())
     if p == "/api/depts":
         with db.db() as c:
             return ctx.send({"depts": accounts.visible_depts(c)})
@@ -116,46 +122,67 @@ def tools_sync(ctx, up):
 
 # ── POST ────────────────────────────────────────────────────────────────
 def login_sync(ctx, body):
-    """POST /api/login · /api/signup"""
+    """POST /api/login · /api/signup — 아이디·PIN 확인은 계정 저장소(auth.backend()), 세션·잠금은 포털(sessions)"""
     try:
         req = parse_json(body)
     except ValueError:
         return ctx.send({"error": "요청 본문은 JSON 객체여야 합니다"}, code=400)
-    uid, pin = str(req.get("id", "")).strip().lower(), str(req.get("pin", ""))
+    b = auth.backend()
+    uid, pin = b.normalize_id(str(req.get("id", ""))), str(req.get("pin", ""))
     try:
         with db.db() as c:
             if ctx.p == "/api/signup":
-                accounts.check_new(c, uid, str(req.get("name", "")), pin, ctx.local_owner())   # 관리자 아이디 가입은 진짜 로컬(토큰)에서만
+                if not b.supports_signup:
+                    raise auth.Unsupported(b.guide)
+                b.check_new(c, uid, str(req.get("name", "")), pin, ctx.local_owner())   # 관리자 아이디 가입은 진짜 로컬(토큰)에서만
                 d = str(req.get("dept") or "")
                 if d and d not in accounts.visible_depts(c):
                     raise ValueError("목록에 있는 부서를 고르세요 (목록에 없으면 관리자에게 요청)")
-                accounts.set_user(c, uid, str(req["name"]).strip()[:40], "", pin)
+                b.create_user(c, uid, str(req["name"]).strip()[:40], pin)
                 if d:
                     accounts.new_request(c, uid, "dept_join", d)
             else:
                 if sessions.limited(c, uid):
                     raise ValueError("PIN 을 여러 번 틀렸습니다. 10분 뒤에 다시 해 주세요")
-                if not accounts.check_pin(c, uid, pin):
+                local = auth.is_local()
+                user = None if (uid == "owner" and not local) else b.verify(c, uid, pin)   # owner 는 로컬 주인 자리(외부 아이디로 못 씀)
+                if user and not local and not accounts.ensure_profile(c, user):   # 포털에서 비활성·정지한 계정
+                    user = None
+                if not user:
                     sessions.add_fail(uid)
                     raise ValueError("아이디 또는 PIN 이 틀립니다 (정지된 계정이면 관리자에게)")
                 sessions.clear_fails(c, uid)
+                uid = user.id   # 저장소가 정한 아이디(local 은 같음)
             keep = ctx.p == "/api/signup" or sessions.want_remember(req.get("remember", True))
             tok = sessions.new_session(c, uid, keep)
         return ctx.send({"ok": True, "id": uid}, headers=[("Set-Cookie", sessions.cookie(tok, persist=keep))])
+    except auth.Unsupported as e:
+        return ctx.send({"error": str(e), "auth": auth_public()}, code=403)
+    except auth.AuthError as e:   # 외부 저장소 장애·미설정 — 상세는 로그에만
+        print("auth:", type(e).__name__, e, flush=True)
+        return ctx.send({"error": str(e)}, code=503)
     except (ValueError, KeyError) as e:
         return ctx.send({"error": str(e)}, code=400)
+
+
+def auth_public():
+    """GET /api/auth(로그인 전) — 화면이 가입·PIN 변경을 보일지 정함. 저장소 이름·주소는 안 내보냄(관리자는 /api/admin 의 auth_backend)"""
+    i = auth.backend().info()
+    return {"signup": i["signup"], "password_change": i["password_change"], "guide": i["guide"]}
 
 
 def change_pin(ctx, c, req):
     """POST /api/pin — 지금 PIN 확인(잠금 포함) → 새 PIN, 내 세션 모두 끊고 새 세션(로그인 유지 여부는 그대로)"""
     if ctx.uid == "owner":
         raise ValueError("로컬 접속은 계정이 없습니다 — 로그인 후 바꾸세요")
-    if sessions.limited(c, ctx.uid) or not accounts.check_pin(c, ctx.uid, req.get("pin", "")):
+    b = auth.backend()
+    if not b.supports_password_change:
+        raise auth.Unsupported(b.guide)
+    if sessions.limited(c, ctx.uid) or not b.verify(c, ctx.uid, req.get("pin", "")):
         sessions.add_fail(ctx.uid)
         raise ValueError("지금 PIN 이 틀립니다 (10분에 5번까지)")
-    if not accounts.PIN_RE.match(req.get("new", "")):
-        raise ValueError("새 PIN 은 숫자 4~8자리")
-    accounts.set_pin(c, ctx.uid, req["new"])
+    b.check_secret_rule(req.get("new", ""))
+    b.set_password(c, ctx.uid, req["new"])
     keep = not sessions.is_short(c, ctx.cookie)
     sessions.drop_user_sessions(c, ctx.uid)
     tok = sessions.new_session(c, ctx.uid, keep)
@@ -219,8 +246,11 @@ def post_sync(ctx, body):
                     return ctx.send({"error": "앱 등록은 관리자만 할 수 있습니다"}, code=403)
                 return ctx.send(tools.add_tool(req))
             return tool_action(ctx, c, path, req)
-    except PermissionError as e:
+    except PermissionError as e:   # auth.Unsupported(외부 저장소에서 PIN 변경·초기화) 포함
         return ctx.send({"error": str(e)}, code=403)
+    except auth.AuthError as e:
+        print("auth:", type(e).__name__, e, flush=True)
+        return ctx.send({"error": str(e)}, code=503)
     except (ValueError, KeyError, TypeError) as e:   # TypeError: 값 형식이 틀린 JSON(예: title 이 숫자) — portal.py 는 연결이 끊겼음
         return ctx.send({"error": str(e) if not isinstance(e, TypeError) else "요청 값 형식이 틀립니다"}, code=400)
 

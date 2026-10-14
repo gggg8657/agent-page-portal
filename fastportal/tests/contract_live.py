@@ -133,7 +133,7 @@ orig = demo_row()
 
 # 삭제 대신(새 포털만): /api/admin 에 deactivated·deact_reason·anonymized(계정)·archived(부서)·anon_after_days·anon_auto 를 더하고,
 # 익명화된 계정의 아이디는 deleted-… 로 내보냄(감사 기록·요청 포함). 예전 portal.py 응답에 같은 바꾸기를 해서 나머지가 같은지 본다.
-NEW_KEYS = {"deactivated", "deact_reason", "anonymized", "archived", "anon_after_days", "anon_auto"}
+NEW_KEYS = {"deactivated", "deact_reason", "anonymized", "archived", "anon_after_days", "anon_auto", "auth_backend"}
 
 
 def anon_map():
