@@ -245,10 +245,8 @@ def manage_get(ctx, p):
             return ctx.send({"me": me(c, ctx.uid, ctx.uname), "depts": visible_depts(c), "requests": req_rows(c, "uid=?", (ctx.uid,))[:20]})
         if p == "/api/account/theme":
             return ctx.send({"theme": ctx.theme(), "themes": sorted(config.THEMES)})
-        if p == "/api/account/notices":
-            rows = req_rows(c, "uid=? AND status IN ('approved','rejected') AND notified=0", (ctx.uid,))
-            c.execute("UPDATE requests SET notified=1 WHERE uid=? AND status IN ('approved','rejected')", (ctx.uid,))
-            return ctx.send({"notices": rows, "approvals": me(c, ctx.uid, ctx.uname)["approvals"]})
+        if p == "/api/account/notices":   # 예전 화면 호환: GET 도 읽음 처리. 새 화면은 POST(같은 응답) 또는 GET ?peek=1(읽음 처리 안 함)
+            return notices(ctx, c, mark="peek=1" not in ctx.raw.partition("?")[2].split("&"))
         if p == "/api/approvals":
             heads = my_heads(c, ctx.uid)
             if not (ctx.is_owner or heads):
@@ -281,8 +279,18 @@ def manage_get(ctx, p):
     return ctx.send({"error": "not found"}, code=404)
 
 
+def notices(ctx, c, mark=True):
+    """승인·반려 알림(아직 안 본 것) + 내가 처리할 승인 수. mark 면 본 것으로 표시"""
+    rows = req_rows(c, "uid=? AND status IN ('approved','rejected') AND notified=0", (ctx.uid,))
+    if mark:
+        c.execute("UPDATE requests SET notified=1 WHERE uid=? AND status IN ('approved','rejected')", (ctx.uid,))
+    return ctx.send({"notices": rows, "approvals": me(c, ctx.uid, ctx.uname)["approvals"]})
+
+
 def manage_post(ctx, c, p, req):
     uid = ctx.uid
+    if p == "/api/account/notices":   # 알림 받고 읽음 처리(상태를 바꾸므로 POST 가 정식)
+        return notices(ctx, c)
     acct = c.execute("SELECT 1 FROM users WHERE id=?", (uid,)).fetchone()
     if p == "/api/account/theme":
         t = str(req.get("theme", ""))
@@ -290,7 +298,7 @@ def manage_post(ctx, c, p, req):
             raise ValueError("없는 테마")
         if acct:
             c.execute("UPDATE users SET theme=? WHERE id=?", (t, uid))
-        return ctx.send({"ok": True, "theme": t}, headers=[("Set-Cookie", f"agtheme={t}; Path=/; Max-Age=31536000; SameSite=Lax" + ("; Secure" if config.TLS else ""))])
+        return ctx.send({"ok": True, "theme": t}, headers=[("Set-Cookie", f"agtheme={t}; Path=/; Max-Age=31536000; SameSite={config.COOKIE_SAMESITE}" + ("; Secure" if config.COOKIE_SECURE else ""))])
     if p.startswith("/api/account/"):
         if not acct:
             raise ValueError("로컬 접속은 계정이 없습니다 — 계정으로 로그인하세요")

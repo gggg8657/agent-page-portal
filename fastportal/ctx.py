@@ -36,7 +36,11 @@ class Ctx:
 
     def send(self, body, ctype="application/json", code=200, headers=None):
         b = body if isinstance(body, bytes) else json.dumps(body, ensure_ascii=False).encode()
-        hd = [("X-Author", hval(pages._SIG_A)), ("Content-Type", ctype)] + [(k, hval(v)) for k, v in headers or ()]
+        hd = [("X-Author", hval(pages._SIG_A)), ("Content-Type", ctype), ("X-Content-Type-Options", "nosniff"), ("Referrer-Policy", "same-origin")]
+        if ctype.startswith("text/html"):   # 고전 포털 화면(/ · /login · /account · /guide): 끼워 넣기 제한
+            hd += [("Content-Security-Policy", pages.frame_csp())] + ([] if config.CORS_ORIGINS else [("X-Frame-Options", "SAMEORIGIN")])
+        given = {k.lower() for k, _ in headers or ()}
+        hd = [(k, v) for k, v in hd if k.lower() not in given] + [(k, hval(v)) for k, v in headers or ()]
         if self.setcookie:
             hd.append(("Set-Cookie", self.setcookie))
         return Raw(b, code, hd)

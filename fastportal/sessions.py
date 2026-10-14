@@ -12,7 +12,7 @@ def _local_token():
     """토큰 파일을 읽음(없으면 무작위 32바이트로 만듦, 권한 600). 값은 어디에도 출력하지 않음"""
     if config.LOCAL_OWNER_MODE != "token":
         return ""
-    f_ = config.LOCAL_TOKEN_FILE
+    f_ = config.secret_file(config.LOCAL_TOKEN_NAME)
     try:
         fd = os.open(f_, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "w") as f:
@@ -56,7 +56,7 @@ SID_ANY = re.compile(r"(?:^|;\s*)agsid=")   # 값이 비었거나 형식이 틀�
 
 
 def cookie(tok, age=SESSION_S, persist=True):
-    return f"agsid={tok}; Path=/;" + (f" Max-Age={age};" if persist else "") + " HttpOnly; SameSite=Lax" + ("; Secure" if config.TLS else "")
+    return f"agsid={tok}; Path=/;" + (f" Max-Age={age};" if persist else "") + f" HttpOnly; SameSite={config.COOKIE_SAMESITE}" + ("; Secure" if config.COOKIE_SECURE else "")
 
 
 def want_remember(v):
@@ -133,17 +133,31 @@ def resolve(cookie_header, client, local_header):
 
 
 # ── 로그인 실패 잠금 ────────────────────────────────────────────────────
-def limited(c, uid):
-    """10분에 5번 틀리면 잠금 — DB(login_fails)에 둬서 워커·프로세스가 여럿이어도, 재시작해도 같은 판정"""
-    return c.execute("SELECT COUNT(*) FROM login_fails WHERE uid=? AND ts>?", (uid, time.time() - FAIL_WINDOW)).fetchone()[0] >= FAIL_MAX   # 읽기만(쓰기 잠금 안 잡음)
+# 잠금은 (아이디, 접속지) 단위 — 남이 내 아이디로 틀려도 내 자리(다른 접속지)는 안 잠김. 대신 한 접속지가 아이디를 바꿔 가며 틀리면
+# 그 접속지 전체를 막음(FAIL_IP_MAX). 아이디 하나에 여러 접속지가 몰리면(분산 대입) 아이디 전체도 막음(FAIL_MAX × 4). DB(login_fails)에 둬서 재시작해도 같음
+def limited(c, uid, ip=""):
+    """잠겼으면 True — 읽기만(쓰기 잠금 안 잡음)"""
+    t = time.time() - FAIL_WINDOW
+    q = lambda sql, *a: c.execute(sql, (*a, t)).fetchone()[0]
+    return (q("SELECT COUNT(*) FROM login_fails WHERE uid=? AND COALESCE(ip,'')=? AND ts>?", uid, ip or "") >= FAIL_MAX
+            or q("SELECT COUNT(*) FROM login_fails WHERE uid=? AND ts>?", uid) >= FAIL_MAX * 4)
 
 
-def add_fail(uid):
+def ip_limited(c, ip):
+    """이 접속지가 10분에 FAIL_IP_MAX 번 넘게 틀림 → 로그인·가입 모두 잠시 막음"""
+    return bool(ip) and c.execute("SELECT COUNT(*) FROM login_fails WHERE ip=? AND ts>?", (ip, time.time() - FAIL_WINDOW)).fetchone()[0] >= config.FAIL_IP_MAX
+
+
+def add_fail(uid, ip=""):
     """실패 기록은 따로 연결·commit — 요청 트랜잭션은 ValueError 로 rollback 되므로. 그 트랜잭션은 이때 쓰기 잠금이 없어야 함(limited 는 읽기만)"""
     with db() as c:
         c.execute("DELETE FROM login_fails WHERE ts<?", (time.time() - FAIL_WINDOW,))
-        c.execute("INSERT INTO login_fails VALUES(?,?)", (uid, time.time()))
+        c.execute("INSERT INTO login_fails(uid, ts, ip) VALUES(?,?,?)", (uid, time.time(), ip or ""))
 
 
-def clear_fails(c, uid):
-    c.execute("DELETE FROM login_fails WHERE uid=?", (uid,))
+def clear_fails(c, uid, ip=None):
+    """성공 → 그 (아이디, 접속지) 실패 기록을 지움(ip 를 안 주면 그 아이디 전부 — PIN 초기화 등)"""
+    if ip is None:
+        c.execute("DELETE FROM login_fails WHERE uid=?", (uid,))
+    else:
+        c.execute("DELETE FROM login_fails WHERE uid=? AND COALESCE(ip,'')=?", (uid, ip or ""))

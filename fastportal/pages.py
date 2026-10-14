@@ -211,6 +211,14 @@ WEB_SPA = re.compile(r"/($|[?#]|(all|fav|recent|account|approvals|admin)([/?#]|$
 WEB_ROOT_PATH = re.compile(r"/($|login|(all|fav|recent|account|approvals|admin)/?|tool/.+|assets/.+|theme-boot\.js|fonts\.css)")
 WEB_CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; "
            "connect-src 'self'; frame-src 'self'; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'")
+
+
+def frame_csp():
+    """고전 포털 화면·도구 화면의 CSP — 인라인 스크립트를 쓰므로 script-src 는 못 조이고, 끼워 넣기(frame-ancestors)·base·object 만.
+    끼워 넣기 허용: 같은 출처 + 다른 출처 화면(config.CORS_ORIGINS)"""
+    return "frame-ancestors 'self'" + "".join(" " + o for o in sorted(config.CORS_ORIGINS)) + "; base-uri 'self'; object-src 'none'"
+
+
 WEB_TYPES = {".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".html": "text/html; charset=utf-8",
              ".json": "application/json", ".map": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp",
              ".ico": "image/x-icon", ".woff2": "font/woff2", ".txt": "text/plain; charset=utf-8", ".webmanifest": "application/manifest+json", ".wasm": "application/wasm"}

@@ -7,7 +7,8 @@
 # 되살리기: tar xzf <파일> -C ~/agent-page   (기존 _data 를 먼저 옮겨 두고)
 cd "$(dirname "$0")/../.."   # agent-page-portal/scripts → 상위 폴더 (상위 폴더 backup.sh 의 사본)
 BASE="$PWD" DATA="${AGENT_DATA:-$PWD/_data}" OUT="${AGENT_BACKUP_DIR:-$HOME/agent-page-backup}" KEEP="${BACKUP_KEEP:-7}"
-mkdir -p "$OUT"
+umask 077   # 백업에는 PIN 해시·세션·비밀 파일이 들어 있음 — 주인만 읽게
+mkdir -p "$OUT" && chmod 700 "$OUT"
 exec 9>"$OUT/.lock"; flock -n 9 || { echo "$(date '+%F %T') 이미 백업 중 — 건너뜀" >> "$BASE/backup.log"; exit 0; }
 {
   t0=$(date +%s); day=$(TZ=Asia/Seoul date +%F)

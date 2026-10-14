@@ -53,6 +53,11 @@ class Tool(BaseHTTPRequestHandler):
             time.sleep(61); return self._json({"ok": True})
         self._echo()
 
+    do_PUT = do_DELETE = do_PATCH = lambda self: self._echo()   # 모든 메서드 프록시 시험
+
+    def do_HEAD(self):
+        self.send_response(200); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", "0"); self.end_headers()
+
     def do_GET(self):
         p = self.path
         if p.startswith("/echo"):
@@ -68,6 +73,11 @@ class Tool(BaseHTTPRequestHandler):
             return self._json({"ok": 1}, extra=[("Set-Cookie", "a=1; Path=/"), ("Set-Cookie", "b=2; Path=/"), ("X-Tool", "yes")])
         if p == "/err":
             return self._json({"error": "bad"}, code=418)
+        if p == "/agcookie":   # 포털 쿠키를 덮으려는 도구(보안 시험)
+            return self._json({"ok": 1}, extra=[("Set-Cookie", "agsid=evil; Path=/"), ("Set-Cookie", "AGTHEME=x; Path=/"), ("Set-Cookie", "c=3; Path=/")])
+        if p.startswith("/api/doc"):   # API 가 주는 HTML(사용자 내용) — sandbox 대상
+            b = b"<script>fetch('/api/me')</script>"
+            self.send_response(200); self.send_header("Content-Type", "text/html"); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b); return
         if p.startswith("/sse"):   # n 개 이벤트를 iv 초 간격으로, 그 뒤 idle 초 동안 아무것도 안 보냄(포털이 끊으면 바로 알아챔)
             q = dict(x.split("=") for x in (p.split("?") + [""])[1].split("&") if "=" in x)
             n, iv, idle = int(q.get("n", 5)), float(q.get("iv", 0.2)), float(q.get("idle", 0))
@@ -120,13 +130,14 @@ shutil.copy(os.path.join(REPO, "docs", "img", "landing-home.png"), os.path.join(
 json.dump([{"dir": "fake-local", "port": TOOL_PORT, "name": "가짜", "title": "가짜 도구", "group": "시험"},
            {"dir": "down-local", "port": DOWN_PORT, "name": "꺼짐", "title": "꺼진 도구", "group": "시험"},
            {"dir": "remote-local", "port": REMOTE_PORT, "host": "127.0.0.2", "name": "원격", "title": "다른 컨테이너 도구", "group": "시험"},
-           {"dir": "bind-local", "port": BIND_PORT, "name": "바인드", "title": "BIND 확인", "group": "시험"}]
+           {"dir": "bind-local", "port": BIND_PORT, "name": "바인드", "title": "BIND 확인", "group": "시험"},
+           {"dir": "hidden-local", "port": TOOL_PORT, "name": "숨김", "title": "숨긴 도구", "group": "시험", "hidden": True}]
           + [{"dir": f"badhost{i}-local", "port": TOOL_PORT, "host": h, "name": "틀린 host", "group": "시험"} for i, h in enumerate(BAD_HOSTS)],
           open(os.path.join(ROOT, "tools.json"), "w"), ensure_ascii=False)
 # bind-local: 포털이 띄우면 받은 BIND 를 파일에 적고 끝남(core.start 의 TOOL_BIND 확인용)
 os.makedirs(os.path.join(T, "bind-local"))
 open(os.path.join(T, "bind-local", "app.py"), "w").write("import os, json\nh = os.path.dirname(os.path.abspath(__file__))\n"
-    "json.dump({k: os.environ.get(k) for k in ('PORTAL_JOBS_URL', 'PORTAL_JOBS_TOKEN', 'PORTAL_JOBS_TOOL', 'PORTAL_JOBS_SECRET')}, open(os.path.join(h, 'jobs-env.json'), 'w'))\n"
+    "json.dump({k: os.environ.get(k) for k in ('PORTAL_JOBS_URL', 'PORTAL_JOBS_TOKEN', 'PORTAL_JOBS_TOOL', 'PORTAL_JOBS_SECRET', 'PORTAL_TOOL_KEY')}, open(os.path.join(h, 'jobs-env.json'), 'w'))\n"
     "open(os.path.join(h, 'bind.txt'), 'w').write(os.environ.get('BIND', ''))\n")
 BIND_TXT = os.path.join(T, "bind-local", "bind.txt")
 # React 빌드 대신 작은 가짜 dist(WEB_DIST 시험)
@@ -192,6 +203,15 @@ def hdr(hd, k):
     return [v for kk, v in hd if kk == k]
 
 
+NEW_REQ = {"x-agent-auth", "cookie"}   # 새 포털이 일부러 바꾼 도구 쪽 헤더: 서명(X-Agent-Auth)을 붙이고 쿠키는 안 넘김 — '보안' 절에서 따로 확인
+NEW_RESP = {"x-content-type-options", "referrer-policy", "x-frame-options", "content-security-policy"}   # 새 포털이 붙이는 보안 응답 헤더
+
+
+def norm(r):
+    """도구가 받은 요청(_echo) — 일부러 바꾼 헤더를 빼고 비교용으로"""
+    return {**r, "headers": [h for h in r["headers"] if h[0] not in NEW_REQ]} if isinstance(r, dict) and "headers" in r else r
+
+
 # 계정(임시 DB): 가입 → 쿠키
 st, hd, b = req(OLD, "POST", "/api/signup", {"Content-Type": "application/json"}, json.dumps({"id": "tester", "name": "시험", "pin": "1234"}).encode())
 TOK = hdr(hd, "set-cookie")[0].split(";")[0].split("=", 1)[1]
@@ -201,21 +221,21 @@ print("\n## 헤더 규칙 (도구가 받은 헤더 비교)")
 spoof = {**CK, "X-Agent-User": "boss", "X-User": "boss", "X-Forwarded-User": "boss", "Accept-Encoding": "gzip", "X-Custom": "1", "Te": "trailers"}
 ra = json.loads(req(OLD, "GET", "/t/fake-local/echo?q=%2F1", spoof)[2]); rb = json.loads(req(NEW, "GET", "/t/fake-local/echo?q=%2F1", spoof)[2])
 check("사용자 헤더 버림·포털 값(X-Agent-User=tester)", dict(rb["headers"]).get("x-agent-user") == "tester" and "x-user" not in dict(rb["headers"]), str(rb["headers"]))
-check("agsid·agtheme 쿠키는 도구로 안 감, 도구 쿠키는 감", dict(rb["headers"]).get("cookie") == "toolck=keep")
-check("도구가 받은 헤더·경로 같음(old=new)", ra == rb, "" if ra == rb else f"{ra} ≠ {rb}")
+check("쿠키는 도구로 하나도 안 감(예전 포털은 agsid·agtheme 만 빼고 넘김)", "cookie" not in dict(rb["headers"]), str(rb["headers"]), kind="의도한 차이")
+check("도구가 받은 헤더·경로 같음(old=new, 서명·쿠키 빼고)", norm(ra) == norm(rb), "" if norm(ra) == norm(rb) else f"{ra} ≠ {rb}")
 ra = json.loads(req(OLD, "GET", "/t/fake-local/echo")[2]); rb = json.loads(req(NEW, "GET", "/t/fake-local/echo")[2])
-check("서버 안 쿠키 없음(+토큰) → X-Agent-User=owner", dict(rb["headers"]).get("x-agent-user") == "owner" and ra == rb)
+check("서버 안 쿠키 없음(+토큰) → X-Agent-User=owner", dict(rb["headers"]).get("x-agent-user") == "owner" and norm(ra) == norm(rb))
 check("X-Local-Owner 토큰은 도구로 안 감", "x-local-owner" not in dict(rb["headers"]), str(rb["headers"]))
 
 print("\n## 요청 본문")
 body = os.urandom(3 * 1024 * 1024)
 ra = json.loads(req(OLD, "POST", "/t/fake-local/echo", {**CK, "Content-Type": "application/octet-stream"}, body)[2])
 rb = json.loads(req(NEW, "POST", "/t/fake-local/echo", {**CK, "Content-Type": "application/octet-stream"}, body)[2])
-check("Content-Length 본문 3MB 그대로(old=new)", ra == rb and rb["len"] == len(body), f"{rb['len']} {rb['sha']}")
+check("Content-Length 본문 3MB 그대로(old=new)", norm(ra) == norm(rb) and rb["len"] == len(body), f"{rb['len']} {rb['sha']}")
 ra = json.loads(req(OLD, "POST", "/t/fake-local/echo", CK, b"a=1")[2]); rb = json.loads(req(NEW, "POST", "/t/fake-local/echo", CK, b"a=1")[2])
-check("Content-Type 없을 때 기본값 같음", ra == rb, f"{dict(ra['headers']).get('content-type')} / {dict(rb['headers']).get('content-type')}")
+check("Content-Type 없을 때 기본값 같음", norm(ra) == norm(rb), f"{dict(ra['headers']).get('content-type')} / {dict(rb['headers']).get('content-type')}")
 ra = json.loads(req(OLD, "POST", "/t/fake-local/echo", CK, b"")[2]); rb = json.loads(req(NEW, "POST", "/t/fake-local/echo", CK, b"")[2])
-check("빈 POST 같음", ra == rb, "" if ra == rb else f"{ra} ≠ {rb}")
+check("빈 POST 같음", norm(ra) == norm(rb), "" if norm(ra) == norm(rb) else f"{ra} ≠ {rb}")
 sa, _, ba = req(OLD, "POST", "/t/fake-local/echo", {**CK, "Content-Type": "application/octet-stream"}, body[:300000], chunked=True)
 sb, _, bb = req(NEW, "POST", "/t/fake-local/echo", {**CK, "Content-Type": "application/octet-stream"}, body[:300000], chunked=True)
 check("청크 본문: 새 포털은 길이를 붙여 전달(예전 포털은 본문을 버림)", json.loads(bb)["len"] == 300000, f"old len={json.loads(ba)['len']} new len={json.loads(bb)['len']}", kind="의도한 차이")
@@ -232,10 +252,11 @@ print("\n## 응답")
 for path in ("/t/fake-local/", "/t/fake-local/?pet=1", "/t/fake-local/cookies", "/t/fake-local/err", "/t/fake-local/redir", "/t/fake-local/nope", "/t/down-local/", "/t/down-local/api/x",
              "/t/fake-local", "/t/none-local/", "/app/", "/app", "/web/landing.json"):   # /app·/web: WEB_DIST 없으면 예전과 같음
     sa, ha, ba = req(OLD, "GET", path, CK); sb, hb, bb = req(NEW, "GET", path, CK)
-    keep = lambda h: [(k, v) for k, v in h if k not in ("date", "server", "connection", "transfer-encoding", "keep-alive")]
+    keep = lambda h: [(k, v) for k, v in h if k not in ("date", "server", "connection", "transfer-encoding", "keep-alive") and k not in NEW_RESP]
     ba_, bb_ = ba, bb
     if path.endswith("redir"):   # 도구가 받은 헤더 비교(전송 헤더는 _echo 가 뺌)
-        ba_, bb_ = json.loads(ba), json.loads(bb)
+        ba_, bb_ = norm(json.loads(ba)), norm(json.loads(bb))
+        ha, hb = [x for x in ha if x[0] != "content-length"], [x for x in hb if x[0] != "content-length"]   # 본문(받은 헤더)이 서명·쿠키만큼 다름
     check(f"GET {path} 같음 ({sa}/{sb})", sa == sb and ba_ == bb_ and keep(ha) == keep(hb), "" if (sa == sb and ba_ == bb_ and keep(ha) == keep(hb)) else f"{keep(ha)} {ba[:200]!r}\n      ≠ {keep(hb)} {bb[:200]!r}")
 
 req(NEW, "GET", "/t/fake-local/cookies", CK)
@@ -305,15 +326,15 @@ bad = json.dumps({"id": "tester", "pin": "9999"}).encode()
 for i in range(5):
     req(NEW, "POST", "/api/login", {"Content-Type": "application/json"}, bad)
 s6, _, b6 = req(NEW, "POST", "/api/login", {"Content-Type": "application/json"}, json.dumps({"id": "tester", "pin": "1234"}).encode())
-check("5번 틀린 뒤 맞는 PIN 도 잠김", s6 == 400 and "10분" in json.loads(b6)["error"], json.loads(b6)["error"])
+check("5번 틀린 뒤 맞는 PIN 도 잠김 → 429 locked(예전 400)", s6 == 429 and json.loads(b6).get("code") == "locked" and "10분" in json.loads(b6)["error"], json.loads(b6)["error"])
 launch("new2", NEW2)
 s7, _, b7 = req(NEW2, "POST", "/api/login", {"Content-Type": "application/json"}, json.dumps({"id": "tester", "pin": "1234"}).encode())
-check("다른 fastportal 프로세스에서도 잠김(같은 DB)", s7 == 400 and "10분" in json.loads(b7)["error"], kind="의도한 차이")
+check("다른 fastportal 프로세스에서도 잠김(같은 DB)", s7 == 429 and "10분" in json.loads(b7)["error"], kind="의도한 차이")
 s8, _, _ = req(OLD, "POST", "/api/login", {"Content-Type": "application/json"}, json.dumps({"id": "tester", "pin": "1234"}).encode())
 check("예전 포털(메모리)은 모름 → 로그인 됨(참고)", s8 == 200, kind="참고")
 sa, ha, ba = req(OLD, "POST", "/api/login", {"Content-Type": "application/json"}, bad)
 sb, hb, bb = req(NEW, "POST", "/api/login", {"Content-Type": "application/json"}, json.dumps({"id": "nobody", "pin": "9999"}).encode())
-check("틀린 PIN 문구 같음", sa == sb == 400 and json.loads(ba) == json.loads(bb), f"{ba.decode()} / {bb.decode()}")
+check("틀린 PIN 문구 같음(새 포털은 code 를 더 줌)", sa == sb == 400 and json.loads(ba)["error"] == json.loads(bb)["error"] and json.loads(bb).get("code") == "bad_credentials", f"{ba.decode()} / {bb.decode()}")
 
 print("\n## 로컬 주인 판정·프록시 뒤(보안) — 새 포털은 portal.py 와 일부러 다름")
 
@@ -380,7 +401,7 @@ print("\n## 혼합형: tools.json host(다른 컨테이너의 도구)")
 rb = json.loads(req(NEW, "GET", "/t/remote-local/echo?q=1", spoof)[2])
 h = dict(rb["headers"])
 check("host 도구로 프록시(127.0.0.2:포트) + 헤더 규칙 그대로", rb["path"] == "/echo?q=1" and h.get("x-agent-user") == "tester" and "x-user" not in h and "x-forwarded-user" not in h
-      and h.get("cookie") == "toolck=keep" and "x-local-owner" not in h, str(rb["headers"]), kind="설정")
+      and "cookie" not in h and "x-agent-auth" in h and "x-local-owner" not in h, str(rb["headers"]), kind="설정")
 sb, hb, bb = req(NEW, "GET", "/t/remote-local/", CK)
 check("host 도구 첫 화면에도 사용법·테마 붙임", sb == 200 and b"fake tool" in bb and b"data-sig" in bb, f"{sb}", kind="설정")
 tl = {t["dir"]: t for t in json.loads(req(NEW, "GET", "/api/tools", CK)[2])["tools"]}
@@ -831,6 +852,81 @@ st, j, _ = jpost(EXT0, "/api/signup", {"id": "someone", "name": "x", "pin": "123
 check(f"external(설정 없음): 가입 → {st}", st == 403, kind="새 기능")
 bad = subprocess.run([os.path.join(VENV, "bin", "python"), "-c", "import fastportal.app"], cwd=REPO, env={**env, "AUTH_BACKEND": "nope"}, capture_output=True, text=True, timeout=60)
 check("AUTH_BACKEND 틀리면 기동 안 함", bad.returncode != 0 and "AUTH_BACKEND" in bad.stderr, bad.stderr[-200:], kind="새 기능")
+
+print("\n## 보안 — 외부 화면을 붙일 때(새 포털, 예전 포털과 일부러 다름)")
+import hmac as _hm
+KEY = _hm.new(open(SECF).read().strip().encode(), b"portal-proxy", hashlib.sha256).hexdigest()
+rb = json.loads(req(NEW, "GET", "/t/fake-local/echo", CK)[2]); h = dict(rb["headers"])
+ok_sig = bool(h.get("x-agent-auth")) and _hm.compare_digest(h["x-agent-auth"].split(".")[2], _hm.new(KEY.encode(), f"v1|{h['x-agent-auth'].split('.')[1]}|tester".encode(), hashlib.sha256).hexdigest())
+check("도구로 가는 요청에 포털 서명(X-Agent-Auth = HMAC(키, v1|초|사용자))", ok_sig and abs(time.time() - int(h["x-agent-auth"].split(".")[1])) < 60, h.get("x-agent-auth", "")[:20], kind="보안")
+rb = json.loads(req(NEW, "GET", "/t/fake-local/echo", {**CK, "X-Agent-Auth": "v1.1.forged"})[2])
+check("밖에서 보낸 X-Agent-Auth 는 버리고 포털 값으로", dict(rb["headers"]).get("x-agent-auth", "").split(".")[2] != "forged", kind="보안")
+check("도구를 띄울 때 PORTAL_TOOL_KEY 를 넘김(포털 비밀값은 안 넘김)", JE.get("PORTAL_TOOL_KEY") == KEY and not JE.get("PORTAL_JOBS_SECRET"), kind="보안")
+st, hd_, b_ = req(NEW, "GET", "/t/fake-local/agcookie", CK)
+sc = hdr(hd_, "set-cookie")
+check("도구가 포털 쿠키(agsid·AGTHEME)를 덮는 Set-Cookie 는 버림, 다른 쿠키는 그대로", st == 200 and sc == ["c=3; Path=/"], str(sc), kind="보안")
+st, hd_, b_ = req(NEW, "GET", "/t/fake-local/", CK)
+csp = (hdr(hd_, "content-security-policy") or [""])[0]
+check("도구 화면: nosniff·X-Frame-Options·CSP frame-ancestors", hdr(hd_, "x-content-type-options") == ["nosniff"] and hdr(hd_, "x-frame-options") == ["SAMEORIGIN"] and "frame-ancestors 'self'" in csp, csp, kind="보안")
+st, hd_, b_ = req(NEW, "GET", "/t/fake-local/api/doc", CK)
+check("API 가 주는 HTML(사용자 내용)은 CSP sandbox(포털 쿠키·API 에 못 닿음)", (hdr(hd_, "content-security-policy") or [""])[0].startswith("sandbox"), str(hdr(hd_, "content-security-policy")), kind="보안")
+st, hd_, b_ = req(NEW, "GET", "/login", tok=False)
+check("고전 로그인 화면: CSP frame-ancestors·X-Frame-Options", "frame-ancestors" in (hdr(hd_, "content-security-policy") or [""])[0] and hdr(hd_, "x-frame-options") == ["SAMEORIGIN"], kind="보안")
+for m in ("PUT", "DELETE", "PATCH"):
+    st, _, b_ = req(NEW, m, "/t/fake-local/echo?x=1", {**CK, "Content-Type": "application/json"}, b'{"a":1}')
+    j = json.loads(b_) if st == 200 else {}
+    check(f"{m} 도 도구로 프록시(예전 501)", st == 200 and j.get("method") == m and j.get("len") == 7, f"{st}", kind="보안")
+st, hd_, _ = req(NEW, "HEAD", "/t/fake-local/echo", CK)
+check("HEAD 도 프록시", st == 200, f"{st}", kind="보안")
+st, hd_, b_ = req(NEW, "DELETE", "/api/me", CK)
+check("포털 API 에 DELETE → 405 + Allow", st == 405 and hdr(hd_, "allow") == ["GET, POST"], f"{st}", kind="보안")
+st, hd_, b_ = req(NEW, "OPTIONS", "/api/me", {"Origin": "http://evil.example", "Access-Control-Request-Method": "POST"}, tok=False)
+check("OPTIONS: CORS 허용 목록이 비면 CORS 머리 없음(다른 출처 막힘)", st == 204 and not hdr(hd_, "access-control-allow-origin"), f"{st}", kind="보안")
+for name, extra, exp in (("Origin 다른 사이트", {"Origin": "http://evil.example"}, 403), ("Origin null(sandbox)", {"Origin": "null"}, 403),
+                         ("Referer 다른 사이트", {"Referer": "http://evil.example/x"}, 403), ("Sec-Fetch-Site cross-site", {"Sec-Fetch-Site": "cross-site"}, 403),
+                         ("Origin 같은 출처", {"Origin": f"http://127.0.0.1:{NEW}"}, 200), ("헤더 없음(curl·스크립트)", {}, 200)):
+    st, j, _ = jpost(NEW, "/api/account/theme", {"theme": "v2-dark"}, {**CK, **extra}, tok=False)
+    check(f"요청 위조 검사(CSRF) — {name} → {st}", st == exp and (exp != 403 or j.get("code") == "csrf"), str(j)[:80], kind="보안")
+st, j, _ = jpost(NEW, "/api/login", {"id": "tester", "pin": "1234"}, {"Origin": "http://evil.example"}, tok=False)
+check("다른 사이트에서 로그인 POST(로그인 위조) → 403", st == 403, f"{st}", kind="보안")
+st, j, _ = jget(NEW, "/api/version", tok=False) if "jget" in globals() else (0, {}, None)
+check("GET /api/version 로그인 없이(api 계약 버전)", st == 200 and j.get("api") and "auth" in j, str(j)[:120], kind="새 기능")
+st, j, _ = jget(NEW, "/api/landing", tok=False)
+check("GET /api/landing 로그인 없이(WEB_DIST 없어도)", st == 200 and "groups" in j, str(j)[:80], kind="새 기능")
+st, j, hd_ = jpost(NEW, "/api/signup", {"id": "sec1", "name": "보안", "pin": "123456"})
+ck2 = {"Cookie": hdr(hd_, "set-cookie")[0].split(";")[0]}
+st, _, _ = req(NEW, "GET", "/logout", {**ck2, "Sec-Fetch-Site": "cross-site"}, tok=False)
+st2, _, _ = req(NEW, "GET", "/api/me", ck2, tok=False)
+check("다른 사이트 링크로 GET /logout → 로그아웃 안 됨", st == 302 and st2 == 200, f"{st} {st2}", kind="보안")
+st, j, hd_ = jpost(NEW, "/api/logout", {}, ck2, tok=False)
+st2, _, _ = req(NEW, "GET", "/api/me", ck2, tok=False)
+check("POST /api/logout → 200 + 쿠키 지움 + 세션 끝", st == 200 and j.get("ok") and "Max-Age=0" in hdr(hd_, "set-cookie")[0] and st2 == 401, f"{st} {st2}", kind="새 기능")
+st, j, _ = jpost(NEW, "/api/logout", {}, tok=False)
+check("POST /api/logout 로그인 안 돼 있어도 200", st == 200, f"{st}", kind="새 기능")
+st, j, _ = jget(NEW, "/api/account/notices?peek=1", CK, tok=False)
+st2, j2, _ = jpost(NEW, "/api/account/notices", {}, CK, tok=False)
+check("알림: GET ?peek=1(읽음 처리 안 함) · POST(읽음 처리)", st == 200 and st2 == 200 and "notices" in j and "notices" in j2, kind="새 기능")
+st, j, _ = jget(NEW, "/t/hidden-local/echo", CK, tok=False)
+st2, j2, _ = jpost(NEW, "/api/start", {"dir": "hidden-local"}, CK, tok=False)
+st3, _, _ = req(NEW, "GET", "/t/hidden-local/echo")   # 로컬 주인(토큰)
+check("숨긴 도구: 일반 사용자 프록시·시작 → 404, 관리자는 됨", st == 404 and st2 == 404 and st3 == 200, f"{st} {st2} {st3}", kind="보안")
+s_ = socket.create_connection(("127.0.0.1", NEW), 5); t0 = time.time()
+s_.sendall(b"POST /api/post HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n1000\r\n" + b"x" * 4096 + b"\r\n")
+s_.settimeout(5); got = b""
+try:
+    while True:
+        d_ = s_.recv(4096)
+        if not d_:
+            break
+        got += d_
+except socket.timeout:
+    pass
+s_.close()
+check("로그인 안 된 큰(청크) POST → 본문을 기다리지 않고 401 + 연결 닫음", got.startswith(b"HTTP/1.1 401") and b"connection: close" in got.lower() and time.time() - t0 < 4, got[:40].decode(errors="replace"), kind="보안")
+# 접속지 잠금(마지막 — 이 뒤로는 127.0.0.1 로그인이 10분 막힘)
+for i in range(31):
+    st, j, _ = jpost(NEW, "/api/login", {"id": f"nobody{i}", "pin": "000000"}, tok=False)
+check("한 접속지가 아이디를 바꿔 가며 30번 넘게 틀림 → 429 ip_locked", st == 429 and j.get("code") == "ip_locked", str(j)[:80], kind="보안")
 
 if A.slow:
     print("\n## 1분 넘는 POST → /api/events (61초)")

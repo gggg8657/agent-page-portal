@@ -11,9 +11,9 @@ export CUDA_VISIBLE_DEVICES="${AGENT_GPUS:-0,1,2,3}" CUDA_DEVICE_ORDER=PCI_BUS_I
   echo "== $(date '+%F %T') autostart"
   agent-page-portal/scripts/start-portal.sh
   for i in $(seq 60); do curl -s -m 2 localhost:8700/api/tools >/dev/null && break; sleep 1; done
-  LO="X-Local-Owner: $(cat _data/.local_owner_token 2>/dev/null)"   # 포털(FastAPI)은 이 비밀 헤더가 있어야 로컬 주인(PORTAL_LOCAL_OWNER=token) — 값은 출력하지 않음
+  TOKF="${PORTAL_SECRETS_DIR:-${AGENT_DATA:-_data}}/.local_owner_token"   # 포털(FastAPI)은 이 비밀 헤더가 있어야 로컬 주인(PORTAL_LOCAL_OWNER=token) — 값은 출력하지 않음
   python3 -c "import json;[print(t['dir']) for t in json.load(open('agent-page-portal/tools.json'))]" | while read -r d; do
-    [ -d "$d" ] && curl -s -X POST -H "$LO" localhost:8700/api/start -d "{\"dir\":\"$d\"}" >/dev/null && echo "start $d"
+    [ -d "$d" ] && curl -s -X POST -H @<(printf 'X-Local-Owner: %s\n' "$(cat "$TOKF" 2>/dev/null)") localhost:8700/api/start -d "{\"dir\":\"$d\"}" >/dev/null && echo "start $d"   # 헤더는 파일로(-H @) — 토큰이 명령줄(ps)에 안 보이게
   done
   agent-page-portal/scripts/backup.sh && echo "backup → $(tail -1 backup.log)"   # 재시작 직후 한 번(같은 날이면 덮어씀). 매일 03시는 포털이 부름
 } >> autostart.log 2>&1

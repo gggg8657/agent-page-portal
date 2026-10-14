@@ -1,7 +1,9 @@
 """/t/<도구>/… 중계 — httpx.AsyncClient(연결 풀)로 요청·응답 본문을 버퍼링 없이 흘림. 브라우저가 끊으면 도구 쪽 연결도 바로 닫음.
-도구로 보내는 헤더 규칙: 사용자 헤더(X-Agent-User 등)·포털 쿠키(agsid·agtheme)·로컬 주인 토큰은 버리고 포털이 정한 X-Agent-User 를 붙임.
+도구로 보내는 헤더 규칙: 사용자 헤더(X-Agent-User 등)·쿠키(전부 — 도구는 쿠키를 안 씀)·로컬 주인 토큰·서명은 버리고
+포털이 정한 X-Agent-User + 서명(X-Agent-Auth, config.TOOL_AUTH)을 붙임. 모든 메서드(GET·POST·PUT·DELETE·PATCH·HEAD·OPTIONS)를 넘김.
+도구 응답: 포털 쿠키(ag*)를 덮는 Set-Cookie 는 버리고, 보안 헤더(nosniff·frame-ancestors 등)를 붙이고, API 가 주는 HTML·SVG(사용자 내용)는 sandbox 로.
 도구 첫 화면 HTML 에만 사용법(?)·테마·저작자 표기를 끼워 넣음. 오래 걸리는 POST 는 작업 알림(jobs)에 자동 기록."""
-import asyncio, http.cookiejar, re, secrets, sqlite3, time, urllib.parse
+import asyncio, http.cookiejar, os, re, secrets, sqlite3, tempfile, time, urllib.parse
 
 import anyio
 import httpx
@@ -10,10 +12,13 @@ from starlette.responses import Response
 
 from . import config, jobs, pages, tools
 from .config import HOP
-from .ctx import Raw, TooBig, drain, length, read_body, too_big
+from .ctx import Raw, TooBig, drain, length, too_big
 
-DROP_REQ = HOP | {"x-agent-user", "x-forwarded-user", "x-user", "cookie", "x-local-owner"}   # 로컬 주인 토큰은 도구로 넘기지 않음
-AG_COOKIE = re.compile(r"(?:^|;\s*)ag(?:sid|theme)=[^;]*")
+DROP_REQ = HOP | {"x-agent-user", "x-agent-auth", "x-forwarded-user", "x-user", "cookie", "x-local-owner"}   # 로컬 주인 토큰·쿠키·밖에서 온 서명은 도구로 넘기지 않음
+AG_SETCOOKIE = re.compile(rb"^\s*ag", re.I)   # 도구가 포털 쿠키(agsid·agtheme)를 덮지 못하게
+SPOOL_MEM = 8 * 1024 * 1024   # 청크 업로드: 이보다 크면 메모리 대신 디스크 임시 파일에 모음
+# 사용자 내용일 수 있는 문서형 응답(API 가 주는 HTML·SVG·XML) → 별도 출처처럼 격리(sandbox: 스크립트는 돌아도 포털 쿠키·API 에 못 닿음)
+SANDBOX_TYPES = ("text/html", "image/svg+xml", "application/xhtml+xml", "text/xml", "application/xml")
 REDIRECTS = (301, 302, 303, 307, 308)
 CLIENT = {"c": None}
 
@@ -121,7 +126,7 @@ async def _send(method, url, hd, content):
     for hop in range(11):
         r = await cl.send(cl.build_request(method, url, headers=hd, content=content), stream=True)
         loc = r.headers.get("location")
-        if hop < 10 and loc and r.status_code in REDIRECTS and (method == "GET" or (method == "POST" and r.status_code in (301, 302, 303))):
+        if hop < 10 and loc and r.status_code in REDIRECTS and (method in ("GET", "HEAD") or (method == "POST" and r.status_code in (301, 302, 303))):
             nxt = urllib.parse.urljoin(url, loc.replace(" ", "%20"))
             if urllib.parse.urlsplit(nxt)[:2] == origin:
                 await r.aclose()
@@ -143,13 +148,60 @@ def _errname(e):
     return type(e).__name__
 
 
+def response_headers(ctx, r, rest):
+    """도구 응답 머리 → 브라우저로. 포털 쿠키 덮기 차단, 보안 헤더(도구가 이미 정했으면 그대로), 문서형 API 응답은 sandbox"""
+    out = [(b"set-cookie", ctx.setcookie.encode())] if ctx.setcookie else []
+    for k, v in r.headers.raw:
+        kl = k.decode("latin-1").lower()
+        if kl in HOP or (kl == "set-cookie" and AG_SETCOOKIE.match(v)):
+            continue
+        out.append((k, v))
+    have = {k.decode("latin-1").lower() for k, _ in out}
+    ctype = (r.headers.get("content-type") or "").split(";")[0].strip().lower()
+    path = rest.split("?")[0]
+    doc = ctype in SANDBOX_TYPES and (path.startswith("api/") or "attachment" in (r.headers.get("content-disposition") or "").lower() or path == "report")
+    csp = "sandbox allow-scripts allow-popups allow-forms allow-modals allow-downloads" if doc else pages.frame_csp()
+    for k, v in (("x-content-type-options", "nosniff"), ("referrer-policy", "same-origin"),
+                 ("x-frame-options", "SAMEORIGIN" if not config.CORS_ORIGINS else None), ("content-security-policy", csp)):
+        if v and k not in have:
+            out.append((k.encode(), v.encode()))
+    return out
+
+
+async def spool_body(ctx):
+    """청크 본문을 MAX_BODY 까지 받아 (길이, 본문 이터레이터). 8MB 까지는 메모리, 넘으면 디스크 임시 파일(권한 600, 다 보내면 지움)"""
+    f = tempfile.SpooledTemporaryFile(max_size=SPOOL_MEM, dir=config.DATA)
+    n = 0
+    try:
+        async for chunk in ctx.request.stream():
+            n += len(chunk)
+            if n > config.MAX_BODY:
+                await drain(ctx.request, 0)
+                raise TooBig
+            await run_in_threadpool(f.write, chunk)
+    except BaseException:
+        f.close()
+        raise
+    f.seek(0)
+
+    async def it():
+        try:
+            while True:
+                b = await run_in_threadpool(f.read, 1024 * 1024)
+                if not b:
+                    return
+                yield b
+        finally:
+            f.close()
+    return n, it()
+
+
 def upstream_headers(ctx, length_):
     """도구로 보낼 요청 헤더(규칙은 머리말)"""
     hd = [(k.decode("latin-1"), v.decode("latin-1")) for k, v in ctx.request.headers.raw if k.decode("latin-1").lower() not in DROP_REQ]
     hd.append(("X-Agent-User", ctx.agent_user))
-    ck = AG_COOKIE.sub("", ctx.cookie).strip("; ")
-    if ck:
-        hd.append(("Cookie", ck))
+    if config.TOOL_AUTH:
+        hd.append(("X-Agent-Auth", jobs.sign(ctx.agent_user)))
     hd.append(("Accept-Encoding", "identity"))   # 압축 안 받음(portal.py 의 urllib 와 같음) — 첫 화면 HTML 에 끼워 넣어야 하므로
     if length_ is not None:
         hd.append(("Content-Length", str(length_)))
@@ -162,7 +214,7 @@ async def proxy(ctx):
     t0, status = time.time(), [200]
     parts = ctx.raw.split("/", 3)
     t = tools.tool(parts[2]) if len(parts) > 2 else None
-    if not t:
+    if not t or (t.get("hidden") and not config.SHOW_HIDDEN and not ctx.is_owner):   # 숨긴 도구는 관리자만(목록에 없는 도구를 주소로 쓰지 못하게)
         return ctx.send({"error": "unknown tool"}, code=404)
     if len(parts) < 4:
         return ctx.bare(302, [("Location", f"/t/{t['dir']}/")])
@@ -183,13 +235,13 @@ async def proxy(ctx):
             async for chunk in ctx.request.stream():
                 yield chunk
         content, clen = body_iter(), n
-    elif chunked:
+    elif chunked:   # stdlib 도구는 청크 본문을 못 읽음 → 모아서 길이를 붙임(큰 건 디스크에 — 메모리에 600MB 를 쌓지 않게)
         try:
-            content = await read_body(ctx, config.MAX_BODY)
+            clen, content = await spool_body(ctx)
         except TooBig:
             rec(); return too_big(ctx, config.MAX_BODY)
-        clen = len(content) or None
-        content = content or None
+        if not clen:
+            clen, content = None, None
     hd = upstream_headers(ctx, clen)
     host = tools.tool_host(t)
     if not host:   # tools.json 의 host 형식이 틀림 — 엉뚱한 주소로 보내지 않음(값은 응답에 안 넣음)
@@ -203,8 +255,7 @@ async def proxy(ctx):
         rec()
         return ctx.send({"error": f"{t['dir']} 응답 없음 ({_errname(e)}) — 포털에서 '시작'을 누르세요"}, code=502)
     status[0] = r.status_code
-    out = [(b"set-cookie", ctx.setcookie.encode())] if ctx.setcookie else []
-    out += [(k, v) for k, v in r.headers.raw if k.decode("latin-1").lower() not in HOP]
+    out = response_headers(ctx, r, parts[3])
     inject = ctx.method == "GET" and pages.first_html(parts[3]) and "text/html" in (r.headers.get("content-type") or "")
     if inject:   # 도구 첫 화면: 사용법(?) + 테마 + 저작자 표기를 붙임 — 이것만 다 읽어서 고침
         try:

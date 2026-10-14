@@ -18,7 +18,7 @@ env: portal.py 와 같음(PORT 기본 8720, AGENT_DATA, AGENT_OWNERS, TLS_CERT·
      PORTAL_JOBS_SECRET(도구 토큰을 만드는 비밀값 — 없으면 _data/.portal_jobs_secret) PORTAL_JOBS_ALLOW(내부 경로를 더 받을 IP, 쉼표) PORTAL_JOBS_KEEPALIVE(SSE 빈 줄 초, 25)
      (모두 config.py 한곳에서 읽음)
 tools.json 의 "host": 그 도구는 다른 컨테이너·서버(http://<host>:<port>) — 상태 확인·프록시만, 시작·중지는 409"""
-import asyncio, json, os, threading, urllib.parse
+import asyncio, json, os, threading, time, urllib.parse
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -68,7 +68,13 @@ def get_sync(ctx):
     if p == "/api/depts":
         with db.db() as c:
             return ctx.send({"depts": accounts.visible_depts(c)})
-    if p == "/logout":
+    if p == "/api/version":   # 로그인 전에도 — 화면이 이 서버와 맞는 API 계약인지 확인(docs/api/README.md '버전')
+        return ctx.send(version_info())
+    if p == "/api/landing":   # 로그인 전 랜딩의 분류·도구 수(WEB_DIST 와 상관없이 늘)
+        return pages.web_landing(ctx)
+    if p == "/logout":   # 예전 화면용 GET 로그아웃. 다른 사이트에서 건 링크(Sec-Fetch-Site: cross-site)로는 로그아웃하지 않음 — 새 화면은 POST /api/logout
+        if (ctx.headers.get("sec-fetch-site") or "").lower() == "cross-site":
+            return ctx.bare(302, [("Location", "/")])
         sessions.end_session(ctx.cookie)
         return ctx.bare(302, [("Location", "/login"), ("Set-Cookie", sessions.cookie("", 0))])
     if not ctx.auth():
@@ -115,25 +121,71 @@ def get_sync(ctx):
     return pages.home(ctx)
 
 
+_VER = {}
+
+
+def version_info():
+    """GET /api/version — api: 계약 버전(config.API_VERSION, 응답 모양이 바뀌면 올림), build: 포털 저장소 git describe(시작 때 한 번)"""
+    if "build" not in _VER:
+        import subprocess
+        try:
+            _VER["build"] = subprocess.run(["git", "-C", config.ROOT, "describe", "--tags", "--always", "--dirty"], capture_output=True, text=True, timeout=3).stdout.strip() or None
+        except Exception:
+            _VER["build"] = None
+        _VER["build"] = os.environ.get("PORTAL_BUILD") or _VER["build"]
+    return {"api": config.API_VERSION, "build": _VER["build"], "auth": auth_public(), "cors": bool(config.CORS_ORIGINS)}
+
+
 def tools_sync(ctx, up):
     with db.db() as c:
         return ctx.send({"tools": tools.tool_list(c, up, ctx.uid), "rank": tools.user_rank(c), "posts": tools.posts(c, ctx.uid), "me": accounts.me(c, ctx.uid, ctx.uname)})
 
 
 # ── POST ────────────────────────────────────────────────────────────────
+class Busy(Exception):
+    pass
+
+
+_HASH_SLOTS = threading.BoundedSemaphore(config.LOGIN_SLOTS)   # PIN 해시 동시 계산 수(로그인 폭주가 스레드 풀을 다 잡지 않게)
+_SIGNUPS = {}   # 접속지 → 최근 가입 시각들(한 시간에 SIGNUP_PER_IP 번까지)
+SIGNUP_PER_IP = 5
+
+
+def _signup_ok(ip):
+    t = time.time()
+    v = [x for x in _SIGNUPS.get(ip, ()) if x > t - 3600]
+    _SIGNUPS[ip] = v
+    return len(v) < SIGNUP_PER_IP
+
+
 def login_sync(ctx, body):
-    """POST /api/login · /api/signup — 아이디·PIN 확인은 계정 저장소(auth.backend()), 세션·잠금은 포털(sessions)"""
+    """POST /api/login · /api/signup — 아이디·PIN 확인은 계정 저장소(auth.backend()), 세션·잠금은 포털(sessions).
+    오류에는 code(bad_request·bad_credentials·locked·ip_locked·busy·unsupported·unavailable)를 같이 줌 — 화면이 문구가 아니라 code 로 구분"""
     try:
         req = parse_json(body)
     except ValueError:
-        return ctx.send({"error": "요청 본문은 JSON 객체여야 합니다"}, code=400)
+        return ctx.send({"error": "요청 본문은 JSON 객체여야 합니다", "code": "bad_request"}, code=400)
+    if not _HASH_SLOTS.acquire(timeout=10):
+        return ctx.send({"error": "로그인 요청이 몰려 있습니다 — 잠시 뒤 다시 해 주세요", "code": "busy"}, code=429, headers=[("Retry-After", "5")])
+    try:
+        return _login(ctx, req)
+    finally:
+        _HASH_SLOTS.release()
+
+
+def _login(ctx, req):
     b = auth.backend()
+    ip = ctx.client or ""
     uid, pin = b.normalize_id(str(req.get("id", ""))), str(req.get("pin", ""))
     try:
         with db.db() as c:
+            if sessions.ip_limited(c, ip):
+                return ctx.send({"error": "이 접속지에서 로그인을 너무 많이 틀렸습니다. 10분 뒤에 다시 해 주세요", "code": "ip_locked"}, code=429, headers=[("Retry-After", "600")])
             if ctx.p == "/api/signup":
                 if not b.supports_signup:
                     raise auth.Unsupported(b.guide)
+                if not _signup_ok(ip) and not ctx.local_owner():
+                    return ctx.send({"error": "이 접속지에서 가입을 너무 많이 했습니다. 한 시간 뒤에 다시 해 주세요", "code": "rate_limited"}, code=429, headers=[("Retry-After", "3600")])
                 b.check_new(c, uid, str(req.get("name", "")), pin, ctx.local_owner())   # 관리자 아이디 가입은 진짜 로컬(토큰)에서만
                 d = str(req.get("dept") or "")
                 if d and d not in accounts.visible_depts(c):
@@ -141,28 +193,32 @@ def login_sync(ctx, body):
                 b.create_user(c, uid, str(req["name"]).strip()[:40], pin)
                 if d:
                     accounts.new_request(c, uid, "dept_join", d)
+                _SIGNUPS.setdefault(ip, []).append(time.time())
+                accounts.audit(c, uid, "signup", uid, ip)
             else:
-                if sessions.limited(c, uid):
-                    raise ValueError("PIN 을 여러 번 틀렸습니다. 10분 뒤에 다시 해 주세요")
+                if sessions.limited(c, uid, ip):
+                    return ctx.send({"error": "PIN 을 여러 번 틀렸습니다. 10분 뒤에 다시 해 주세요", "code": "locked"}, code=429, headers=[("Retry-After", "600")])
                 local = auth.is_local()
                 user = None if (uid == "owner" and not local) else b.verify(c, uid, pin)   # owner 는 로컬 주인 자리(외부 아이디로 못 씀)
                 if user and not local and not accounts.ensure_profile(c, user):   # 포털에서 비활성·정지한 계정
                     user = None
                 if not user:
-                    sessions.add_fail(uid)
-                    raise ValueError("아이디 또는 PIN 이 틀립니다 (정지된 계정이면 관리자에게)")
-                sessions.clear_fails(c, uid)
+                    sessions.add_fail(uid, ip)
+                    accounts.audit(c, uid, "login_fail", uid, ip)
+                    return ctx.send({"error": "아이디 또는 PIN 이 틀립니다 (정지된 계정이면 관리자에게)", "code": "bad_credentials"}, code=400)
+                sessions.clear_fails(c, uid, ip)
+                accounts.audit(c, user.id, "login", user.id, ip)
                 uid = user.id   # 저장소가 정한 아이디(local 은 같음)
             keep = ctx.p == "/api/signup" or sessions.want_remember(req.get("remember", True))
             tok = sessions.new_session(c, uid, keep)
         return ctx.send({"ok": True, "id": uid}, headers=[("Set-Cookie", sessions.cookie(tok, persist=keep))])
     except auth.Unsupported as e:
-        return ctx.send({"error": str(e), "auth": auth_public()}, code=403)
+        return ctx.send({"error": str(e), "auth": auth_public(), "code": "unsupported"}, code=403)
     except auth.AuthError as e:   # 외부 저장소 장애·미설정 — 상세는 로그에만
         print("auth:", type(e).__name__, e, flush=True)
-        return ctx.send({"error": str(e)}, code=503)
+        return ctx.send({"error": str(e), "code": "unavailable"}, code=503)
     except (ValueError, KeyError) as e:
-        return ctx.send({"error": str(e)}, code=400)
+        return ctx.send({"error": str(e), "code": "bad_request"}, code=400)
 
 
 def auth_public():
@@ -178,8 +234,8 @@ def change_pin(ctx, c, req):
     b = auth.backend()
     if not b.supports_password_change:
         raise auth.Unsupported(b.guide)
-    if sessions.limited(c, ctx.uid) or not b.verify(c, ctx.uid, req.get("pin", "")):
-        sessions.add_fail(ctx.uid)
+    if sessions.limited(c, ctx.uid, ctx.client or "") or not b.verify(c, ctx.uid, req.get("pin", "")):
+        sessions.add_fail(ctx.uid, ctx.client or "")
         raise ValueError("지금 PIN 이 틀립니다 (10분에 5번까지)")
     b.check_secret_rule(req.get("new", ""))
     b.set_password(c, ctx.uid, req["new"])
@@ -187,6 +243,10 @@ def change_pin(ctx, c, req):
     sessions.drop_user_sessions(c, ctx.uid)
     tok = sessions.new_session(c, ctx.uid, keep)
     return ctx.send({"ok": True}, headers=[("Set-Cookie", sessions.cookie(tok, persist=keep))])
+
+
+_STARTING = {}   # 도구 → 마지막으로 시작을 누른 시각
+START_GAP = 60   # 초 — 이 안에 일반 사용자가 다시 시작을 누르면 409(관리자는 바로 다시 띄울 수 있음)
 
 
 def tool_action(ctx, c, path, req):
@@ -199,13 +259,21 @@ def tool_action(ctx, c, path, req):
     elif path in ("/api/start", "/api/stop") and tools.is_remote(t):
         return ctx.send({"error": "다른 컨테이너에서 항상 켜져 있는 도구입니다"}, code=409)
     elif path == "/api/start":
+        if t.get("hidden") and not ctx.is_owner:   # 숨긴 도구는 목록에도 없음 — 일반 사용자는 못 켬
+            return ctx.send({"error": "unknown tool"}, code=404)
         if tools.alive_sync(tools.tool_addr(t)) and not ctx.is_owner:
             return ctx.send({"error": "이미 실행 중입니다"}, code=409)
+        last = _STARTING.get(t["dir"], 0)
+        if time.time() - last < START_GAP and not ctx.is_owner:   # 켜지는 중(모델 적재 등)에 또 누르면 여러 벌이 뜸 — 잠깐 막음
+            return ctx.send({"error": "켜는 중입니다 — 잠시 뒤 다시 확인하세요", "code": "starting"}, code=409)
+        _STARTING[t["dir"]] = time.time()
         tools.start(t, jobs.tool_env(t)); tools.alive_reset()   # 켜짐 캐시 비움 — 다음 /api/tools 가 바로 다시 확인
+        accounts.audit(c, ctx.uid, "tool_start", t["dir"])
     elif path == "/api/stop":
         if not ctx.is_owner:
             return ctx.send({"error": "도구 중지는 관리자만 할 수 있습니다"}, code=403)
-        tools.stop(t); tools.alive_reset()
+        tools.stop(t); tools.alive_reset(); _STARTING.pop(t["dir"], None)
+        accounts.audit(c, ctx.uid, "tool_stop", t["dir"])
     else:
         return ctx.send({"error": "not found"}, code=404)
     return ctx.send({"ok": True})
@@ -244,7 +312,9 @@ def post_sync(ctx, body):
             if path == "/api/tool_add":
                 if not ctx.is_owner:
                     return ctx.send({"error": "앱 등록은 관리자만 할 수 있습니다"}, code=403)
-                return ctx.send(tools.add_tool(req))
+                r = tools.add_tool(req)
+                accounts.audit(c, ctx.uid, "tool_add", str(req.get("dir", "")))
+                return ctx.send(r)
             return tool_action(ctx, c, path, req)
     except PermissionError as e:   # auth.Unsupported(외부 저장소에서 PIN 변경·초기화) 포함
         return ctx.send({"error": str(e)}, code=403)
@@ -255,49 +325,127 @@ def post_sync(ctx, body):
         return ctx.send({"error": str(e) if not isinstance(e, TypeError) else "요청 값 형식이 틀립니다"}, code=400)
 
 
-# ── 진입점: portal.py 의 do_GET·do_POST 와 같은 순서 ────────────────────────
-async def handle(request: Request):
-    ctx = Ctx(request)
+# ── 진입점 ──────────────────────────────────────────────────────────────
+SAFE = ("GET", "HEAD", "OPTIONS")
+METHODS = "GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS"
+
+
+def _netloc(url):
     try:
-        if ctx.method == "GET":
-            r = await run_in_threadpool(get_sync, ctx)
-            if r == "proxy":
-                return await proxy.proxy(ctx)
-            if r == "jobs_stream":
-                return jobs.stream(ctx)
-            if r == "tools":
-                up = await tools.alive_map([tools.tool_addr(t) for t in tools.tools()])
-                return await run_in_threadpool(tools_sync, ctx, up)
-            return r
-        if ctx.method == "POST":
-            if ctx.raw == "/api/internal/jobs":   # 도구 → 포털(쿠키 없음, 접속지 + 도구 토큰)
-                try:
-                    body = await read_body(ctx, 64 * 1024)
-                except TooBig:
-                    return too_big(ctx, 64 * 1024)
-                return await run_in_threadpool(jobs.internal_post, ctx, body)
-            if ctx.raw in ("/api/login", "/api/signup"):
-                try:
-                    body = await read_body(ctx, config.MAX_JSON)
-                except TooBig:
-                    return too_big(ctx, config.MAX_JSON)
-                return await run_in_threadpool(login_sync, ctx, body)
-            if not await run_in_threadpool(ctx.auth):
-                await drain(request, length(ctx) or 0)
-                return ctx.need_login()
-            if ctx.raw.startswith("/t/"):
-                return await proxy.proxy(ctx)
+        u = urllib.parse.urlsplit(url)
+    except ValueError:
+        return None
+    return u.netloc.lower() if u.scheme in ("http", "https") and u.netloc else None
+
+
+def csrf_ok(ctx):
+    """상태를 바꾸는 요청(POST·PUT·DELETE·PATCH)이 우리 화면에서 왔는지 — 요청 위조(CSRF) 방지.
+    브라우저는 이런 요청에 Origin 을 붙임: 요청의 Host 와 같은 출처이거나 config.ALLOWED_ORIGINS 면 통과, 'null'(sandbox·파일)·다른 출처는 거부.
+    Origin 이 없으면 Referer 로, 그것도 없으면 Sec-Fetch-Site 가 cross-site 일 때만 거부(curl·스크립트·도구는 이 헤더들을 안 붙임 → 통과)"""
+    if ctx.method in SAFE:
+        return True
+    host = (ctx.headers.get("host") or "").lower()
+    origin = ctx.headers.get("origin")
+    if origin is not None:
+        return origin.rstrip("/") in config.ALLOWED_ORIGINS or (_netloc(origin) or "\0") == host
+    ref = ctx.headers.get("referer")
+    if ref:
+        n = _netloc(ref)
+        return n == host or any(n == _netloc(o) for o in config.ALLOWED_ORIGINS)
+    return (ctx.headers.get("sec-fetch-site") or "").lower() != "cross-site"
+
+
+def cors_headers(ctx):
+    """다른 출처 화면(config.CORS_ORIGINS)에만 CORS 머리 — 쿠키 포함(credentials). 목록이 비면 아무것도 안 붙음(같은 출처만)"""
+    o = (ctx.headers.get("origin") or "").rstrip("/")
+    if not o or o not in config.CORS_ORIGINS:
+        return []
+    return [(b"access-control-allow-origin", o.encode()), (b"access-control-allow-credentials", b"true"), (b"vary", b"Origin"),
+            (b"access-control-expose-headers", b"Content-Disposition, Content-Length, Retry-After, X-Author")]
+
+
+def preflight(ctx):
+    """OPTIONS: 허용한 다른 출처면 CORS 사전 요청 응답, 아니면 허용 메서드만(브라우저는 CORS 머리가 없으니 막음)"""
+    hd = [("Allow", METHODS)]
+    if cors_headers(ctx):
+        want = ctx.headers.get("access-control-request-headers") or ""
+        ok = ", ".join(h for h in (x.strip() for x in want.split(",")) if h and h.lower() not in ("cookie", "x-agent-user", "x-agent-auth", "x-local-owner"))
+        hd += [("Access-Control-Allow-Methods", METHODS), ("Access-Control-Max-Age", "600")] + ([("Access-Control-Allow-Headers", ok)] if ok else [])
+    return ctx.bare(204, hd)
+
+
+async def _unauth(ctx, request):
+    """로그인 안 된 POST·PUT 등: 작은 본문만 읽어 버리고 401, 크거나 길이를 모르면 읽지 않고 연결을 닫음(느린 업로드로 붙잡지 못하게)"""
+    n = length(ctx)
+    r = ctx.need_login()
+    if n is not None and n <= 64 * 1024:
+        await drain(request, n)
+    else:
+        r.raw_headers.append((b"connection", b"close"))
+    return r
+
+
+async def route(ctx, request):
+    if ctx.method == "OPTIONS":
+        return preflight(ctx)
+    if not csrf_ok(ctx):
+        return ctx.send({"error": "다른 사이트에서 온 요청은 받지 않습니다", "code": "csrf"}, code=403)
+    if ctx.method in ("GET", "HEAD"):
+        r = await run_in_threadpool(get_sync, ctx)
+        if r == "proxy":
+            return await proxy.proxy(ctx)
+        if r == "jobs_stream":
+            return jobs.stream(ctx)
+        if r == "tools":
+            up = await tools.alive_map([tools.tool_addr(t) for t in tools.tools()])
+            return await run_in_threadpool(tools_sync, ctx, up)
+        return r
+    if ctx.method == "POST":
+        if ctx.raw == "/api/internal/jobs":   # 도구 → 포털(쿠키 없음, 접속지 + 도구 토큰)
+            try:
+                body = await read_body(ctx, 64 * 1024)
+            except TooBig:
+                return too_big(ctx, 64 * 1024)
+            return await run_in_threadpool(jobs.internal_post, ctx, body)
+        if ctx.raw in ("/api/login", "/api/signup"):
             try:
                 body = await read_body(ctx, config.MAX_JSON)
             except TooBig:
                 return too_big(ctx, config.MAX_JSON)
-            return await run_in_threadpool(post_sync, ctx, body)
-        return not_implemented(ctx.method)
+            return await run_in_threadpool(login_sync, ctx, body)
+        if ctx.raw == "/api/logout":   # JSON 로그아웃(로그인 안 돼 있어도 200 — 쿠키를 지움)
+            await drain(request, length(ctx) or 0)
+            await run_in_threadpool(sessions.end_session, ctx.cookie)
+            return ctx.send({"ok": True}, headers=[("Set-Cookie", sessions.cookie("", 0))])
+    if ctx.method in ("POST", "PUT", "DELETE", "PATCH"):
+        if not await run_in_threadpool(ctx.auth):
+            return await _unauth(ctx, request)
+        if ctx.raw.startswith("/t/"):
+            return await proxy.proxy(ctx)
+        if ctx.method != "POST":   # 포털 자체 API 는 GET·POST 만
+            await drain(request, length(ctx) or 0)
+            return ctx.send({"error": "이 주소는 GET·POST 만 받습니다", "code": "method_not_allowed"}, code=405, headers=[("Allow", "GET, POST")])
+        try:
+            body = await read_body(ctx, config.MAX_JSON)
+        except TooBig:
+            return too_big(ctx, config.MAX_JSON)
+        return await run_in_threadpool(post_sync, ctx, body)
+    return not_implemented(ctx.method)
+
+
+async def handle(request: Request):
+    ctx = Ctx(request)
+    try:
+        r = await route(ctx, request)
     except ValueError:   # Content-Length 형식 오류 등
-        return ctx.send({"error": "요청 형식이 틀립니다"}, code=400)
+        r = ctx.send({"error": "요청 형식이 틀립니다", "code": "bad_request"}, code=400)
     except Exception as e:   # 예상 못 한 오류: 내부 정보(경로·스택)는 로그에만, 응답은 짧게
         print("error:", ctx.method, ctx.p, type(e).__name__, e, flush=True)
-        return ctx.send({"error": "서버 오류"}, code=500)
+        r = ctx.send({"error": "서버 오류", "code": "server_error"}, code=500)
+    extra = cors_headers(ctx)
+    if extra:
+        r.raw_headers = [(k, v) for k, v in r.raw_headers if k.lower() not in (b"access-control-allow-origin", b"vary")] + extra
+    return r
 
 
 app.add_api_route("/{_path:path}", handle, methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"], include_in_schema=False)

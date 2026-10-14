@@ -23,7 +23,7 @@ AUTO_S = float(os.environ.get("PORTAL_JOBS_AUTO_S", "60"))
 KEEP_DAYS = 30
 STATUSES = ("queued", "running", "done", "failed", "canceled")
 TERMINAL = ("done", "failed", "canceled")
-SECRET_FILE = os.path.join(config.DATA, ".portal_jobs_secret")
+SECRET_FILE = config.secret_file(".portal_jobs_secret")   # PORTAL_SECRETS_DIR(기본 DATA)
 USER_RE = re.compile(r"[A-Za-z0-9_.@-]{1,64}")
 ID_RE = re.compile(r"[A-Za-z0-9_.:-]{1,80}")
 
@@ -55,10 +55,24 @@ def token_for(tool_dir):
     return hmac.new(SECRET, ("portal-jobs:" + tool_dir).encode(), hashlib.sha256).hexdigest()
 
 
+# 도구 서명 키(포털 → 도구 요청의 X-Agent-Auth, 도구 → 도구 호출도 같은 키) — 모든 도구가 같은 값(서로 부르므로). 도구 portal_auth.py 가 확인
+TOOL_KEY = hmac.new(SECRET, b"portal-proxy", hashlib.sha256).hexdigest()
+
+
+def sign(user, now=None):
+    """도구로 가는 요청에 붙일 X-Agent-Auth 값: v1.<초>.HMAC(TOOL_KEY, "v1|<초>|<user>") — portal_auth.verify 와 같은 규칙"""
+    ts = str(int(now if now is not None else time.time()))
+    return f"v1.{ts}." + hmac.new(TOOL_KEY.encode(), f"v1|{ts}|{user}".encode(), hashlib.sha256).hexdigest()
+
+
 def tool_env(t, port=None):
-    """tools.start 가 도구에 넘기는 환경변수. URL 은 PORTAL_JOBS_URL(컨테이너 등) 또는 이 포털의 127.0.0.1:PORT"""
+    """tools.start 가 도구에 넘기는 환경변수. URL 은 PORTAL_JOBS_URL(컨테이너 등) 또는 이 포털의 127.0.0.1:PORT.
+    PORTAL_TOOL_KEY: 도구가 포털 서명만 받게(config.TOOL_AUTH, 기본 켬) — 다른 컨테이너 도구는 `python -m fastportal.jobs toolkey` 값을 env 로"""
     url = os.environ.get("PORTAL_JOBS_URL") or f"http://127.0.0.1:{port or os.environ.get('PORT', '8720')}/api/internal/jobs"
-    return {"PORTAL_JOBS_URL": url, "PORTAL_JOBS_TOKEN": token_for(t["dir"]), "PORTAL_JOBS_TOOL": t["dir"]}
+    env = {"PORTAL_JOBS_URL": url, "PORTAL_JOBS_TOKEN": token_for(t["dir"]), "PORTAL_JOBS_TOOL": t["dir"]}
+    if config.TOOL_AUTH:
+        env["PORTAL_TOOL_KEY"] = TOOL_KEY
+    return env
 
 
 _ALLOW = {"t": 0.0, "v": {}}
@@ -352,6 +366,9 @@ def stream(ctx):
 
 if __name__ == "__main__":   # 다른 컨테이너 도구에 넣을 토큰 만들기(관리자만 — 출력값은 그 컨테이너 환경변수로만, 커밋·로그 금지)
     import sys
+    if len(sys.argv) == 2 and sys.argv[1] == "toolkey":   # 도구 서명 키(PORTAL_TOOL_KEY) — 다른 컨테이너 도구 env 로
+        print(TOOL_KEY)
+        raise SystemExit
     if len(sys.argv) != 3 or sys.argv[1] != "token" or not tools.tool(sys.argv[2]):
-        raise SystemExit("python -m fastportal.jobs token <tools.json 의 dir>")
+        raise SystemExit("python -m fastportal.jobs token <tools.json 의 dir>  |  python -m fastportal.jobs toolkey")
     print(token_for(sys.argv[2]))

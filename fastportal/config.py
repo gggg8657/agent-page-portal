@@ -28,11 +28,49 @@ LOCAL = ("127.0.0.1", "::1")
 _LO = (os.environ.get("PORTAL_LOCAL_OWNER") or "token").strip().lower()
 LOCAL_OWNER_MODE = "0" if _LO in ("0", "off", "no", "false") else "1" if _LO in ("1", "on", "yes", "true") else "token"
 LOCAL_OWNER = LOCAL_OWNER_MODE != "0"
-LOCAL_TOKEN_FILE = os.path.join(DATA, ".local_owner_token")
+LOCAL_TOKEN_NAME = ".local_owner_token"   # 파일은 SECRETS_DIR 에(아래 secret_file)
 # 믿을 프록시 주소(쉼표). 바로 앞 접속이 이 목록일 때만 X-Forwarded-For 를 읽어 실제 클라이언트 주소로 판정(오른쪽부터 믿을 프록시가 아닌 첫 주소).
 # 목록의 프록시를 거쳤는데 X-Forwarded-For 가 없으면 '알 수 없음'(로컬 아님). 목록이 비면 X-Forwarded-For 는 무시(portal.py 와 같음)
 TRUSTED_PROXIES = {x.strip() for x in os.environ.get("TRUSTED_PROXIES", "").split(",") if x.strip()}
 TLS = bool(os.environ.get("TLS_CERT") and os.environ.get("TLS_KEY"))
+
+# ── 비밀 파일 ───────────────────────────────────────────────────────────
+# 로컬 주인 토큰·작업 알림 비밀값을 두는 폴더(PORTAL_SECRETS_DIR, 권한 700). 기본은 예전처럼 DATA(_data) — 운영 스크립트가 _data/.local_owner_token 을 읽으므로.
+# 도구가 DATA 를 같이 붙이는 컨테이너 구성에서는 포털만 붙는 볼륨으로 따로 둘 것(예: /secrets). 따로 정하면 예전 자리(DATA/<이름>)의 파일을 처음 기동 때 옮김
+SECRETS_DIR = os.environ.get("PORTAL_SECRETS_DIR") or DATA
+if SECRETS_DIR != DATA:
+    os.makedirs(SECRETS_DIR, mode=0o700, exist_ok=True)
+    os.chmod(SECRETS_DIR, 0o700)
+
+
+def secret_file(name):
+    """비밀 파일 경로. 예전 자리(DATA/name)에 있고 새 자리에 없으면 옮김(같은 값 그대로 — 스크립트가 읽던 토큰이 바뀌지 않게)"""
+    new, old = os.path.join(SECRETS_DIR, name), os.path.join(DATA, name)
+    if not os.path.exists(new) and os.path.exists(old):
+        try:
+            os.replace(old, new)
+        except OSError:   # 다른 파일시스템(컨테이너 볼륨) — 복사 후 지움
+            import shutil
+            shutil.copy2(old, new); os.remove(old)
+    return new
+
+
+# ── 외부 화면·도구 서명(보안) ────────────────────────────────────────────
+API_VERSION = "2026.10.14"   # 포털 API 계약 버전(GET /api/version) — 응답 모양이 바뀌면 올림(docs/api/README.md '버전')
+# 도구로 가는 요청에 포털 서명(X-Agent-Auth)을 붙이고, 도구를 띄울 때 PORTAL_TOOL_KEY 를 넘김(도구 portal_auth.py 가 확인). 0 이면 끔(옛 도구와 시험용)
+TOOL_AUTH = os.environ.get("PORTAL_TOOL_AUTH", "1") != "0"
+_list = lambda v: {x.strip().rstrip("/") for x in (os.environ.get(v) or "").split(",") if x.strip()}
+# 다른 출처 화면 허용(CORS, 쉼표 — 예: https://front.example.kr). 비면 CORS 헤더를 안 냄(같은 출처만). 쿠키를 보내려면 PORTAL_COOKIE_SAMESITE=None + HTTPS
+CORS_ORIGINS = _list("PORTAL_CORS_ORIGINS")
+# 요청 위조(CSRF) 검사에서 '우리 화면'으로 볼 출처 — 요청의 Host 와 같은 출처 + CORS_ORIGINS + 이 목록(앞단 프록시가 Host 를 바꿀 때)
+ALLOWED_ORIGINS = CORS_ORIGINS | _list("PORTAL_ALLOWED_ORIGINS")
+COOKIE_SAMESITE = (os.environ.get("PORTAL_COOKIE_SAMESITE") or "Lax").strip().capitalize()
+_cs = (os.environ.get("PORTAL_COOKIE_SECURE") or "auto").strip().lower()
+COOKIE_SECURE = TLS if _cs == "auto" else _cs in ("1", "true", "yes", "on")   # 앞단 프록시에서 HTTPS 를 끝내면 1
+if COOKIE_SAMESITE not in ("Lax", "Strict", "None"):
+    raise SystemExit("PORTAL_COOKIE_SAMESITE 는 Lax | Strict | None")
+if COOKIE_SAMESITE == "None" and not COOKIE_SECURE:
+    raise SystemExit("PORTAL_COOKIE_SAMESITE=None 은 HTTPS(TLS_CERT·TLS_KEY 또는 PORTAL_COOKIE_SECURE=1)가 필요합니다 — 브라우저가 Secure 없는 None 쿠키를 버림")
 
 # ── 계정 저장소(auth/) ──────────────────────────────────────────────────
 # AUTH_BACKEND: local(기본 — 포털 내부 DB portal.db 의 users, 임시) | external(챗봇 계정 DB/API — auth/external.py, 아직 틀만)
@@ -42,6 +80,8 @@ AUTH_BACKEND = (os.environ.get("AUTH_BACKEND") or "local").strip()
 # ── 세션·로그인 ─────────────────────────────────────────────────────────
 SESSION_S, SHORT_S = 30 * 86400, 12 * 3600          # 로그인 유지 30일 · 유지 끔 12시간
 FAIL_WINDOW, FAIL_MAX = 600, 5                       # 10분에 5번 틀리면 잠금
+FAIL_IP_MAX = int(os.environ.get("PORTAL_LOGIN_IP_FAILS") or 30)   # 한 접속지가 10분에 이만큼 틀리면 그 접속지의 로그인·가입을 모두 막음(아이디 바꿔 가며 대입·남의 계정 잠그기 방지)
+LOGIN_SLOTS = int(os.environ.get("PORTAL_LOGIN_SLOTS") or 4)       # PIN 해시(PBKDF2)를 동시에 계산하는 수 — 로그인 폭주가 스레드 풀(화면·API)을 다 잡지 않게
 
 # ── 비활성 계정 익명화 정리 ──────────────────────────────────────────────
 ANON_AFTER_DAYS = int(os.environ.get("PORTAL_ANON_AFTER_DAYS") or 365)

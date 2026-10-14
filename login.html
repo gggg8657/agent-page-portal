@@ -190,7 +190,7 @@
 <footer class="lp-foot"><div class="lp-in">%SIG%<a href="/login?next=/guide/agent-portal.pdf#login" title="설명서는 로그인한 사람만 볼 수 있습니다">사용 설명서 PDF(로그인 후)</a><a href="/guide/#licenses">출처·라이선스</a></div></footer>
 <script>
 const q = new URLSearchParams(location.search), raw = q.get('next') || '/';
-const next = /^\/(?![\/\\])/.test(raw) ? raw : '/';   // 같은 사이트 안으로만 (서버 portal.py safe_next 와 같은 규칙)
+const next = /^\/(?![\/\\])/.test(raw) && !/[\x00-\x1f\x7f\\]/.test(raw) ? raw : '/';   // 같은 사이트 안으로만 — 제어 문자(탭 등)·역빗금도 막음(서버 safe_next 와 같은 규칙: /%09/evil → //evil 방지)
 const show = (t, focus = true) => {
   document.querySelectorAll('.lp-tabs button').forEach(b => { b.classList.toggle('on', b.dataset.t === t); b.setAttribute('aria-selected', b.dataset.t === t); });
   document.querySelectorAll('#login form').forEach(f => f.hidden = f.getAttribute('id') !== t);
