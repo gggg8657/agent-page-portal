@@ -597,6 +597,20 @@ def recover():
         c.execute("UPDATE flow_runs SET status='failed', finished=?, error=? WHERE status='running'", (time.time(), "포털이 다시 시작되어 멈췄습니다"))
 
 
+def community(c):
+    """GET /api/flows/stats — 모두의 에이전트 참여 현황(포털 쪽 수만, 개인 내용 없음): 흐름·실행·도구 사용·개발자 등록 도구"""
+    import datetime as _dt
+    week = time.time() - 7 * 86400
+    since = (_dt.datetime.now() - _dt.timedelta(days=7)).isoformat(timespec="seconds")
+    one = lambda q, a=(): (c.execute(q, a).fetchone() or [0])[0] or 0
+    has = lambda t: bool(c.execute("SELECT 1 FROM sqlite_master WHERE name=?", (t,)).fetchone())
+    return {"flows": one("SELECT COUNT(*) FROM flows"), "flow_makers": one("SELECT COUNT(DISTINCT uid) FROM flows"),
+            "flow_runs_7d": one("SELECT COUNT(*) FROM flow_runs WHERE started>=?", (week,)),
+            "tool_opens_7d": one("SELECT COUNT(*) FROM events WHERE kind='open' AND ts>=?", (since,)) if has("events") else 0,
+            "active_users_7d": one("SELECT COUNT(DISTINCT user) FROM events WHERE ts>=?", (since,)) if has("events") else 0,
+            "dev_tools": one("SELECT COUNT(*) FROM dev_submissions WHERE status='approved'") if has("dev_submissions") else 0}
+
+
 # ── 라우팅(app.py 가 부름) ───────────────────────────────────────────────
 def handle_get(ctx, up=None):
     p = ctx.p
@@ -606,6 +620,8 @@ def handle_get(ctx, up=None):
                 return ctx.send(listing(c, ctx.uid))
             if p == "/api/flows/adapters":
                 return ctx.send({"adapters": adapter_list(up)})
+            if p == "/api/flows/stats":
+                return ctx.send(community(c))
             if p.startswith("/api/flows/runs/"):
                 return ctx.send(get_run(c, ctx.uid, p.rsplit("/", 1)[1]))
             return ctx.send(get_flow(c, ctx.uid, p.rsplit("/", 1)[1]))

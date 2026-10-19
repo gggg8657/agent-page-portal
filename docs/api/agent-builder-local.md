@@ -16,7 +16,7 @@ OpenAPI 3.1: [`openapi/agent-builder-local.json`](openapi/agent-builder-local.js
 | GET | `api/agents/{id}` | 상세 | 아니오 | 볼 수 있는 사람(아니면 404) |
 | POST | `api/agents/{id}` | 설정 고치기(자동 저장) | 아니오 | 만든 사람·관리자(403) |
 | POST | `api/agents/{id}/publish` | 게시 — 나만 / 우리 부서(승인 요청) | 아니오 | 만든 사람·관리자 |
-| POST | `api/agents/{id}/duplicate` | 복제(초안·나만) | 아니오 | 만든 사람·관리자 |
+| POST | `api/agents/{id}/duplicate` | 복제(초안·나만, 자료 포함) | 아니오 | 만든 사람·관리자 · 볼 수 있는 부서 공개 에이전트 |
 | POST | `api/agents/{id}/delete` | 지우기(자료·피드백 포함) | 아니오 | 만든 사람·관리자 |
 | POST | `api/agents/{id}/docs` | 자료 올리기 → 읽기·색인 | 예 — **SSE** | 만든 사람·관리자 |
 | POST | `api/agents/{id}/docs/{doc}/delete` | 자료 빼기 | 아니오 | 만든 사람·관리자 |
@@ -102,3 +102,8 @@ OpenAPI 3.1: [`openapi/agent-builder-local.json`](openapi/agent-builder-local.js
 
 ## 화면만의 것
 - 자동 저장(입력 0.7초 뒤 `POST api/agents/{id}`), 여러 파일은 하나씩 차례로 올림, 근거 [n] 누르면 `chunk` 로 패널 표시, 목록 탭 기억(localStorage `abTab`).
+
+## 모두의 에이전트 연동 (2026-10-19)
+- `GET api/stats` — 참여 현황(수만): `{agents, creators, shared, new_7d, asks_7d, top_creators: [{name, dept, agents, uses_7d}]}`. 제작자 순위는 **부서에 공개(승인)한 에이전트만** 셈 — 비공개 에이전트의 제목·내용은 나가지 않음.
+- `POST api/agents/<id>/duplicate` — 내 에이전트뿐 아니라 **내가 볼 수 있는 부서 공개 에이전트**도 내 초안(나만)으로 복제(자료 포함). 볼 수 없으면 404, 공개 안 된 남의 것은 403.
+- 카드(`api/agents`)에 `created`, `dept`(부서 공개 승인이면 그 부서) 추가.

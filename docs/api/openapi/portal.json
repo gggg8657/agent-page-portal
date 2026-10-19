@@ -3440,6 +3440,52 @@
      }
     }
    }
+  },
+  "/api/flows/stats": {
+   "get": {
+    "operationId": "portalFlowStats",
+    "summary": "모두의 에이전트 참여 현황(포털 쪽 수만)",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "저장된 흐름 수·흐름 만든 사람 수·최근 7일 흐름 실행·도구 열기·참여한 사람 수·개발자 등록 도구 수. 이름·내용 없음",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "flows": {
+           "type": "integer"
+          },
+          "flow_makers": {
+           "type": "integer"
+          },
+          "flow_runs_7d": {
+           "type": "integer"
+          },
+          "tool_opens_7d": {
+           "type": "integer"
+          },
+          "active_users_7d": {
+           "type": "integer"
+          },
+          "dev_tools": {
+           "type": "integer"
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "로그인 필요"
+     }
+    }
+   }
   }
  },
  "components": {

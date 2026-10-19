@@ -144,6 +144,14 @@ class FlowsTest(unittest.TestCase):
         self.assertEqual(r["status"], "failed")
         self.assertIn("꺼져 있습니다", r["steps"][0]["error"])
 
+    def test_community_counts_only(self):
+        f = self.save("alice")
+        self.run_flow("alice", f["id"], {"0.body": "a"})
+        with db() as c:
+            st = flows.community(c)
+        self.assertEqual((st["flows"], st["flow_makers"], st["flow_runs_7d"]), (1, 1, 1))
+        self.assertFalse(any(isinstance(v, (str, list, dict)) for v in st.values()), "수만 — 이름·내용 없음")
+
     def test_hidden_tool_not_listed(self):
         self.assertFalse(any(a["tool"] == "persona-local" for a in flows.adapter_list()))
 
