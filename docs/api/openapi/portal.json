@@ -3486,6 +3486,737 @@
      }
     }
    }
+  },
+  "/api/community/summary": {
+   "get": {
+    "operationId": "communitySummary",
+    "summary": "카드용 평균 별점·리뷰 수·열린 요청 수",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "t = 'agent:<id>,tool:<dir>,flow:<id>' (쉼표, 200개까지). 수만 → {summary: {'kind:id': {stars, reviews, requests_open}}}",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·속도 제한)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "볼 수 없는 대상·자기 것 리뷰·남의 글·상태 권한 없음"
+     },
+     "404": {
+      "description": "없음"
+     },
+     "503": {
+      "description": "에이전트 빌더 꺼짐"
+     }
+    },
+    "parameters": [
+     {
+      "name": "t",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/community/reviews": {
+   "get": {
+    "operationId": "communityReviews",
+    "summary": "대상 리뷰",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "볼 수 있는 대상만. {target{kind,id,name,mine}, summary, histogram{1..5}, reviews[{id,name,stars,body,created,updated,mine,hidden}], can_review}. 숨긴 리뷰는 쓴 사람·관리자만",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·속도 제한)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "볼 수 없는 대상·자기 것 리뷰·남의 글·상태 권한 없음"
+     },
+     "404": {
+      "description": "없음"
+     },
+     "503": {
+      "description": "에이전트 빌더 꺼짐"
+     }
+    },
+    "parameters": [
+     {
+      "name": "kind",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/community/requests": {
+   "get": {
+    "operationId": "communityRequests",
+    "summary": "대상의 개선·요청 / 내 요청함",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "kind·id 로 대상 하나, 또는 box=received(내 대상에 온 요청)|sent(내가 쓴 요청). requests[{id,kind,target,target_name?,type,type_label,title,body,status,status_label,note,name,mine,created,votes,voted,can_status,hidden}]",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·속도 제한)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "볼 수 없는 대상·자기 것 리뷰·남의 글·상태 권한 없음"
+     },
+     "404": {
+      "description": "없음"
+     },
+     "503": {
+      "description": "에이전트 빌더 꺼짐"
+     }
+    },
+    "parameters": [
+     {
+      "name": "kind",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "box",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/community/ranking": {
+   "get": {
+    "operationId": "communityRanking",
+    "summary": "이달의 제작자(최근 30일 기여 점수)",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "점수 = 질문 수 + 10×복제당한 수 + 5×받은 리뷰 + 20×반영한 요청. ranking[{name,dept,agents,uses_30d,forks_30d,reviews_30d,stars,done_30d,score}] — 계정 id 없음",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·속도 제한)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "볼 수 없는 대상·자기 것 리뷰·남의 글·상태 권한 없음"
+     },
+     "404": {
+      "description": "없음"
+     },
+     "503": {
+      "description": "에이전트 빌더 꺼짐"
+     }
+    }
+   }
+  },
+  "/api/community/review": {
+   "post": {
+    "operationId": "communityReviewWrite",
+    "summary": "리뷰 쓰기·고치기(대상마다 1개)",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "자기 것 403, 볼 수 없는 대상 403. stars 1~5, body 500자. 10분에 쓰기 20번",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·속도 제한)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "볼 수 없는 대상·자기 것 리뷰·남의 글·상태 권한 없음"
+     },
+     "404": {
+      "description": "없음"
+     },
+     "503": {
+      "description": "에이전트 빌더 꺼짐"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "kind",
+         "id",
+         "stars"
+        ],
+        "properties": {
+         "kind": {
+          "enum": [
+           "agent",
+           "flow",
+           "tool"
+          ]
+         },
+         "id": {
+          "type": "string"
+         },
+         "stars": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+         },
+         "body": {
+          "type": "string",
+          "maxLength": 500
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/community/review/delete": {
+   "post": {
+    "operationId": "communityReviewDelete",
+    "summary": "리뷰 지우기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "쓴 사람·관리자(남의 것 403)",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·속도 제한)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "볼 수 없는 대상·자기 것 리뷰·남의 글·상태 권한 없음"
+     },
+     "404": {
+      "description": "없음"
+     },
+     "503": {
+      "description": "에이전트 빌더 꺼짐"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id"
+        ],
+        "properties": {
+         "id": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/community/review/hide": {
+   "post": {
+    "operationId": "communityReviewHide",
+    "summary": "리뷰 숨기기·풀기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "admin",
+    "description": "관리자만",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·속도 제한)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "볼 수 없는 대상·자기 것 리뷰·남의 글·상태 권한 없음"
+     },
+     "404": {
+      "description": "없음"
+     },
+     "503": {
+      "description": "에이전트 빌더 꺼짐"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id"
+        ],
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "hidden": {
+          "type": "boolean"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/community/request": {
+   "post": {
+    "operationId": "communityRequestWrite",
+    "summary": "개선·요청 쓰기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "type improve|bug|feature, title 80자, body 2000자. 대상 주인에게 작업 알림(tool community)",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·속도 제한)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "볼 수 없는 대상·자기 것 리뷰·남의 글·상태 권한 없음"
+     },
+     "404": {
+      "description": "없음"
+     },
+     "503": {
+      "description": "에이전트 빌더 꺼짐"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "kind",
+         "id",
+         "type",
+         "title"
+        ],
+        "properties": {
+         "kind": {
+          "enum": [
+           "agent",
+           "flow",
+           "tool"
+          ]
+         },
+         "id": {
+          "type": "string"
+         },
+         "type": {
+          "enum": [
+           "improve",
+           "bug",
+           "feature"
+          ]
+         },
+         "title": {
+          "type": "string",
+          "maxLength": 80
+         },
+         "body": {
+          "type": "string",
+          "maxLength": 2000
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/community/request/status": {
+   "post": {
+    "operationId": "communityRequestStatus",
+    "summary": "요청 상태 바꾸기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "open 접수 · review 검토 중 · done 반영됨 · hold 보류. 대상 주인·관리자만(요청자 포함 남은 403). 요청자에게 알림",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·속도 제한)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "볼 수 없는 대상·자기 것 리뷰·남의 글·상태 권한 없음"
+     },
+     "404": {
+      "description": "없음"
+     },
+     "503": {
+      "description": "에이전트 빌더 꺼짐"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id",
+         "status"
+        ],
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "status": {
+          "enum": [
+           "open",
+           "review",
+           "done",
+           "hold"
+          ]
+         },
+         "note": {
+          "type": "string",
+          "maxLength": 300
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/community/request/vote": {
+   "post": {
+    "operationId": "communityRequestVote",
+    "summary": "나도 필요해요(+1)",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "한 사람 1표, 내 요청엔 못 함",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·속도 제한)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "볼 수 없는 대상·자기 것 리뷰·남의 글·상태 권한 없음"
+     },
+     "404": {
+      "description": "없음"
+     },
+     "503": {
+      "description": "에이전트 빌더 꺼짐"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id"
+        ],
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "on": {
+          "type": "boolean"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/community/request/delete": {
+   "post": {
+    "operationId": "communityRequestDelete",
+    "summary": "요청 지우기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "쓴 사람·관리자",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·속도 제한)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "볼 수 없는 대상·자기 것 리뷰·남의 글·상태 권한 없음"
+     },
+     "404": {
+      "description": "없음"
+     },
+     "503": {
+      "description": "에이전트 빌더 꺼짐"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id"
+        ],
+        "properties": {
+         "id": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/community/request/hide": {
+   "post": {
+    "operationId": "communityRequestHide",
+    "summary": "요청 숨기기·풀기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "admin",
+    "description": "관리자만",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·속도 제한)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "볼 수 없는 대상·자기 것 리뷰·남의 글·상태 권한 없음"
+     },
+     "404": {
+      "description": "없음"
+     },
+     "503": {
+      "description": "에이전트 빌더 꺼짐"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id"
+        ],
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "hidden": {
+          "type": "boolean"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
   }
  },
  "components": {

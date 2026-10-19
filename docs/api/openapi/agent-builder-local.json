@@ -2203,6 +2203,17 @@
        "null"
       ],
       "description": "부서 공개(승인)면 그 부서, 아니면 null"
+     },
+     "forks": {
+      "type": "integer",
+      "description": "복제된 수(비공개 복제본 포함, 수만)"
+     },
+     "forked_from": {
+      "type": [
+       "object",
+       "null"
+      ],
+      "description": "복제본이면 원본 {id(볼 수 있을 때만), name, owner_name, at, viewable}"
      }
     }
    },
@@ -2332,6 +2343,21 @@
      },
      "template": {
       "type": "string"
+     },
+     "forks": {
+      "type": "integer",
+      "description": "복제된 수(비공개 복제본 포함, 수만)"
+     },
+     "forked_from": {
+      "type": [
+       "object",
+       "null"
+      ],
+      "description": "복제본이면 원본 {id(볼 수 있을 때만), name, owner_name, at, viewable}"
+     },
+     "forks_list": {
+      "type": "array",
+      "description": "이걸로 만든 에이전트 — 내가 볼 수 있는 복제본만 {id,name,owner_name}"
      }
     }
    },

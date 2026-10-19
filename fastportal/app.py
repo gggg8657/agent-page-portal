@@ -26,7 +26,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from starlette.concurrency import run_in_threadpool
 
-from . import accounts, auth, config, db, devsubmit, dwell, flows, jobs, lists, pages, proxy, sessions, tools, workspace
+from . import accounts, auth, community, config, db, devsubmit, dwell, flows, jobs, lists, pages, proxy, sessions, tools, workspace
 from .config import OWNERS, TLS
 from .ctx import Ctx, TooBig, drain, length, not_implemented, parse_json, read_body, too_big
 
@@ -37,6 +37,7 @@ with db.db() as _c:
     lists.init(_c)   # 계정별 즐겨찾기·최근 사용
     flows.init(_c)   # 모두의 에이전트 — 에이전트 연결(흐름·실행 기록)
     devsubmit.init(_c)   # 모두의 에이전트 — 개발자 역할·제출
+    community.init(_c)   # 모두의 에이전트 — 리뷰·개선 요청·투표
 flows.recover(); devsubmit.recover()
 jobs.load_self_report()
 _AB = auth.backend()   # 계정 저장소(AUTH_BACKEND) — 설정이 틀리면 여기서 멈춤
@@ -100,6 +101,8 @@ def get_sync(ctx):
         return "flow_adapters"
     if p == "/api/flows" or p.startswith("/api/flows/"):   # 모두의 에이전트 — 에이전트 연결(내 흐름만)
         return flows.handle_get(ctx)
+    if p.startswith("/api/community/"):   # 리뷰·요청·기여 순위(볼 수 있는 대상만 — community.target)
+        return community.handle_get(ctx)
     if p == "/api/dev/submissions" or p.startswith("/api/dev/submissions/"):   # 개발자 제출(개발자는 자기 것, 관리자는 전부)
         return devsubmit.handle_get(ctx)
     if p in ("/account", "/approvals", "/admin"):
@@ -317,6 +320,8 @@ def post_sync(ctx, body):
                 return dwell.record(ctx, c, req)
             if ctx.p.startswith("/api/flows/"):
                 return flows.handle_post(ctx, req)
+            if ctx.p.startswith("/api/community/"):
+                return community.handle_post(ctx, req)
             if ctx.p in ("/api/admin/dev/decide", "/api/admin/developer"):
                 return devsubmit.handle_post(ctx, req)
             if path.startswith(("/api/account/", "/api/approvals/", "/api/admin/")):

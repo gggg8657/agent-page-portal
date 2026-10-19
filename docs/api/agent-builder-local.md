@@ -107,3 +107,5 @@ OpenAPI 3.1: [`openapi/agent-builder-local.json`](openapi/agent-builder-local.js
 - `GET api/stats` — 참여 현황(수만): `{agents, creators, shared, new_7d, asks_7d, top_creators: [{name, dept, agents, uses_7d}]}`. 제작자 순위는 **부서에 공개(승인)한 에이전트만** 셈 — 비공개 에이전트의 제목·내용은 나가지 않음.
 - `POST api/agents/<id>/duplicate` — 내 에이전트뿐 아니라 **내가 볼 수 있는 부서 공개 에이전트**도 내 초안(나만)으로 복제(자료 포함). 볼 수 없으면 404, 공개 안 된 남의 것은 403.
 - 카드(`api/agents`)에 `created`, `dept`(부서 공개 승인이면 그 부서) 추가.
+- 복제 기록: 복제본 `agent.json` 의 `forked_from {id, name, owner, at, docs_copied}`. 남의 부서 공개 에이전트를 복제하면 **지시문·설정만** 복사하고 자료 파일은 복사하지 않음(내 것·관리자는 자료까지). 카드·상세에 `forks`(수), `forked_from`(원본 — 볼 수 있을 때만 id), 상세에 `forks_list`(내가 볼 수 있는 복제본만).
+- `api/stats` 를 관리자(포털 서버, X-Agent-User=owner)가 부르면 `creators_detail[{uid, name, dept, agents, uses_30d, forks_30d}]` 이 더 붙음 — 포털 `/api/community/ranking` 이 리뷰·요청과 합쳐 점수를 냄(화면에는 계정 id 안 나감).

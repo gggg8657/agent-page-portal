@@ -125,7 +125,7 @@ def _name(tool_dir):
     return (t or {}).get("name", tool_dir)
 
 
-PORTAL_KINDS = {"flows": "모두의 에이전트 · 연결", "devsubmit": "모두의 에이전트 · 개발자 제출"}
+PORTAL_KINDS = {"flows": "모두의 에이전트 · 연결", "devsubmit": "모두의 에이전트 · 개발자 제출", "community": "모두의 에이전트 · 리뷰·요청"}
 
 
 def public(r, viewer=None, unread=None):
