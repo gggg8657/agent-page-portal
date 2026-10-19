@@ -125,12 +125,16 @@ def _name(tool_dir):
     return (t or {}).get("name", tool_dir)
 
 
+PORTAL_KINDS = {"flows": "모두의 에이전트 · 연결", "devsubmit": "모두의 에이전트 · 개발자 제출"}
+
+
 def public(r, viewer=None, unread=None):
     """화면에 내보내는 모양(link 는 포털 주소 /t/<도구>/…)"""
     d = dict(r)
     link = d.get("link") or "/"
-    return {"id": d["id"], "tool": d["tool"], "name": _name(d["tool"]), "user": d["user"], "title": d["title"] or "", "status": d["status"],
-            "progress": d["progress"], "started": d["started"], "finished": d["finished"], "link": f"/t/{d['tool']}{link}",
+    portal = d["tool"] in PORTAL_KINDS   # 포털 자체 작업(모두의 에이전트 흐름·개발자 제출) — 링크는 포털 화면 주소 그대로
+    return {"id": d["id"], "tool": d["tool"], "name": PORTAL_KINDS[d["tool"]] if portal else _name(d["tool"]), "user": d["user"], "title": d["title"] or "", "status": d["status"],
+            "progress": d["progress"], "started": d["started"], "finished": d["finished"], "link": link if portal else f"/t/{d['tool']}{link}",
             "message": d["message"] or "", "seq": d["seq"], "unread": bool(unread) if unread is not None else d["status"] in TERMINAL}
 
 

@@ -16,7 +16,9 @@ env: portal.py 와 같음(PORT 기본 8720, AGENT_DATA, AGENT_OWNERS, TLS_CERT·
      AUTH_BACKEND(계정 저장소: local 기본 — 포털 내부 DB, 임시 | external — 사내 챗봇 계정 DB, auth/README.md | <모듈>:<클래스>)
      작업 알림 센터(jobs.py): PORTAL_JOBS_AUTO_S(자동 기록 기준 초, 60) PORTAL_JOBS_URL(도구에 넘길 내부 주소, 기본 http://127.0.0.1:PORT/api/internal/jobs)
      PORTAL_JOBS_SECRET(도구 토큰을 만드는 비밀값 — 없으면 _data/.portal_jobs_secret) PORTAL_JOBS_ALLOW(내부 경로를 더 받을 IP, 쉼표) PORTAL_JOBS_KEEPALIVE(SSE 빈 줄 초, 25)
-     (모두 config.py 한곳에서 읽음)
+     모두의 에이전트(flows.py·devsubmit.py): FLOW_RUN_MAX_BYTES(흐름 실행 본문 상한, 40MB) FLOW_MAX_RUNS(포털 전체 동시 흐름, 4)
+     DEVSUBMIT_ZIP_MAX(개발자 zip 상한, 50MB) DEVCHECK_DOCKER_HOST(tcp://127.0.0.1:2375) DEVCHECK_IMAGE(dongjukim/agent-portal:v2) DEVCHECK_PYTHON DEVCHECK_TIMEOUT(180초)
+     (모두 config.py 한곳에서 읽음 — 모두의 에이전트 값은 그 모듈 머리에서)
 tools.json 의 "host": 그 도구는 다른 컨테이너·서버(http://<host>:<port>) — 상태 확인·프록시만, 시작·중지는 409"""
 import asyncio, json, os, threading, time, urllib.parse
 from contextlib import asynccontextmanager
@@ -24,7 +26,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from starlette.concurrency import run_in_threadpool
 
-from . import accounts, auth, config, db, dwell, jobs, lists, pages, proxy, sessions, tools, workspace
+from . import accounts, auth, config, db, devsubmit, dwell, flows, jobs, lists, pages, proxy, sessions, tools, workspace
 from .config import OWNERS, TLS
 from .ctx import Ctx, TooBig, drain, length, not_implemented, parse_json, read_body, too_big
 
@@ -33,6 +35,9 @@ with db.db() as _c:
     jobs.init(_c)   # 작업 알림 센터(jobs 표) — 예전 메모리 EVENTS 를 대체(재시작해도 남음)
     workspace.init(_c)
     lists.init(_c)   # 계정별 즐겨찾기·최근 사용
+    flows.init(_c)   # 모두의 에이전트 — 에이전트 연결(흐름·실행 기록)
+    devsubmit.init(_c)   # 모두의 에이전트 — 개발자 역할·제출
+flows.recover(); devsubmit.recover()
 jobs.load_self_report()
 _AB = auth.backend()   # 계정 저장소(AUTH_BACKEND) — 설정이 틀리면 여기서 멈춤
 if not auth.is_local() and hasattr(_AB, "ready") and not _AB.ready():
@@ -91,6 +96,12 @@ def get_sync(ctx):
             return ctx.send(lists.get(c, ctx.uid))
     if p == "/api/admin/dwell":
         return dwell.report(ctx)
+    if p == "/api/flows/adapters":
+        return "flow_adapters"
+    if p == "/api/flows" or p.startswith("/api/flows/"):   # 모두의 에이전트 — 에이전트 연결(내 흐름만)
+        return flows.handle_get(ctx)
+    if p == "/api/dev/submissions" or p.startswith("/api/dev/submissions/"):   # 개발자 제출(개발자는 자기 것, 관리자는 전부)
+        return devsubmit.handle_get(ctx)
     if p in ("/account", "/approvals", "/admin"):
         return pages.account_page(ctx, p)
     if p == "/api/account" or p.startswith(("/api/account/", "/api/approvals", "/api/admin")):
@@ -304,6 +315,10 @@ def post_sync(ctx, body):
                 return ctx.send(lists.put(c, ctx.uid, req))
             if path == "/api/dwell":
                 return dwell.record(ctx, c, req)
+            if ctx.p.startswith("/api/flows/"):
+                return flows.handle_post(ctx, req)
+            if ctx.p in ("/api/admin/dev/decide", "/api/admin/developer"):
+                return devsubmit.handle_post(ctx, req)
             if path.startswith(("/api/account/", "/api/approvals/", "/api/admin/")):
                 return accounts.manage_post(ctx, c, path, req)
             if path == "/api/post":
@@ -414,6 +429,9 @@ async def route(ctx, request):
         if r == "tools":
             up = await tools.alive_map([tools.tool_addr(t) for t in tools.tools()])
             return await run_in_threadpool(tools_sync, ctx, up)
+        if r == "flow_adapters":
+            up = await tools.alive_map([tools.tool_addr(t) for t in tools.tools()])
+            return await run_in_threadpool(flows.handle_get, ctx, up)
         return r
     if ctx.method == "POST":
         if ctx.raw == "/api/internal/jobs":   # 도구 → 포털(쿠키 없음, 접속지 + 도구 토큰)
@@ -440,6 +458,18 @@ async def route(ctx, request):
         if ctx.method != "POST":   # 포털 자체 API 는 GET·POST 만
             await drain(request, length(ctx) or 0)
             return ctx.send({"error": "이 주소는 GET·POST 만 받습니다", "code": "method_not_allowed"}, code=405, headers=[("Allow", "GET, POST")])
+        if ctx.raw == "/api/dev/submit":   # 개발자 업로드(본문 = zip, 상한 devsubmit.ZIP_MAX) — 권한은 devsubmit.submit 이 확인
+            try:
+                body = await read_body(ctx, devsubmit.ZIP_MAX)
+            except TooBig:
+                return too_big(ctx, devsubmit.ZIP_MAX)
+            return await run_in_threadpool(devsubmit.handle_submit, ctx, body)
+        if ctx.raw == "/api/flows/run":   # 흐름 실행(파일 입력 base64 포함 — 상한 flows.RUN_MAX)
+            try:
+                body = await read_body(ctx, flows.RUN_MAX)
+            except TooBig:
+                return too_big(ctx, flows.RUN_MAX)
+            return await run_in_threadpool(post_sync, ctx, body)
         try:
             body = await read_body(ctx, config.MAX_JSON)
         except TooBig:

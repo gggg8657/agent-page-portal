@@ -37,13 +37,81 @@
     "operationId": "portalDwellRecord",
     "summary": "활성 화면 체류 구간 기록",
     "description": "로그인 계정의 현재 uid로 저장. 화면은 정해진 포털 화면 키 또는 도구 화면이며 초는 1~30초. 중복 (방문 id, 순번)은 무시합니다.",
-    "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["visit", "seq", "screen", "seconds"], "properties": {
-     "visit": {"type": "string", "format": "uuid"}, "seq": {"type": "integer", "minimum": 0},
-     "screen": {"type": "string", "enum": ["home", "all", "fav", "recent", "work", "account", "approvals", "admin", "tool"]},
-     "tool": {"type": "string", "description": "screen=tool 일 때 등록된 도구 dir"}, "seconds": {"type": "integer", "minimum": 1, "maximum": 30}
-    }}}}},
-    "responses": {"200": {"description": "기록됨 또는 중복 구간 무시", "content": {"application/json": {"schema": {"type": "object", "properties": {"ok": {"type": "boolean"}}}}}}, "400": {"description": "값 형식 오류"}, "401": {"description": "로그인 필요"}},
-    "tags": ["portal"]
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "visit",
+         "seq",
+         "screen",
+         "seconds"
+        ],
+        "properties": {
+         "visit": {
+          "type": "string",
+          "format": "uuid"
+         },
+         "seq": {
+          "type": "integer",
+          "minimum": 0
+         },
+         "screen": {
+          "type": "string",
+          "enum": [
+           "home",
+           "all",
+           "fav",
+           "recent",
+           "work",
+           "account",
+           "approvals",
+           "admin",
+           "tool"
+          ]
+         },
+         "tool": {
+          "type": "string",
+          "description": "screen=tool 일 때 등록된 도구 dir"
+         },
+         "seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "기록됨 또는 중복 구간 무시",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "값 형식 오류"
+     },
+     "401": {
+      "description": "로그인 필요"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
    }
   },
   "/api/admin/dwell": {
@@ -53,28 +121,246 @@
     "description": "관리자 전용. days=7|30|90, uid·screen·tool 필터. 활성 체류는 화면별로 필터하며 도구 열기(events)·끝난 작업 실행 시간(jobs)은 화면 필터와 무관하게 계정·도구·기간 필터를 적용해 별도로 제공합니다.",
     "x-permission": "admin",
     "parameters": [
-     {"name": "days", "in": "query", "schema": {"type": "integer", "enum": [7,30,90], "default": 30}},
-     {"name": "uid", "in": "query", "schema": {"type": "string"}},
-     {"name": "screen", "in": "query", "schema": {"type": "string", "enum": ["home", "all", "fav", "recent", "work", "account", "approvals", "admin", "tool"]}},
-     {"name": "tool", "in": "query", "schema": {"type": "string"}}
+     {
+      "name": "days",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "enum": [
+        7,
+        30,
+        90
+       ],
+       "default": 30
+      }
+     },
+     {
+      "name": "uid",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "screen",
+      "in": "query",
+      "schema": {
+       "type": "string",
+       "enum": [
+        "home",
+        "all",
+        "fav",
+        "recent",
+        "work",
+        "account",
+        "approvals",
+        "admin",
+        "tool"
+       ]
+      }
+     },
+     {
+      "name": "tool",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      }
+     }
     ],
-    "responses": {"200": {"description": "집계 결과", "content": {"application/json": {"schema": {"type": "object", "required": ["days", "active_seconds", "visits", "rows", "tool_rows", "daily", "tool_opens", "finished_jobs", "job_runtime_seconds", "screens", "tools"], "properties": {
-     "days": {"type": "integer"}, "from": {"type": "string", "format": "date"}, "to": {"type": "string", "format": "date"},
-     "active_seconds": {"type": "integer"}, "visits": {"type": "integer"}, "tool_opens": {"type": "integer", "description": "도구 열기 버튼을 누른 횟수"},
-     "finished_jobs": {"type": "integer"}, "job_runtime_seconds": {"type": "integer", "description": "끝난 작업의 실제 실행 시간 합계"},
-     "rows": {"type": "array", "items": {"type": "object", "required": ["uid", "name", "screen", "screen_name", "tool", "tool_name", "seconds", "visits", "last"], "properties": {
-      "uid": {"type": "string", "description": "익명화 계정은 deleted-… 아이디"}, "name": {"type": "string"}, "dept": {"type": "string"}, "screen": {"type": "string"}, "screen_name": {"type": "string"},
-      "tool": {"type": "string"}, "tool_name": {"type": "string"}, "seconds": {"type": "integer"}, "visits": {"type": "integer"}, "last": {"type": "string", "format": "date-time"}
-     }}},
-     "tool_rows": {"type": "array", "description": "계정·도구별 활성 체류, 열기 버튼, 완료 작업, 실행 시간(화면 필터와 무관)", "items": {"type": "object", "properties": {
-      "uid": {"type": "string"}, "name": {"type": "string"}, "dept": {"type": "string"}, "tool": {"type": "string"}, "tool_name": {"type": "string"},
-      "active_seconds": {"type": "integer"}, "opens": {"type": "integer"}, "jobs": {"type": "integer"}, "job_seconds": {"type": "integer"}
-     }}},
-     "daily": {"type": "array", "items": {"type": "object", "properties": {"day": {"type": "string", "format": "date"}, "seconds": {"type": "integer"}}}},
-     "screens": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}}}},
-     "tools": {"type": "array", "items": {"type": "object", "properties": {"dir": {"type": "string"}, "name": {"type": "string"}}}}
-    }}}}}, "400": {"description": "필터 형식 오류"}, "403": {"description": "관리자만"}},
-    "tags": ["portal"]
+    "responses": {
+     "200": {
+      "description": "집계 결과",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "days",
+          "active_seconds",
+          "visits",
+          "rows",
+          "tool_rows",
+          "daily",
+          "tool_opens",
+          "finished_jobs",
+          "job_runtime_seconds",
+          "screens",
+          "tools"
+         ],
+         "properties": {
+          "days": {
+           "type": "integer"
+          },
+          "from": {
+           "type": "string",
+           "format": "date"
+          },
+          "to": {
+           "type": "string",
+           "format": "date"
+          },
+          "active_seconds": {
+           "type": "integer"
+          },
+          "visits": {
+           "type": "integer"
+          },
+          "tool_opens": {
+           "type": "integer",
+           "description": "도구 열기 버튼을 누른 횟수"
+          },
+          "finished_jobs": {
+           "type": "integer"
+          },
+          "job_runtime_seconds": {
+           "type": "integer",
+           "description": "끝난 작업의 실제 실행 시간 합계"
+          },
+          "rows": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "required": [
+             "uid",
+             "name",
+             "screen",
+             "screen_name",
+             "tool",
+             "tool_name",
+             "seconds",
+             "visits",
+             "last"
+            ],
+            "properties": {
+             "uid": {
+              "type": "string",
+              "description": "익명화 계정은 deleted-… 아이디"
+             },
+             "name": {
+              "type": "string"
+             },
+             "dept": {
+              "type": "string"
+             },
+             "screen": {
+              "type": "string"
+             },
+             "screen_name": {
+              "type": "string"
+             },
+             "tool": {
+              "type": "string"
+             },
+             "tool_name": {
+              "type": "string"
+             },
+             "seconds": {
+              "type": "integer"
+             },
+             "visits": {
+              "type": "integer"
+             },
+             "last": {
+              "type": "string",
+              "format": "date-time"
+             }
+            }
+           }
+          },
+          "tool_rows": {
+           "type": "array",
+           "description": "계정·도구별 활성 체류, 열기 버튼, 완료 작업, 실행 시간(화면 필터와 무관)",
+           "items": {
+            "type": "object",
+            "properties": {
+             "uid": {
+              "type": "string"
+             },
+             "name": {
+              "type": "string"
+             },
+             "dept": {
+              "type": "string"
+             },
+             "tool": {
+              "type": "string"
+             },
+             "tool_name": {
+              "type": "string"
+             },
+             "active_seconds": {
+              "type": "integer"
+             },
+             "opens": {
+              "type": "integer"
+             },
+             "jobs": {
+              "type": "integer"
+             },
+             "job_seconds": {
+              "type": "integer"
+             }
+            }
+           }
+          },
+          "daily": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "day": {
+              "type": "string",
+              "format": "date"
+             },
+             "seconds": {
+              "type": "integer"
+             }
+            }
+           }
+          },
+          "screens": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "id": {
+              "type": "string"
+             },
+             "name": {
+              "type": "string"
+             }
+            }
+           }
+          },
+          "tools": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "dir": {
+              "type": "string"
+             },
+             "name": {
+              "type": "string"
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "필터 형식 오류"
+     },
+     "403": {
+      "description": "관리자만"
+     }
+    },
+    "tags": [
+     "portal"
+    ]
    }
   },
   "/api/login": {
@@ -2416,6 +2702,744 @@
      }
     }
    }
+  },
+  "/api/flows": {
+   "get": {
+    "operationId": "portalFlows",
+    "summary": "내 흐름·최근 실행 20개",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "모두의 에이전트 — 기존 에이전트 연결. 본인 것만(관리자도 남의 흐름은 못 봄)",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "flows": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/Flow"
+           }
+          },
+          "runs": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/FlowRun"
+           }
+          },
+          "limits": {
+           "type": "object"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류 {error, code: bad_request}"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "권한 없음 {error, code: forbidden} — 남의 흐름·실행 기록, 개발자·관리자 아님"
+     },
+     "404": {
+      "description": "없음"
+     }
+    }
+   }
+  },
+  "/api/flows/adapters": {
+   "get": {
+    "operationId": "portalFlowAdapters",
+    "summary": "연결할 수 있는 단계(어댑터) 목록",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "서버에 정의한 것만 연결 가능(임의 API 호출 불가). 숨긴 도구는 빠짐",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "adapters": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/FlowAdapter"
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류 {error, code: bad_request}"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "권한 없음 {error, code: forbidden} — 남의 흐름·실행 기록, 개발자·관리자 아님"
+     },
+     "404": {
+      "description": "없음"
+     }
+    }
+   }
+  },
+  "/api/flows/{id}": {
+   "get": {
+    "operationId": "portalFlowGet",
+    "summary": "흐름 하나",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Flow"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류 {error, code: bad_request}"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "권한 없음 {error, code: forbidden} — 남의 흐름·실행 기록, 개발자·관리자 아님"
+     },
+     "404": {
+      "description": "없음"
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/flows/runs/{run_id}": {
+   "get": {
+    "operationId": "portalFlowRun",
+    "summary": "실행 기록(진행·결과)",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "실행 중이면 1~2초마다 다시 읽음. 남의 기록 403",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/FlowRun"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류 {error, code: bad_request}"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "권한 없음 {error, code: forbidden} — 남의 흐름·실행 기록, 개발자·관리자 아님"
+     },
+     "404": {
+      "description": "없음"
+     }
+    },
+    "parameters": [
+     {
+      "name": "run_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/flows/save": {
+   "post": {
+    "operationId": "portalFlowSave",
+    "summary": "흐름 저장(id 있으면 고침)",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "단계 2~6개, 계정당 50개",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "flow": {
+           "$ref": "#/components/schemas/Flow"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류 {error, code: bad_request}"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "권한 없음 {error, code: forbidden} — 남의 흐름·실행 기록, 개발자·관리자 아님"
+     },
+     "404": {
+      "description": "없음"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "name",
+         "steps"
+        ],
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "name": {
+          "type": "string",
+          "maxLength": 80
+         },
+         "steps": {
+          "type": "array",
+          "items": {
+           "$ref": "#/components/schemas/FlowStep"
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/flows/delete": {
+   "post": {
+    "operationId": "portalFlowDelete",
+    "summary": "흐름 지우기(실행 기록은 남음)",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류 {error, code: bad_request}"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "권한 없음 {error, code: forbidden} — 남의 흐름·실행 기록, 개발자·관리자 아님"
+     },
+     "404": {
+      "description": "없음"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id"
+        ],
+        "properties": {
+         "id": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/flows/run": {
+   "post": {
+    "operationId": "portalFlowRunStart",
+    "summary": "저장한 흐름 실행 시작",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "포털이 순서대로 도구 API 호출(X-Agent-User = 실행자 + 포털 서명). 사용자당 동시 1개(400), 단계별 시간 제한, 실패 단계에서 멈춤. 진행은 작업 알림(tool `flows`, link `/create?tab=flow&run=<id>`). 본문 상한 FLOW_RUN_MAX_BYTES(기본 40MB, 파일 하나 25MB)",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "run": {
+           "type": "object",
+           "properties": {
+            "id": {
+             "type": "string"
+            },
+            "status": {
+             "type": "string"
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류 {error, code: bad_request}"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "권한 없음 {error, code: forbidden} — 남의 흐름·실행 기록, 개발자·관리자 아님"
+     },
+     "404": {
+      "description": "없음"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id"
+        ],
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "inputs": {
+          "type": "object",
+          "description": "'<단계 번호(0부터)>.<칸 key>' → 글, 파일은 {name, b64}",
+          "additionalProperties": true
+         }
+        }
+       }
+      }
+     }
+    },
+    "x-long-running": true
+   }
+  },
+  "/api/dev/submit": {
+   "post": {
+    "operationId": "portalDevSubmit",
+    "summary": "개발자 업로드(zip)",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "developer",
+    "description": "본문 = zip 바이트(Content-Type application/zip, 상한 DEVSUBMIT_ZIP_MAX 기본 50MB, 파일 2000개·풀린 크기 200MB). zip slip·절대 경로·심볼릭 링크·특수 파일 400. 형식 검사 오류면 status failed, 아니면 sandbox(격리 검증 진행) → review(관리자 승인 대기)",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "submission": {
+           "$ref": "#/components/schemas/DevSubmission"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류 {error, code: bad_request}"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "권한 없음 {error, code: forbidden} — 남의 흐름·실행 기록, 개발자·관리자 아님"
+     },
+     "404": {
+      "description": "없음"
+     },
+     "413": {
+      "description": "zip 이 너무 큼"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/zip": {
+       "schema": {
+        "type": "string",
+        "format": "binary"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/dev/submissions": {
+   "get": {
+    "operationId": "portalDevSubmissions",
+    "summary": "제출 목록",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "developer",
+    "description": "개발자는 자기 것만, 관리자는 전부",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "submissions": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/DevSubmission"
+           }
+          },
+          "developer": {
+           "type": "boolean"
+          },
+          "admin": {
+           "type": "boolean"
+          },
+          "limits": {
+           "type": "object"
+          },
+          "image": {
+           "type": "string"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류 {error, code: bad_request}"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "권한 없음 {error, code: forbidden} — 남의 흐름·실행 기록, 개발자·관리자 아님"
+     },
+     "404": {
+      "description": "없음"
+     }
+    }
+   }
+  },
+  "/api/dev/submissions/{id}": {
+   "get": {
+    "operationId": "portalDevSubmission",
+    "summary": "제출 상세(검사·격리 검증 결과·파일 목록)",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "developer",
+    "description": "제출자·관리자만",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/DevSubmission"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류 {error, code: bad_request}"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "권한 없음 {error, code: forbidden} — 남의 흐름·실행 기록, 개발자·관리자 아님"
+     },
+     "404": {
+      "description": "없음"
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/dev/submissions/{id}/file": {
+   "get": {
+    "operationId": "portalDevSubmissionFile",
+    "summary": "제출 파일 미리보기(글자 200KB)",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "developer",
+    "description": "제출자·관리자만. 폴더 밖 경로·링크는 404",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "path": {
+           "type": "string"
+          },
+          "binary": {
+           "type": "boolean"
+          },
+          "text": {
+           "type": "string"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류 {error, code: bad_request}"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "권한 없음 {error, code: forbidden} — 남의 흐름·실행 기록, 개발자·관리자 아님"
+     },
+     "404": {
+      "description": "없음"
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "path",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/admin/dev/decide": {
+   "post": {
+    "operationId": "portalDevDecide",
+    "summary": "제출 승인·거절",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "admin",
+    "description": "승인: review 상태·형식 오류 없음·(격리 검증 건너뜀이면 confirm_skipped: true) → ~/agent-page/<dir> 설치, tools.json 등록, guides/<dir>.md, 포트 배정(8810~), 포털 서명 모드로 시작. 거절은 note 필수. 모두 감사 기록",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "status": {
+           "type": "string"
+          },
+          "tool": {
+           "type": "object"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류 {error, code: bad_request}"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "권한 없음 {error, code: forbidden} — 남의 흐름·실행 기록, 개발자·관리자 아님"
+     },
+     "404": {
+      "description": "없음"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id",
+         "ok"
+        ],
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "ok": {
+          "type": "boolean"
+         },
+         "note": {
+          "type": "string",
+          "maxLength": 300
+         },
+         "confirm_skipped": {
+          "type": "boolean"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/admin/developer": {
+   "post": {
+    "operationId": "portalDeveloperRole",
+    "summary": "개발자 역할 부여·회수",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "admin",
+    "description": "감사 기록(developer_grant·developer_revoke)",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류 {error, code: bad_request}"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "권한 없음 {error, code: forbidden} — 남의 흐름·실행 기록, 개발자·관리자 아님"
+     },
+     "404": {
+      "description": "없음"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "uid",
+         "op"
+        ],
+        "properties": {
+         "uid": {
+          "type": "string"
+         },
+         "op": {
+          "type": "string",
+          "enum": [
+           "grant",
+           "revoke"
+          ]
+         }
+        }
+       }
+      }
+     }
+    }
+   }
   }
  },
  "components": {
@@ -2616,6 +3640,10 @@
      },
      "onboarded": {
       "type": "boolean"
+     },
+     "developer": {
+      "type": "boolean",
+      "description": "개발자 역할(모두의 에이전트 → 개발자 업로드). 관리자만 부여·회수"
      }
     }
    },
@@ -3176,6 +4204,10 @@
        "null"
       ],
       "description": "익명화한 시각(되돌릴 수 없음 — 이름 '탈퇴한 사용자', 부서·PIN 지움). 없으면 null"
+     },
+     "developer": {
+      "type": "boolean",
+      "description": "개발자 역할"
      }
     }
    },
@@ -3511,6 +4543,411 @@
      },
      "revision": {
       "type": "integer"
+     }
+    }
+   },
+   "FlowField": {
+    "type": "object",
+    "required": [
+     "key",
+     "label",
+     "type"
+    ],
+    "properties": {
+     "key": {
+      "type": "string"
+     },
+     "label": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "text",
+       "textarea",
+       "select",
+       "file"
+      ]
+     },
+     "required": {
+      "type": "boolean"
+     },
+     "main": {
+      "type": "boolean",
+      "description": "앞 단계 결과를 받는 기본 칸"
+     },
+     "options": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "default": {
+      "type": "string"
+     },
+     "accept": {
+      "type": "string"
+     }
+    }
+   },
+   "FlowAdapter": {
+    "type": "object",
+    "required": [
+     "id",
+     "tool",
+     "title",
+     "inputs"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "example": "mail.write"
+     },
+     "tool": {
+      "type": "string"
+     },
+     "tool_name": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "desc": {
+      "type": "string"
+     },
+     "inputs": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/FlowField"
+      }
+     },
+     "heavy": {
+      "type": "boolean",
+      "description": "GPU 사용"
+     },
+     "timeout": {
+      "type": "integer",
+      "description": "단계 시간 제한(초)"
+     },
+     "up": {
+      "type": [
+       "boolean",
+       "null"
+      ],
+      "description": "도구 켜짐"
+     }
+    }
+   },
+   "FlowSource": {
+    "type": "object",
+    "required": [
+     "from"
+    ],
+    "properties": {
+     "from": {
+      "type": "string",
+      "enum": [
+       "prev",
+       "step",
+       "const",
+       "ask"
+      ],
+      "description": "prev 바로 앞 단계 결과 · step 앞 단계 n(0부터) 결과 · const 고정값 · ask 실행 때 입력(파일은 ask 만)"
+     },
+     "step": {
+      "type": "integer"
+     },
+     "value": {
+      "type": "string",
+      "maxLength": 20000
+     }
+    }
+   },
+   "FlowStep": {
+    "type": "object",
+    "required": [
+     "adapter"
+    ],
+    "properties": {
+     "adapter": {
+      "type": "string"
+     },
+     "inputs": {
+      "type": "object",
+      "additionalProperties": {
+       "$ref": "#/components/schemas/FlowSource"
+      },
+      "description": "빠진 칸: main 은 prev(첫 단계는 ask), required 는 ask, default 가 있으면 const, 나머지는 비움"
+     }
+    }
+   },
+   "Flow": {
+    "type": "object",
+    "required": [
+     "id",
+     "name",
+     "steps"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "steps": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/FlowStep"
+      },
+      "minItems": 2,
+      "maxItems": 6
+     },
+     "created": {
+      "type": "string"
+     },
+     "updated": {
+      "type": "string"
+     }
+    }
+   },
+   "FlowStepRun": {
+    "type": "object",
+    "required": [
+     "adapter",
+     "status"
+    ],
+    "properties": {
+     "adapter": {
+      "type": "string"
+     },
+     "tool": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "queued",
+       "running",
+       "done",
+       "failed",
+       "skipped"
+      ]
+     },
+     "started": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "finished": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "text": {
+      "type": "string",
+      "description": "결과 글(10만 자까지)"
+     },
+     "files": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "name": {
+         "type": "string"
+        },
+        "url": {
+         "type": "string",
+         "description": "/t/<도구>/… 내려받기"
+        }
+       }
+      }
+     },
+     "svg": {
+      "type": "string",
+      "description": "chart.suggest 1순위 그래프"
+     },
+     "note": {
+      "type": "string",
+      "description": "단계 메모(판정·변경률·실행한 SQL 등)"
+     },
+     "unchanged": {
+      "type": "boolean",
+      "description": "받은 글을 그대로 돌려줌(바뀐 곳 없음)"
+     },
+     "error": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "msg": {
+      "type": "string",
+      "description": "진행 중 단계 메시지"
+     }
+    }
+   },
+   "FlowRun": {
+    "type": "object",
+    "required": [
+     "id",
+     "flow",
+     "status",
+     "steps"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "flow": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "running",
+       "done",
+       "failed"
+      ]
+     },
+     "started": {
+      "type": "number"
+     },
+     "finished": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "error": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "멈춘 단계와 이유"
+     },
+     "steps": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/FlowStepRun"
+      }
+     }
+    }
+   },
+   "DevSubmission": {
+    "type": "object",
+    "required": [
+     "id",
+     "uid",
+     "dir",
+     "status"
+    ],
+    "additionalProperties": true,
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "uid": {
+      "type": "string"
+     },
+     "dir": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "checking",
+       "sandbox",
+       "review",
+       "failed",
+       "approved",
+       "rejected"
+      ]
+     },
+     "created": {
+      "type": "string"
+     },
+     "updated": {
+      "type": "string"
+     },
+     "size": {
+      "type": "integer"
+     },
+     "nfiles": {
+      "type": "integer"
+     },
+     "errors": {
+      "type": "integer"
+     },
+     "warnings": {
+      "type": "integer"
+     },
+     "sandbox_status": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "enum": [
+       "passed",
+       "failed",
+       "skipped",
+       null
+      ]
+     },
+     "note": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "decided_by": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "port": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "checks": {
+      "type": "object",
+      "description": "상세에만: {errors, warnings, info, meta{title,desc,group,name,usage}}"
+     },
+     "sandbox": {
+      "type": [
+       "object",
+       "null"
+      ],
+      "description": "상세에만: {status, reason, steps[{name, ok, skipped, detail}], log, seconds, image, container}"
+     },
+     "files": {
+      "type": "array",
+      "description": "상세에만",
+      "items": {
+       "type": "object",
+       "properties": {
+        "path": {
+         "type": "string"
+        },
+        "size": {
+         "type": "integer"
+        }
+       }
+      }
      }
     }
    }

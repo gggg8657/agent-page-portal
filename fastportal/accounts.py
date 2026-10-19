@@ -235,7 +235,8 @@ def me(c, uid, uname):
     n = sum(can_decide(c, uid, r) for r in c.execute("SELECT * FROM requests WHERE status='pending'"))
     return {"id": uid, "name": uname, "owner": is_owner, "agent_user": "owner" if is_owner else uid, "role": role(c, uid),
             "dept": u["dept"] if u else "", "dept_pending": pend["dept"] if pend else "", "heads": my_heads(c, uid), "approvals": n,
-            "account": bool(u), "onboarded": bool(u["onboarded"]) if u else True}
+            "account": bool(u), "onboarded": bool(u["onboarded"]) if u else True,
+            "developer": bool(c.execute("SELECT 1 FROM sqlite_master WHERE name='developers'").fetchone() and c.execute("SELECT 1 FROM developers WHERE uid=?", (uid,)).fetchone())}
 
 
 # ── 계정 설정·승인·관리 API (ctx: app.Ctx — send·uid·uname·is_owner·theme) ─────
@@ -267,7 +268,8 @@ def manage_get(ctx, p):
             for r in c.execute("SELECT dept, uid FROM dept_heads"):
                 heads.setdefault(r["uid"], []).append(r["dept"])
             dis = display_ids(c)   # 익명화된 계정은 아이디도 deleted-… 로만 내보냄(감사 기록의 누가·대상 포함)
-            users = [dict(r) | {"id": dis.get(r["id"], r["id"]), "role": "관리자" if r["id"] in OWNERS else "부서장" if r["id"] in heads else "일반", "heads": heads.get(r["id"], [])}
+            devs = {r[0] for r in c.execute("SELECT uid FROM developers")} if c.execute("SELECT 1 FROM sqlite_master WHERE name='developers'").fetchone() else set()
+            users = [dict(r) | {"id": dis.get(r["id"], r["id"]), "developer": r["id"] in devs, "role": "관리자" if r["id"] in OWNERS else "부서장" if r["id"] in heads else "일반", "heads": heads.get(r["id"], [])}
                      for r in c.execute("SELECT id, name, dept, ts, seen, disabled, deactivated, deact_reason, anonymized FROM users ORDER BY ts")]
             depts = [dict(r) | {"members": c.execute("SELECT COUNT(*) FROM users WHERE dept=?", (r["name"],)).fetchone()[0], "heads": heads_of(c, r["name"])}
                      for r in c.execute("SELECT name, hidden, archived FROM depts ORDER BY hidden, name")]
