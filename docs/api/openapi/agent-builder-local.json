@@ -505,6 +505,10 @@
            "mid",
            "long"
           ]
+         },
+         "allow_fork": {
+          "type": "boolean",
+          "description": "다른 사람이 복제(지시문 포함) 허용 — 기본 참. 끄면 남의 duplicate 는 403 '만든 사람이 복제를 허용하지 않았습니다'"
          }
         }
        }
@@ -2214,6 +2218,10 @@
        "null"
       ],
       "description": "복제본이면 원본 {id(볼 수 있을 때만), name, owner_name, at, viewable}"
+     },
+     "allow_fork": {
+      "type": "boolean",
+      "description": "만든 사람이 복제를 허용했는지(기본 참). 지시문 본문은 여전히 만든 사람·관리자·승인자만 봄"
      }
     }
    },
@@ -2358,6 +2366,10 @@
      "forks_list": {
       "type": "array",
       "description": "이걸로 만든 에이전트 — 내가 볼 수 있는 복제본만 {id,name,owner_name}"
+     },
+     "allow_fork": {
+      "type": "boolean",
+      "description": "만든 사람이 복제를 허용했는지(기본 참). 지시문 본문은 여전히 만든 사람·관리자·승인자만 봄"
      }
     }
    },
