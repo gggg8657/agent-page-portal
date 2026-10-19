@@ -169,6 +169,8 @@ const g  = await (await fetch('/t/saju-local/api/graph?dept=' + encodeURICompone
 | `GET /api/dev/submissions` · `/api/dev/submissions/<id>` · `…/<id>/file?path=` | 제출 목록·상세(검사·검증 로그·파일 목록)·파일 미리보기. 개발자는 자기 것만. 목록의 `approve: {enabled, reason}` = 승인 잠금 여부 | 개발자·관리자 |
 | `POST /api/admin/dev/decide` `{id, ok, note?, confirm_skipped?}` | 승인 → 도구 폴더 설치 + tools.json 등록 + guides/<dir>.md + 포트 배정 + 서명 모드 시작 / 거절(사유 필수). 감사 기록. **승인 잠금(임시)**: 업로드 도구의 실행 격리가 끝날 때까지 포털 설정 `PORTAL_DEV_APPROVE=0`(기본)이면 승인(ok=true)은 409 `approve_locked` "실행 격리 준비 중 — 지금은 승인할 수 없습니다". 거절·업로드·형식 검사·격리 검증은 그대로. 풀려면 `PORTAL_DEV_APPROVE=1` 로 포털 재시작 | 관리자 |
 | `POST /api/admin/developer` `{uid, op: grant\|revoke}` | 개발자 역할 부여·회수(`/api/me`·`/api/admin` users 의 `developer`). 감사 기록 | 관리자 |
+| `GET /api/pkg-index?q=` · `/api/pkg-index/check?names=a,b` | **폐쇄망 pip 패키지 찾기**: 이름 접두·부분 일치(PEP 503 정규화, 최대 50개) / 이름별 `{name, found, versions}`. 응답에 목록 `source`·`updated`·`count`, 그리고 포털 설정 `PORTAL_PIP_INDEX_URL` 이 있을 때만 `index_url`(화면이 `pip install --index-url <내부 PyPI 주소> 이름` 안내) | 로그인 |
+| `POST /api/admin/pkg-index?source=<파일 이름>` (본문 = 목록 글자, 8MB) | 폐쇄망 패키지 목록을 통째로 바꿈. 이름만 / `이름==버전` / `이름 버전,버전` / pip list 표 / `pip index versions` 출력을 읽음. 관리자 확인을 본문보다 먼저(아니면 403). 감사 `pkg_index_update`. 포털은 기동할 때 표가 비어 있으면 `_data/pkg-index/*.txt` 의 가장 최근 파일을 읽음. 개발자 업로드 형식 검사가 이 목록으로 requirements*.txt·pyproject.toml·setup.sh 의 pip install 을 확인해 **경고**(목록에 없음 "폐쇄망에서 설치 불가", 없는 버전 "버전 없음", git·URL·로컬 경로 설치) — 목록이 비면 건너뛰고 안내만 | 관리자 |
 
 ### 도구가 작업 상태를 알리는 법(개발 가이드)
 오래 걸리는 작업(대기열·폴링·스트리밍)을 하는 도구는 상태를 포털에 알려 주세요 — 사용자는 다른 화면에 있어도 🔔·토스트·브라우저 알림으로 받고, '결과 보기'로 그 결과 화면에 바로 갑니다.

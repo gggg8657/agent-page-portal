@@ -5,6 +5,7 @@
           _data/dev-submissions/<id>/src/<dir> 에 풀어 둠(폴더 0700).
   형식 검사(서버): <이름>-local 폴더 하나, app.py 또는 setup.sh, README.md, agent.json(title·desc·group·usage), 이름 충돌 없음,
           BIND 0.0.0.0 고정 금지, PORT 환경변수 사용, portal_auth 권장(경고), 위험 패턴(shell=True·eval/exec·pickle.load·os.system·외부 URL) 경고.
+          폐쇄망 pip 목록(pkgindex.scan_tree): requirements*.txt·pyproject.toml·setup.sh 의 pip install — 목록에 없음·없는 버전·git/URL/경로 설치는 경고.
   격리 자가검증: Docker(DEVCHECK_DOCKER_HOST, 기본 tcp://127.0.0.1:2375) — 이름 dongjukim-devcheck-<id>, GPU 없음, --network none,
           CPU·메모리·프로세스 수 상한, 읽기 전용 루트 + /tmp(tmpfs), 권한 모두 뺌, 시간 제한. 안에서: 문법 검사(compile), selftest.py, 서버 띄워 /healthz.
           이미지(DEVCHECK_IMAGE)·Docker 가 없으면 '건너뜀'으로 표시하고 관리자에게 알림.
@@ -13,9 +14,10 @@
   승인: ~/agent-page/<dir> 로 설치 + tools.json 등록(tools.add_tool) + guides/<dir>.md + 포털이 시작(서명 모드 PORTAL_TOOL_KEY). 모두 감사 기록."""
 import io, json, os, re, secrets, shutil, socket, stat, subprocess, threading, time, zipfile
 
-from . import accounts, config, jobs, tools
+from . import accounts, config, jobs, pkgindex, tools
 from .db import db, now
 
+PKG_LIST_MAX = 8 * 1024 * 1024   # 폐쇄망 패키지 목록 파일(pip index 출력 포함) 상한
 ZIP_MAX = int(os.environ.get("DEVSUBMIT_ZIP_MAX", str(50 * 1024 * 1024)))
 FILES_MAX = 2000
 UNZIP_MAX = 200 * 1024 * 1024
@@ -198,13 +200,15 @@ def check_tree(c, sid, top, path, files):
         warn.append("portal_auth 를 쓰지 않습니다 — 포털 서명 확인 없이 열림(권장: portal_auth.install, 포털 sdk/portal_auth.py)")
     elif "portal_auth.py" not in names:
         info.append("portal_auth.py 가 없어 승인 때 포털 sdk 사본을 넣습니다")
+    pw, pi = pkgindex.scan_tree(c, path, names)   # 폐쇄망 pip 목록으로 설치 가능 여부(경고만)
+    warn += pw; info += pi
     if "selftest.py" not in names:
         info.append("selftest.py 가 없습니다 — 있으면 격리 검증에서 실행함")
     info.append(f"파일 {len(files)}개 · {sum(s for _, s in files) // 1024}KB")
     m = {"title": str(meta.get("title") or top)[:60], "desc": str(meta.get("desc") or "")[:200], "group": str(meta.get("group") or "기타")[:20],
          "tags": str(meta.get("tags") or "")[:100] if not isinstance(meta.get("tags"), list) else " ".join(map(str, meta["tags"]))[:100],
          "name": str(meta.get("name") or meta.get("title") or top)[:30], "usage": usage[:20000], "dept": str(meta.get("dept") or "")[:40]}
-    return {"errors": err, "warnings": warn[:40], "info": info, "meta": m}
+    return {"errors": err, "warnings": warn[:60], "info": info, "meta": m}
 
 
 # ── 격리 자가검증 ────────────────────────────────────────────────────────
@@ -505,6 +509,36 @@ def handle_get(ctx):
         return ctx.send({"error": str(e), "code": "forbidden"}, code=403)
     except FileNotFoundError as e:
         return ctx.send({"error": str(e), "code": "not_found"}, code=404)
+
+
+def pkg_get(ctx):
+    """GET /api/pkg-index?q= (최대 50개, 접두·부분 일치) · /api/pkg-index/check?names=a,b — 로그인. 목록 날짜·개수 같이"""
+    import urllib.parse
+    q = urllib.parse.parse_qs(urllib.parse.urlsplit(ctx.raw).query)
+    with db() as c:
+        m = pkgindex.meta(c)
+        if ctx.p == "/api/pkg-index":
+            return ctx.send({**m, "items": pkgindex.search(c, (q.get("q") or [""])[0][:100])})
+        names = [x.strip() for x in ",".join(q.get("names") or []).split(",") if x.strip()][:200]
+        return ctx.send({**m, "results": pkgindex.lookup(c, names)})
+
+
+def pkg_upload(ctx, body):
+    """POST /api/admin/pkg-index?source=<파일 이름> (본문 = 목록 글자) — 관리자. 표를 통째로 바꾸고 감사 기록"""
+    import urllib.parse
+    q = urllib.parse.parse_qs(urllib.parse.urlsplit(ctx.raw).query)
+    src = re.sub(r"[^\w.() -]", "_", (q.get("source") or ["업로드"])[0])[:80] or "업로드"
+    try:
+        entries = pkgindex.parse_list(body.decode("utf-8", errors="replace"))
+    except Exception:
+        entries = {}
+    if not entries:
+        return ctx.send({"error": "패키지 이름을 하나도 읽지 못했습니다 — 한 줄에 하나(이름, 이름==버전, '이름 버전,버전', pip index 출력)", "code": "bad_request"}, code=400)
+    with db() as c:
+        pkgindex.replace(c, entries, src)
+        nv = sum(1 for v in entries.values() if v)
+        accounts.audit(c, ctx.uid, "pkg_index_update", src, f"{len(entries)}개(버전 있음 {nv})")
+        return ctx.send({"ok": True, **pkgindex.meta(c), "with_versions": nv})
 
 
 def handle_submit(ctx, data):

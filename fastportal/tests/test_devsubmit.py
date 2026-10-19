@@ -3,7 +3,7 @@ import io, json, os, stat, tempfile, unittest, zipfile
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from fastportal import config, devsubmit
+from fastportal import config, devsubmit, pkgindex
 from fastportal.db import db
 
 
@@ -29,11 +29,13 @@ class DevSubmitTest(unittest.TestCase):
                   patch.object(devsubmit, "SUB_DIR", os.path.join(self.tmp.name, "subs")),
                   patch.object(config, "BASE", os.path.join(self.tmp.name, "base")),
                   patch.object(devsubmit.tools, "tool", return_value=None), patch.object(devsubmit.tools, "tools", return_value=[{"dir": "sql-local", "port": 8772, "group": "데이터"}]),
-                  patch.object(devsubmit, "_pipeline", lambda *a: None), patch.object(devsubmit, "_notify", lambda *a: None)]
+                  patch.object(devsubmit, "_pipeline", lambda *a: None), patch.object(devsubmit, "_notify", lambda *a: None),
+                  patch.object(pkgindex, "SEED_DIR", os.path.join(self.tmp.name, "no-seed"))]
         self.p.append(patch.object(config, "DEV_APPROVE", True))   # 승인 경로 시험은 잠금을 푼 상태로(잠금은 test_approve_locked)
         for x in self.p: x.start()
         with db() as c:
             devsubmit.init(c)
+            pkgindex.init(c)
             c.execute("CREATE TABLE audit(ts TEXT, actor TEXT, action TEXT, target TEXT, detail TEXT)")
             c.execute("CREATE TABLE users(id TEXT PRIMARY KEY, disabled INTEGER DEFAULT 0)")
             c.executemany("INSERT INTO users(id) VALUES(?)", [("dev",), ("bob",)])
@@ -89,6 +91,19 @@ class DevSubmitTest(unittest.TestCase):
         self.assertIn("shell=True", w); self.assertIn("eval", w); self.assertIn("portal_auth", w)
         nm = {k.replace("hello-local", "Hello"): v for k, v in GOOD.items()}
         self.assertEqual(devsubmit.submit(self.ctx("dev"), mkzip(nm))["status"], "failed", "폴더 이름 규칙")
+
+    def test_pkg_warnings_in_checks(self):
+        s = devsubmit.submit(self.ctx("dev"), mkzip(GOOD))
+        self.assertTrue(any("폐쇄망 패키지 목록이 아직 없어" in x for x in s["checks"]["info"]), "목록이 비면 안내만")
+        with db() as c:
+            pkgindex.replace(c, {"fastapi": {"0.110.0"}}, "t.txt")
+            c.execute("UPDATE dev_submissions SET status='review'")
+        g = {k.replace("hello-local", "pkgs-local"): v for k, v in GOOD.items()}
+        g["pkgs-local/requirements.txt"] = "fastapi==0.99\nnot-in-closed\ngit+https://example.invalid/x.git\n"
+        s = devsubmit.submit(self.ctx("dev"), mkzip(g))
+        w = " | ".join(s["checks"]["warnings"])
+        self.assertEqual(s["status"], "sandbox", "패키지 문제는 경고(오류 아님)")
+        self.assertIn("버전 없음: fastapi==0.99", w); self.assertIn("폐쇄망에서 설치 불가: not-in-closed", w); self.assertIn("git", w)
 
     def test_precheck_before_body(self):
         sent = []

@@ -99,6 +99,9 @@ ALIVE_TTL = float(os.environ.get("TOOLS_ALIVE_TTL", "5"))  # 도구 켜짐 확�
 # 0(기본) = 잠금 — /api/admin/dev/decide 의 승인(ok=true)은 409. 거절·업로드·형식 검사·격리 검증은 그대로. 1 = 승인 허용
 DEV_APPROVE = os.environ.get("PORTAL_DEV_APPROVE", "0") == "1"
 
+# 폐쇄망 내부 PyPI 주소(pkgindex.py) — 있을 때만 화면에 'pip install --index-url <주소> 이름' 안내. 기본 빈 값(주소는 코드·문서에 쓰지 않음)
+PIP_INDEX_URL = os.environ.get("PORTAL_PIP_INDEX_URL", "").strip()
+
 # ── 본문·프록시 ─────────────────────────────────────────────────────────
 MAX_BODY = int(os.environ.get("PORTAL_MAX_BODY", str(600 * 1024 * 1024)))   # 보안 설계서 '포털 업로드 상한' 제안값(meeting 음성 500MB 포함)
 MAX_JSON = int(os.environ.get("PORTAL_MAX_JSON", str(1024 * 1024)))

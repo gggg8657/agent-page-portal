@@ -3390,6 +3390,234 @@
     }
    }
   },
+  "/api/pkg-index": {
+   "get": {
+    "operationId": "portalPkgIndexSearch",
+    "summary": "폐쇄망 pip 패키지 찾기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "이름 접두 일치 먼저, 그다음 부분 일치(PEP 503 정규화). 최대 50개",
+    "parameters": [
+     {
+      "name": "q",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "count": {
+           "type": "integer"
+          },
+          "source": {
+           "type": "string",
+           "description": "목록 파일 이름"
+          },
+          "updated": {
+           "type": "string",
+           "description": "목록을 넣은 시각"
+          },
+          "index_url": {
+           "type": "string",
+           "description": "PORTAL_PIP_INDEX_URL(없으면 \"\") — 있을 때만 설치 안내"
+          },
+          "items": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "name": {
+              "type": "string"
+             },
+             "versions": {
+              "type": [
+               "array",
+               "null"
+              ],
+              "items": {
+               "type": "string"
+              }
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "로그인 필요"
+     }
+    }
+   }
+  },
+  "/api/pkg-index/check": {
+   "get": {
+    "operationId": "portalPkgIndexCheck",
+    "summary": "폐쇄망 pip 패키지 여러 개 확인",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "parameters": [
+     {
+      "name": "names",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      },
+      "description": "쉼표로 구분(최대 200개)"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "count": {
+           "type": "integer"
+          },
+          "source": {
+           "type": "string",
+           "description": "목록 파일 이름"
+          },
+          "updated": {
+           "type": "string",
+           "description": "목록을 넣은 시각"
+          },
+          "index_url": {
+           "type": "string",
+           "description": "PORTAL_PIP_INDEX_URL(없으면 \"\") — 있을 때만 설치 안내"
+          },
+          "results": {
+           "type": "object",
+           "additionalProperties": {
+            "type": "object",
+            "properties": {
+             "name": {
+              "type": "string"
+             },
+             "found": {
+              "type": "boolean"
+             },
+             "versions": {
+              "type": [
+               "array",
+               "null"
+              ],
+              "items": {
+               "type": "string"
+              }
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "로그인 필요"
+     }
+    }
+   }
+  },
+  "/api/admin/pkg-index": {
+   "post": {
+    "operationId": "portalPkgIndexUpload",
+    "summary": "폐쇄망 pip 패키지 목록 올리기(통째로 바꿈)",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "admin",
+    "description": "본문 = 목록 글자(8MB). 이름만 / 이름==버전 / '이름 버전,버전' / pip list 표 / pip index versions 출력. 관리자 확인을 본문보다 먼저. 감사 pkg_index_update",
+    "parameters": [
+     {
+      "name": "source",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string"
+      },
+      "description": "목록 파일 이름(표시용)"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "text/plain": {
+       "schema": {
+        "type": "string"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "count": {
+           "type": "integer"
+          },
+          "source": {
+           "type": "string",
+           "description": "목록 파일 이름"
+          },
+          "updated": {
+           "type": "string",
+           "description": "목록을 넣은 시각"
+          },
+          "index_url": {
+           "type": "string",
+           "description": "PORTAL_PIP_INDEX_URL(없으면 \"\") — 있을 때만 설치 안내"
+          },
+          "with_versions": {
+           "type": "integer"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "이름을 하나도 못 읽음 {error, code: bad_request}"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "관리자 아님 — 본문을 읽기 전에"
+     },
+     "413": {
+      "description": "8MB 초과"
+     }
+    }
+   }
+  },
   "/api/admin/developer": {
    "post": {
     "operationId": "portalDeveloperRole",
