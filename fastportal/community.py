@@ -117,12 +117,13 @@ def target(ctx, kind, tid):
         raise ValueError("kind 는 agent|flow|tool, id 는 글")
     if kind == "tool":
         t = tools.tool(tid) if TOOL_RE.fullmatch(tid) else None
-        if not t or (t.get("hidden") and not ctx.is_owner):
+        if not t or t.get("hidden"):   # 숨긴 도구는 관리자도 리뷰·요청 대상이 아님
             raise PermissionError("볼 수 없는 도구입니다")
         author = str(t.get("author") or "")
         with db() as c:
             owner = author if author and c.execute("SELECT 1 FROM users WHERE id=?", (author,)).fetchone() else None
-        return {"kind": kind, "id": tid, "name": t.get("name") or tid, "owner": owner, "mine": bool(owner) and owner == ctx.uid}
+        # 도구 주인 = 관리자 전원(+ tools.json author 가 포털 계정이면 그 계정). owner 열에는 author 계정(없으면 None) — 관리자는 늘 상태를 바꿀 수 있음
+        return {"kind": kind, "id": tid, "name": t.get("name") or tid, "owner": owner, "mine": bool(owner) and owner == ctx.uid, "admin_owned": True}
     if kind == "flow":
         if not FLOW_RE.fullmatch(tid):
             raise ValueError("흐름 id 형식")
@@ -202,8 +203,9 @@ def requests_box(ctx, box):
     """내 에이전트 탭: received(내 대상에 온 요청 — 숨김 제외) · sent(내가 쓴 요청)"""
     with db() as c:
         names = _names(c)
-        if box == "received":
-            rows = c.execute("SELECT * FROM requests_fb WHERE owner=? AND hidden=0 ORDER BY CASE status WHEN 'open' THEN 0 WHEN 'review' THEN 1 ELSE 2 END, created DESC LIMIT 200", (ctx.uid,)).fetchall()
+        if box == "received":   # 관리자는 도구 요청 전부(도구 주인 = 관리자)도 받음
+            rows = c.execute("SELECT * FROM requests_fb WHERE (owner=? OR (? AND kind='tool')) AND (hidden=0 OR ?) ORDER BY CASE status WHEN 'open' THEN 0 WHEN 'review' THEN 1 ELSE 2 END, created DESC LIMIT 200",
+                             (ctx.uid, int(bool(ctx.is_owner)), int(bool(ctx.is_owner)))).fetchall()
         elif box == "sent":
             rows = c.execute("SELECT * FROM requests_fb WHERE uid=? ORDER BY created DESC LIMIT 200", (ctx.uid,)).fetchall()
         else:
@@ -304,10 +306,14 @@ def write_request(ctx, req):
         c.execute("INSERT INTO requests_fb(id, kind, target, uid, owner, type, title, body, status, created, updated) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                   (rid, kind, tid, ctx.uid, tg["owner"], typ, title, body, "open", now(), now()))
         accounts.audit(c, ctx.uid, "request_write", f"{kind}:{tid}", f"#{rid} {REQ_TYPES[typ]}")
+    # 받는 사람: 대상 주인(author 계정) + 도구·주인 없는 대상은 관리자 알림함. 관리자 계정은 모두 'owner' 알림함 하나로(두 번 안 감), 보낸 사람 자신은 뺌
+    to = set()
     if tg["owner"] and tg["owner"] != ctx.uid:
-        _notify(tg["owner"], rid, "done", f"새 {REQ_TYPES[typ]} 요청: {tg['name']}", title)
-    elif not tg["owner"]:
-        _notify("owner", rid, "done", f"새 {REQ_TYPES[typ]} 요청(주인 없음): {tg['name']}", title)
+        to.add("owner" if accounts.is_admin(tg["owner"]) else tg["owner"])
+    if (tg.get("admin_owned") or not tg["owner"]) and not ctx.is_owner:
+        to.add("owner")
+    for u in to:
+        _notify(u, rid, "done", f"새 {REQ_TYPES[typ]} 요청: {tg['name']}", title)
     return {"ok": True, "id": rid}
 
 

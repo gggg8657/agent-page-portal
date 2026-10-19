@@ -48,8 +48,9 @@ class CommunityTest(unittest.TestCase):
     def test_visibility_and_own(self):
         with self.assertRaises(PermissionError):
             community.write_review(ctx("alice"), {"kind": "tool", "id": "sql-local", "stars": 5})   # 자기 도구
-        with self.assertRaises(PermissionError):
-            community.write_review(ctx("bob"), {"kind": "tool", "id": "secret-local", "stars": 5})   # 숨긴 도구
+        for who in (ctx("bob"), ctx("owner", True)):   # 숨긴 도구는 관리자도 403
+            with self.assertRaises(PermissionError):
+                community.write_review(who, {"kind": "tool", "id": "secret-local", "stars": 5})
         with self.assertRaises(PermissionError):
             community.write_review(ctx("bob"), {"kind": "flow", "id": "flow123456", "stars": 5})   # 남의 흐름(공유 전)
         with self.assertRaises(PermissionError):
@@ -85,7 +86,11 @@ class CommunityTest(unittest.TestCase):
 
     def test_requests_status_votes_notify(self):
         r = community.write_request(ctx("bob"), {"kind": "tool", "id": "sql-local", "type": "bug", "title": "표가 잘림", "body": "500행"})
-        self.assertEqual(self.sent[-1][0], "alice", "대상 주인에게 알림")
+        self.assertEqual(sorted(x[0] for x in self.sent), ["alice", "owner"], "도구 요청 → author 계정 + 관리자 알림함")
+        adm = community.requests_box(ctx("owner", True), "received")["requests"]
+        self.assertEqual([x["id"] for x in adm], [r["id"]], "관리자는 도구 요청을 받은 요청에서 봄")
+        community.set_status(ctx("owner", True), {"id": r["id"], "status": "review"})
+        self.assertEqual(self.sent[-1][0], "bob")
         with self.assertRaises(PermissionError):
             community.set_status(ctx("bob"), {"id": r["id"], "status": "done"})   # 요청자도 상태는 못 바꿈
         with self.assertRaises(PermissionError):
