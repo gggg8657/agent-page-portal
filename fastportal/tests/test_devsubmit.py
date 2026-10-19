@@ -30,6 +30,7 @@ class DevSubmitTest(unittest.TestCase):
                   patch.object(config, "BASE", os.path.join(self.tmp.name, "base")),
                   patch.object(devsubmit.tools, "tool", return_value=None), patch.object(devsubmit.tools, "tools", return_value=[{"dir": "sql-local", "port": 8772, "group": "데이터"}]),
                   patch.object(devsubmit, "_pipeline", lambda *a: None), patch.object(devsubmit, "_notify", lambda *a: None)]
+        self.p.append(patch.object(config, "DEV_APPROVE", True))   # 승인 경로 시험은 잠금을 푼 상태로(잠금은 test_approve_locked)
         for x in self.p: x.start()
         with db() as c:
             devsubmit.init(c)
@@ -88,6 +89,29 @@ class DevSubmitTest(unittest.TestCase):
         self.assertIn("shell=True", w); self.assertIn("eval", w); self.assertIn("portal_auth", w)
         nm = {k.replace("hello-local", "Hello"): v for k, v in GOOD.items()}
         self.assertEqual(devsubmit.submit(self.ctx("dev"), mkzip(nm))["status"], "failed", "폴더 이름 규칙")
+
+    def test_precheck_before_body(self):
+        sent = []
+        mk = lambda uid: SimpleNamespace(uid=uid, agent_user=uid, is_owner=False, send=lambda d, code=200: sent.append((code, d)) or (code, d))
+        self.assertEqual(devsubmit.precheck(mk("bob"))[0], 403, "개발자 아님 → 본문 전에 403")
+        self.assertIsNone(devsubmit.precheck(mk("dev")))
+        devsubmit.submit(self.ctx("dev"), mkzip(GOOD))   # 검사 중(sandbox) 제출이 생김
+        self.assertEqual(devsubmit.precheck(mk("dev"))[0], 400, "검사 중 제출이 있으면 본문 전에 400")
+
+    def test_approve_locked(self):
+        s = devsubmit.submit(self.ctx("dev"), mkzip(GOOD))
+        with db() as c:
+            c.execute("UPDATE dev_submissions SET status='review', sandbox=? WHERE id=?", (json.dumps({"status": "ok", "steps": []}), s["id"]))
+        sent = []
+        owner = SimpleNamespace(uid="owner", agent_user="owner", is_owner=True, p="/api/admin/dev/decide", send=lambda d, code=200: sent.append((code, d)) or (code, d))
+        with patch.object(config, "DEV_APPROVE", False):
+            code, d = devsubmit.handle_post(owner, {"id": s["id"], "ok": True})
+            self.assertEqual((code, d["code"]), (409, "approve_locked"))
+            self.assertIn("실행 격리 준비 중", d["error"])
+            with db() as c:
+                self.assertEqual(c.execute("SELECT status FROM dev_submissions WHERE id=?", (s["id"],)).fetchone()[0], "review", "잠금 중 승인은 아무것도 안 바꿈")
+            code, d = devsubmit.handle_post(owner, {"id": s["id"], "ok": False, "note": "격리 뒤 다시"})
+            self.assertEqual((code, d["status"]), (200, "rejected"), "거절은 잠금과 상관없이 됨")
 
     def test_approve_requires_review_and_no_errors(self):
         s = devsubmit.submit(self.ctx("dev"), mkzip(GOOD))

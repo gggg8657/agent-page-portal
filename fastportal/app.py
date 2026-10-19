@@ -463,13 +463,19 @@ async def route(ctx, request):
         if ctx.method != "POST":   # 포털 자체 API 는 GET·POST 만
             await drain(request, length(ctx) or 0)
             return ctx.send({"error": "이 주소는 GET·POST 만 받습니다", "code": "method_not_allowed"}, code=405, headers=[("Allow", "GET, POST")])
-        if ctx.raw == "/api/dev/submit":   # 개발자 업로드(본문 = zip, 상한 devsubmit.ZIP_MAX) — 권한은 devsubmit.submit 이 확인
+        if ctx.raw == "/api/dev/submit":   # 개발자 업로드(본문 = zip, 상한 devsubmit.ZIP_MAX) — 권한을 본문보다 먼저 확인(아니면 본문을 읽지 않고 403)
+            deny = await run_in_threadpool(devsubmit.precheck, ctx)
+            if deny is not None:
+                return deny
             try:
                 body = await read_body(ctx, devsubmit.ZIP_MAX)
             except TooBig:
                 return too_big(ctx, devsubmit.ZIP_MAX)
             return await run_in_threadpool(devsubmit.handle_submit, ctx, body)
-        if ctx.raw == "/api/flows/run":   # 흐름 실행(파일 입력 base64 포함 — 상한 flows.RUN_MAX)
+        if ctx.raw == "/api/flows/run":   # 흐름 실행(파일 입력 base64 포함 — 상한 flows.RUN_MAX). 이미 실행 중이면 본문(40MB)을 읽기 전에 400(start_run 과 같은 문구)
+            busy = flows.busy(ctx.uid)
+            if busy:
+                return ctx.send({"error": busy, "code": "bad_request"}, code=400)
             try:
                 body = await read_body(ctx, flows.RUN_MAX)
             except TooBig:

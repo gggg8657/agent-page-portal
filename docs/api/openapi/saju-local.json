@@ -119,6 +119,35 @@
     }
    }
   },
+  "/t/saju-local/api/account": {
+   "get": {
+    "tags": [
+     "saju-local"
+    ],
+    "operationId": "sajuAccount",
+    "summary": "내 계정 이름·부서 + 연결된 내 프로필",
+    "description": "포털 계정(X-Agent-User)으로 판단. 이름·부서는 계정 것을 쓰며(등록 본문의 name·dept 는 무시), 계정당 프로필 1건. mine 의 id·token 으로 다른 API 를 부른다.",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SajuAccount"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-permission": "self"
+   }
+  },
   "/t/saju-local/api/register": {
    "post": {
     "tags": [
@@ -1617,11 +1646,11 @@
     "properties": {
      "name": {
       "type": "string",
-      "description": "실명(20자에서 자름)"
+      "description": "무시됨 — 이름은 포털 계정 것을 씀(계정 연동)"
      },
      "dept": {
       "type": "string",
-      "description": "부서(30자에서 자름)"
+      "description": "무시됨 — 부서는 포털 계정 것을 씀. 계정에 부서가 없으면 등록 403"
      },
      "year": {
       "type": [
@@ -1676,8 +1705,8 @@
      },
      "consent_global": {
       "type": "boolean",
-      "default": true,
-      "description": "회사 전체 매칭·팀 맵에 별명으로 보일지"
+      "default": false,
+      "description": "회사 전체 매칭·팀 맵에 별명으로 보일지. 명시 동의(true)만 — 기본 꺼짐(2026-10-19~ 새 등록). 기존 등록자의 값은 그대로"
      },
      "hobbies": {
       "type": "array",
@@ -1713,8 +1742,6 @@
      }
     },
     "required": [
-     "name",
-     "dept",
      "year",
      "month",
      "day"
@@ -2098,6 +2125,63 @@
      "cap"
     ],
     "additionalProperties": true
+   },
+   "SajuAccount": {
+    "type": "object",
+    "description": "화면용 — 내 포털 계정 이름·부서와 계정에 연결된 내 프로필",
+    "properties": {
+     "name": {
+      "type": "string",
+      "description": "포털 계정 이름"
+     },
+     "dept": {
+      "type": "string",
+      "description": "포털 계정 부서(없으면 \"\")"
+     },
+     "admin": {
+      "type": "boolean"
+     },
+     "no_dept": {
+      "type": "string",
+      "description": "부서가 없을 때 안내 문구(있으면 \"\")"
+     },
+     "mine": {
+      "oneOf": [
+       {
+        "type": "null"
+       },
+       {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}$"
+         },
+         "token": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+         },
+         "alias": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "id",
+         "token",
+         "alias"
+        ]
+       }
+      ],
+      "description": "계정에 연결된 내 프로필(같은 계정만 받음 — 다른 기기에서 이어 쓰기). 없으면 null"
+     }
+    },
+    "required": [
+     "name",
+     "dept",
+     "admin",
+     "no_dept",
+     "mine"
+    ]
    }
   },
   "responses": {

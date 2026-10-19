@@ -165,9 +165,9 @@ const g  = await (await fetch('/t/saju-local/api/graph?dept=' + encodeURICompone
 | `GET /api/flows` · `/api/flows/adapters` · `/api/flows/<id>` · `/api/flows/runs/<run_id>` | **모두의 에이전트 — 기존 에이전트 연결**: 내 흐름·최근 실행, 연결할 수 있는 단계(어댑터 — 서버에 정의한 10개만: 회의록 만들기·공지문 초안·글 다듬기·공문체 윤문·공문 양식 초안·메일 초안·원고 검토·다이어그램·SQL 질의·표→그래프), 실행 기록(진행·단계별 결과·멈춘 이유). 남의 흐름·기록은 403(관리자도) | 본인 |
 | `POST /api/flows/save` `{id?, name, steps: [{adapter, inputs: {칸: {from: prev\|step\|const\|ask, step?, value?}}}]}` · `/api/flows/delete` `{id}` | 흐름 저장(단계 2~6개, 계정당 50개)·지우기 | 본인 |
 | `POST /api/flows/run` `{id, inputs: {"<단계>.<칸>": 글 \| {name, b64}}}` | 실행 시작 → `{run: {id}}`. 포털이 순서대로 도구 API 를 부름(X-Agent-User = 실행자 + 포털 서명, 프록시와 같음). 사용자당 동시 1개, 단계별 시간 제한, 실패 단계에서 멈춤. 진행은 작업 알림(tool `flows`, link `/create?tab=make&m=flow&run=…`). 본문 상한 40MB(`FLOW_RUN_MAX_BYTES`) | 본인 |
-| `POST /api/dev/submit` (본문 zip) | **모두의 에이전트 — 개발자 업로드**: `<이름>-local` 폴더 하나 zip(50MB·파일 2000개). zip slip·절대 경로·링크 거절 → 형식 검사 → 격리 컨테이너 자가검증(Docker `--network none`·읽기 전용·CPU/메모리 상한·GPU 없음, 이름 `dongjukim-devcheck-…`: 문법·selftest.py·`/healthz`) → 관리자 승인 대기. 이미지가 없으면 '건너뜀'으로 표시하고 관리자 확인 필요 | 개발자 |
-| `GET /api/dev/submissions` · `/api/dev/submissions/<id>` · `…/<id>/file?path=` | 제출 목록·상세(검사·검증 로그·파일 목록)·파일 미리보기. 개발자는 자기 것만 | 개발자·관리자 |
-| `POST /api/admin/dev/decide` `{id, ok, note?, confirm_skipped?}` | 승인 → 도구 폴더 설치 + tools.json 등록 + guides/<dir>.md + 포트 배정 + 서명 모드 시작 / 거절(사유 필수). 감사 기록 | 관리자 |
+| `POST /api/dev/submit` (본문 zip) | **모두의 에이전트 — 개발자 업로드**: `<이름>-local` 폴더 하나 zip(50MB·파일 2000개). zip slip·절대 경로·링크 거절 → 형식 검사 → 격리 컨테이너 자가검증(Docker `--network none`·읽기 전용·CPU/메모리 상한·GPU 없음, 이름 `dongjukim-devcheck-…`: 문법·selftest.py·`/healthz`) → 관리자 승인 대기. 이미지가 없으면 '건너뜀'으로 표시하고 관리자 확인 필요. 권한(로그인·개발자)·검사 중 제출을 **본문보다 먼저** 확인해 아니면 본문을 읽지 않고 403(검사 중이면 400) | 개발자 |
+| `GET /api/dev/submissions` · `/api/dev/submissions/<id>` · `…/<id>/file?path=` | 제출 목록·상세(검사·검증 로그·파일 목록)·파일 미리보기. 개발자는 자기 것만. 목록의 `approve: {enabled, reason}` = 승인 잠금 여부 | 개발자·관리자 |
+| `POST /api/admin/dev/decide` `{id, ok, note?, confirm_skipped?}` | 승인 → 도구 폴더 설치 + tools.json 등록 + guides/<dir>.md + 포트 배정 + 서명 모드 시작 / 거절(사유 필수). 감사 기록. **승인 잠금(임시)**: 업로드 도구의 실행 격리가 끝날 때까지 포털 설정 `PORTAL_DEV_APPROVE=0`(기본)이면 승인(ok=true)은 409 `approve_locked` "실행 격리 준비 중 — 지금은 승인할 수 없습니다". 거절·업로드·형식 검사·격리 검증은 그대로. 풀려면 `PORTAL_DEV_APPROVE=1` 로 포털 재시작 | 관리자 |
 | `POST /api/admin/developer` `{uid, op: grant\|revoke}` | 개발자 역할 부여·회수(`/api/me`·`/api/admin` users 의 `developer`). 감사 기록 | 관리자 |
 
 ### 도구가 작업 상태를 알리는 법(개발 가이드)

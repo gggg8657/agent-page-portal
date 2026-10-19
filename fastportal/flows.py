@@ -478,6 +478,16 @@ def _resolve_inputs(flow_steps, given):
     return out
 
 
+def busy(uid):
+    """본문을 읽기 전 빠른 확인(app.py) — 이 사용자가 이미 실행 중이거나 전체가 꽉 찼으면 문구, 아니면 None. 최종 판정은 start_run 의 잠금 안에서"""
+    with _LOCK:
+        if uid in _ACTIVE:
+            return "이미 실행 중인 흐름이 있습니다 — 끝난 뒤 다시 실행하세요(사용자당 한 번에 하나)"
+        if len(_ACTIVE) >= MAX_RUNS:
+            return "포털에서 실행 중인 흐름이 많습니다 — 잠시 뒤 다시 실행하세요"
+    return None
+
+
 def start_run(c, uid, agent_user, req):
     """POST /api/flows/run {id, inputs} → {run}. 검사·자리 잡기만 하고 실행은 스레드에서"""
     r = _own(c, uid, req.get("id"))

@@ -94,6 +94,11 @@ TOOL_PY = os.environ.get("TOOL_PYTHON") or getattr(sys, "_base_executable", None
 TOOL_BIND = os.environ.get("TOOL_BIND") or "127.0.0.1"   # 도구가 열 주소(BIND). 컨테이너에선 0.0.0.0(다른 컨테이너의 포털이 붙게)
 ALIVE_TTL = float(os.environ.get("TOOLS_ALIVE_TTL", "5"))  # 도구 켜짐 확인 캐시(초)
 
+# ── 개발자 업로드 승인(devsubmit.py) ───────────────────────────────────
+# 임시 잠금(2026-10-19 사용자 결정): 승인된 업로드 도구의 실행 격리(컨테이너·별도 OS 사용자)가 끝날 때까지 관리자 승인을 막는다.
+# 0(기본) = 잠금 — /api/admin/dev/decide 의 승인(ok=true)은 409. 거절·업로드·형식 검사·격리 검증은 그대로. 1 = 승인 허용
+DEV_APPROVE = os.environ.get("PORTAL_DEV_APPROVE", "0") == "1"
+
 # ── 본문·프록시 ─────────────────────────────────────────────────────────
 MAX_BODY = int(os.environ.get("PORTAL_MAX_BODY", str(600 * 1024 * 1024)))   # 보안 설계서 '포털 업로드 상한' 제안값(meeting 음성 500MB 포함)
 MAX_JSON = int(os.environ.get("PORTAL_MAX_JSON", str(1024 * 1024)))

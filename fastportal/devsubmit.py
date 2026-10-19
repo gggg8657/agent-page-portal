@@ -8,6 +8,8 @@
   격리 자가검증: Docker(DEVCHECK_DOCKER_HOST, 기본 tcp://127.0.0.1:2375) — 이름 dongjukim-devcheck-<id>, GPU 없음, --network none,
           CPU·메모리·프로세스 수 상한, 읽기 전용 루트 + /tmp(tmpfs), 권한 모두 뺌, 시간 제한. 안에서: 문법 검사(compile), selftest.py, 서버 띄워 /healthz.
           이미지(DEVCHECK_IMAGE)·Docker 가 없으면 '건너뜀'으로 표시하고 관리자에게 알림.
+  승인 잠금: PORTAL_DEV_APPROVE=0(기본) 이면 승인(ok=true)은 409 — 실행 격리가 끝날 때까지 임시. 거절은 그대로.
+  본문 전 권한 확인: app.py 가 precheck() 로 로그인·개발자·검사 중 제출을 먼저 보고, 아니면 본문(zip)을 읽지 않고 돌려보냄.
   승인: ~/agent-page/<dir> 로 설치 + tools.json 등록(tools.add_tool) + guides/<dir>.md + 포털이 시작(서명 모드 PORTAL_TOOL_KEY). 모두 감사 기록."""
 import io, json, os, re, secrets, shutil, socket, stat, subprocess, threading, time, zipfile
 
@@ -289,6 +291,24 @@ def _pipeline(sid, agent_user, top, src):
                 f"격리 검증 {lab}" + (f" — {res.get('reason')} (관리자 확인 필요)" if res["status"] == "skipped" else ""))
 
 
+class Locked(Exception):
+    """승인 잠금(PORTAL_DEV_APPROVE=0) — 409"""
+
+
+LOCK_MSG = "실행 격리 준비 중 — 지금은 승인할 수 없습니다"
+
+
+def precheck(ctx):
+    """POST /api/dev/submit 본문을 읽기 전에 — 개발자가 아니면 403, 검사 중인 제출이 있으면 400. 통과면 None.
+    (본문 50MB 를 받은 뒤에야 권한을 보면, 로그인한 아무나 큰 본문을 여러 개 동시에 보내 포털 메모리를 쓸 수 있음)"""
+    with db() as c:
+        if not is_developer(c, ctx.uid):
+            return ctx.send({"error": "개발자 권한이 필요합니다 — 관리자에게 요청하세요", "code": "forbidden"}, code=403)
+        if c.execute("SELECT COUNT(*) FROM dev_submissions WHERE uid=? AND status IN ('checking','sandbox')", (ctx.uid,)).fetchone()[0]:
+            return ctx.send({"error": "검사 중인 제출이 있습니다 — 끝난 뒤 다시 올리세요", "code": "bad_request"}, code=400)
+    return None
+
+
 def submit(ctx, data):
     """POST /api/dev/submit — 본문 zip. 개발자만"""
     with db() as c:
@@ -407,6 +427,8 @@ def decide(ctx, req):
                 accounts.audit(c, ctx.uid, "dev_reject", r["dir"] or "", f"#{r['id']} {note}")
                 _notify(r["agent_user"], r["id"], "failed", f"제출 {r['dir']}: 거절", note)
                 return {"ok": True, "status": "rejected"}
+            if not config.DEV_APPROVE:
+                raise Locked(LOCK_MSG)
             chk = json.loads(r["checks"] or "{}")
             if chk.get("errors"):
                 raise ValueError("형식 검사 오류가 있는 제출은 승인할 수 없습니다")
@@ -466,7 +488,8 @@ def handle_get(ctx):
                 else:
                     rows = c.execute("SELECT * FROM dev_submissions WHERE uid=? ORDER BY created DESC LIMIT 100", (ctx.uid,)).fetchall()
                 return ctx.send({"submissions": [_public(r) for r in rows], "developer": dev, "admin": ctx.is_owner,
-                                 "limits": {"zip_max": ZIP_MAX, "files_max": FILES_MAX, "unzip_max": UNZIP_MAX}, "image": IMAGE})
+                                 "limits": {"zip_max": ZIP_MAX, "files_max": FILES_MAX, "unzip_max": UNZIP_MAX}, "image": IMAGE,
+                                 "approve": {"enabled": config.DEV_APPROVE, "reason": "" if config.DEV_APPROVE else LOCK_MSG}})
             if p.startswith("/api/dev/submissions/"):
                 rest = p[len("/api/dev/submissions/"):]
                 sid, _, sub = rest.partition("/")
@@ -497,7 +520,10 @@ def handle_post(ctx, req):
     p = ctx.p
     try:
         if p == "/api/admin/dev/decide":
-            return ctx.send(decide(ctx, req))
+            try:
+                return ctx.send(decide(ctx, req))
+            except Locked as e:
+                return ctx.send({"error": str(e), "code": "approve_locked"}, code=409)
         if p == "/api/admin/developer":
             if not ctx.is_owner:
                 raise PermissionError("관리자만 할 수 있습니다")
