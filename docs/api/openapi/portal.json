@@ -4461,6 +4461,398 @@
      }
     }
    }
+  },
+  "/api/idea/plan": {
+   "post": {
+    "operationId": "portalIdeaPlan",
+    "summary": "아이디어로 만들기 — 길 고르기·초안 만들기(LLM)",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "하고 싶은 일(≤2000자) → 가장 가벼운 길(existing < builder < flow < newtool)·이유·대안 1~2개 + 그 길의 결과만. `route` 를 주면 그 길만 다시 만듦(`id` 를 주면 같은 기록에 덧붙임). LLM 이라 수십 초 걸림. 사용자당 동시 1개(409 `busy`)·10분에 10번(429 `rate_limited`, `IDEA_RATE_N`). LLM 실패 503 `llm`. 사용자 글은 구분자로 감싸 데이터로만 다루고 응답은 서버가 스키마 검증·길이 상한. newtool 은 데모 — 코드는 보여 주기만 하고 실행·설치·등록하지 않음",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/IdeaPlan"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류 {error, code: bad_request}"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "권한 없음 {error, code: forbidden} — 남의 아이디어 기록"
+     },
+     "404": {
+      "description": "없음 {error, code: not_found}"
+     },
+     "409": {
+      "description": "이미 만드는 중 {code: busy}"
+     },
+     "429": {
+      "description": "10분 상한 {code: rate_limited} + Retry-After"
+     },
+     "503": {
+      "description": "LLM 실패 {code: llm}"
+     }
+    },
+    "x-llm": true,
+    "x-long-running": true,
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "text"
+        ],
+        "properties": {
+         "text": {
+          "type": "string",
+          "maxLength": 2000
+         },
+         "route": {
+          "type": "string",
+          "enum": [
+           "existing",
+           "builder",
+           "flow",
+           "newtool"
+          ]
+         },
+         "id": {
+          "type": "string",
+          "description": "같은 아이디어 기록에서 다른 길"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/idea/recent": {
+   "get": {
+    "operationId": "portalIdeaRecent",
+    "summary": "최근 아이디어 20개(내 것)",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "글(앞 300자)·고른 길·만든 결과 id",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "items": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "id": {
+              "type": "string"
+             },
+             "ts": {
+              "type": "number"
+             },
+             "text": {
+              "type": "string"
+             },
+             "route": {
+              "type": "string",
+              "enum": [
+               "existing",
+               "builder",
+               "flow",
+               "newtool"
+              ]
+             },
+             "made": {
+              "type": "array",
+              "items": {
+               "$ref": "#/components/schemas/IdeaMade"
+              }
+             }
+            }
+           }
+          },
+          "limits": {
+           "type": "object",
+           "properties": {
+            "text_max": {
+             "type": "integer"
+            },
+            "rate_n": {
+             "type": "integer"
+            },
+            "rate_s": {
+             "type": "integer"
+            }
+           }
+          },
+          "note": {
+           "type": "string"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류 {error, code: bad_request}"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "권한 없음 {error, code: forbidden} — 남의 아이디어 기록"
+     },
+     "404": {
+      "description": "없음 {error, code: not_found}"
+     }
+    }
+   }
+  },
+  "/api/idea/{id}": {
+   "get": {
+    "operationId": "portalIdeaGet",
+    "summary": "저장된 아이디어 결과 다시 열기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "LLM 을 다시 부르지 않음",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/IdeaPlan"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류 {error, code: bad_request}"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "권한 없음 {error, code: forbidden} — 남의 아이디어 기록"
+     },
+     "404": {
+      "description": "없음 {error, code: not_found}"
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/idea/made": {
+   "post": {
+    "operationId": "portalIdeaMade",
+    "summary": "만든 결과 id 기록",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "빌더 초안(agent)·저장한 흐름(flow) id 를 아이디어 기록에 남김(흐름은 내 것인지 확인)",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "made": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/IdeaMade"
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류 {error, code: bad_request}"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "권한 없음 {error, code: forbidden} — 남의 아이디어 기록"
+     },
+     "404": {
+      "description": "없음 {error, code: not_found}"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id",
+         "kind",
+         "ref"
+        ],
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "kind": {
+          "type": "string",
+          "enum": [
+           "agent",
+           "flow"
+          ]
+         },
+         "ref": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/idea/delete": {
+   "post": {
+    "operationId": "portalIdeaDelete",
+    "summary": "아이디어 기록 지우기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ok"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류 {error, code: bad_request}"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "권한 없음 {error, code: forbidden} — 남의 아이디어 기록"
+     },
+     "404": {
+      "description": "없음 {error, code: not_found}"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id"
+        ],
+        "properties": {
+         "id": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/idea/zip": {
+   "post": {
+    "operationId": "portalIdeaZip",
+    "summary": "새 도구 뼈대 zip 내려받기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "저장된 newtool 결과로 zip 을 메모리에서 만들어 내려줌(서버 디스크에 남기지 않음). 경로는 서버가 정한 `<dir>-local/<app.py|ui.html|agent.json|README.md|requirements.txt|selftest.py|portal_auth.py>` 만",
+    "responses": {
+     "200": {
+      "description": "zip (Content-Disposition: attachment)",
+      "content": {
+       "application/zip": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류 {error, code: bad_request}"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "권한 없음 {error, code: forbidden} — 남의 아이디어 기록"
+     },
+     "404": {
+      "description": "없음 {error, code: not_found}"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id"
+        ],
+        "properties": {
+         "id": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
   }
  },
  "components": {
@@ -5969,6 +6361,447 @@
         }
        }
       }
+     }
+    }
+   },
+   "IdeaPick": {
+    "type": "object",
+    "required": [
+     "id",
+     "kind",
+     "name",
+     "link",
+     "why"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "description": "tool:<dir> | agent:<빌더 id>"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "tool",
+       "agent"
+      ]
+     },
+     "name": {
+      "type": "string"
+     },
+     "desc": {
+      "type": "string"
+     },
+     "group": {
+      "type": "string"
+     },
+     "link": {
+      "type": "string",
+      "description": "바로 열기 — /tool/<dir> 또는 /tool/agent-builder-local/chat/<id>"
+     },
+     "why": {
+      "type": "string",
+      "description": "추천 이유(≤240자)"
+     }
+    }
+   },
+   "IdeaBuilder": {
+    "type": "object",
+    "required": [
+     "name",
+     "desc",
+     "instructions",
+     "examples",
+     "materials",
+     "template"
+    ],
+    "properties": {
+     "name": {
+      "type": "string",
+      "maxLength": 40
+     },
+     "desc": {
+      "type": "string",
+      "maxLength": 140
+     },
+     "instructions": {
+      "type": "string",
+      "description": "첫 줄 '너는 …다.' + '- ' 규칙"
+     },
+     "examples": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "minItems": 3,
+      "maxItems": 3
+     },
+     "materials": {
+      "type": "string",
+      "description": "올릴 자료 안내(빌더에는 저장 안 됨 — 화면 안내용)"
+     },
+     "template": {
+      "type": "string",
+      "description": "빌더 템플릿 id(GET /t/agent-builder-local/api/templates)"
+     }
+    }
+   },
+   "IdeaFlow": {
+    "type": "object",
+    "required": [
+     "name",
+     "explain",
+     "steps",
+     "valid"
+    ],
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "explain": {
+      "type": "string"
+     },
+     "steps": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/FlowStep"
+      }
+     },
+     "valid": {
+      "type": "boolean",
+      "description": "서버 검증(flows 저장 규칙) 통과 — false 면 error 를 보여 주고 저장 버튼을 막음"
+     },
+     "error": {
+      "type": "string"
+     },
+     "notes": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "다시 묻거나 기본값으로 고친 곳"
+     }
+    }
+   },
+   "IdeaNewTool": {
+    "type": "object",
+    "required": [
+     "dir",
+     "title",
+     "files",
+     "tree",
+     "pkg_check",
+     "checks",
+     "note"
+    ],
+    "properties": {
+     "dir": {
+      "type": "string",
+      "description": "<이름>-local"
+     },
+     "title": {
+      "type": "string"
+     },
+     "desc": {
+      "type": "string"
+     },
+     "group": {
+      "type": "string"
+     },
+     "usage": {
+      "type": "string"
+     },
+     "fields": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "key": {
+         "type": "string"
+        },
+        "label": {
+         "type": "string"
+        },
+        "type": {
+         "type": "string",
+         "enum": [
+          "text",
+          "textarea",
+          "number",
+          "file_text",
+          "select"
+         ]
+        },
+        "options": {
+         "type": "array",
+         "items": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     },
+     "files": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "path",
+        "content"
+       ],
+       "properties": {
+        "path": {
+         "type": "string"
+        },
+        "content": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "tree": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "path",
+        "size"
+       ],
+       "properties": {
+        "path": {
+         "type": "string"
+        },
+        "size": {
+         "type": "integer"
+        },
+        "lang": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "pkg_check": {
+      "type": "object",
+      "required": [
+       "source",
+       "known",
+       "items",
+       "missing"
+      ],
+      "properties": {
+       "source": {
+        "type": "string",
+        "description": "폐쇄망 패키지 목록 출처(pkgindex 또는 _data/pkg-index 파일 이름)"
+       },
+       "known": {
+        "type": "integer"
+       },
+       "items": {
+        "type": "array",
+        "items": {
+         "type": "object",
+         "required": [
+          "name",
+          "status",
+          "from"
+         ],
+         "properties": {
+          "name": {
+           "type": "string"
+          },
+          "import": {
+           "type": "string"
+          },
+          "status": {
+           "type": "string",
+           "enum": [
+            "ok",
+            "missing",
+            "stdlib"
+           ]
+          },
+          "from": {
+           "type": "string",
+           "enum": [
+            "import",
+            "declared"
+           ]
+          }
+         }
+        }
+       },
+       "missing": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "checks": {
+      "type": "object",
+      "required": [
+       "errors",
+       "warnings"
+      ],
+      "properties": {
+       "errors": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       "warnings": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "note": {
+      "type": "string",
+      "description": "데모 안내 — 실행·설치·등록하지 않음"
+     }
+    }
+   },
+   "IdeaPlan": {
+    "type": "object",
+    "required": [
+     "id",
+     "text",
+     "route",
+     "reason",
+     "alternatives",
+     "existing",
+     "builder",
+     "flow",
+     "newtool",
+     "made"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "description": "최근 아이디어 기록 id"
+     },
+     "text": {
+      "type": "string"
+     },
+     "route": {
+      "type": "string",
+      "enum": [
+       "existing",
+       "builder",
+       "flow",
+       "newtool"
+      ]
+     },
+     "first": {
+      "type": "string",
+      "enum": [
+       "existing",
+       "builder",
+       "flow",
+       "newtool"
+      ],
+      "description": "처음 LLM 이 고른 길"
+     },
+     "reason": {
+      "type": "string"
+     },
+     "alternatives": {
+      "type": "array",
+      "maxItems": 2,
+      "items": {
+       "type": "object",
+       "required": [
+        "route",
+        "reason"
+       ],
+       "properties": {
+        "route": {
+         "type": "string",
+         "enum": [
+          "existing",
+          "builder",
+          "flow",
+          "newtool"
+         ]
+        },
+        "reason": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "existing": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/IdeaPick"
+      }
+     },
+     "builder": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/IdeaBuilder"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "flow": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/IdeaFlow"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "newtool": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/IdeaNewTool"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "made": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/IdeaMade"
+      }
+     },
+     "route_names": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "string"
+      }
+     }
+    }
+   },
+   "IdeaMade": {
+    "type": "object",
+    "required": [
+     "kind",
+     "ref"
+    ],
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "agent",
+       "flow"
+      ]
+     },
+     "ref": {
+      "type": "string"
+     },
+     "ts": {
+      "type": "number"
      }
     }
    }

@@ -26,7 +26,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from starlette.concurrency import run_in_threadpool
 
-from . import accounts, auth, community, config, db, devsubmit, dwell, flows, jobs, lists, pages, pkgindex, proxy, sessions, tools, workspace
+from . import accounts, auth, community, config, db, devsubmit, dwell, flows, idea, jobs, lists, pages, pkgindex, proxy, sessions, tools, workspace
 from .config import OWNERS, TLS
 from .ctx import Ctx, TooBig, drain, length, not_implemented, parse_json, read_body, too_big
 
@@ -39,6 +39,7 @@ with db.db() as _c:
     devsubmit.init(_c)   # 모두의 에이전트 — 개발자 역할·제출
     community.init(_c)   # 모두의 에이전트 — 리뷰·개선 요청·투표
     pkgindex.init(_c)   # 폐쇄망 pip 패키지 목록(비어 있으면 _data/pkg-index/*.txt 에서)
+    idea.init(_c)   # 모두의 에이전트 — 아이디어로 만들기(최근 아이디어)
 flows.recover(); devsubmit.recover()
 jobs.load_self_report()
 _AB = auth.backend()   # 계정 저장소(AUTH_BACKEND) — 설정이 틀리면 여기서 멈춤
@@ -102,6 +103,8 @@ def get_sync(ctx):
         return "flow_adapters"
     if p == "/api/flows" or p.startswith("/api/flows/"):   # 모두의 에이전트 — 에이전트 연결(내 흐름만)
         return flows.handle_get(ctx)
+    if p.startswith("/api/idea/"):   # 아이디어로 만들기 — 최근 아이디어·저장된 결과(내 것만)
+        return idea.handle_get(ctx)
     if p.startswith("/api/community/"):   # 리뷰·요청·기여 순위(볼 수 있는 대상만 — community.target)
         return community.handle_get(ctx)
     if p in ("/api/pkg-index", "/api/pkg-index/check"):   # 폐쇄망 pip 패키지 찾기·확인(로그인)
@@ -315,6 +318,8 @@ def post_sync(ctx, body):
     path = ctx.raw   # portal.py 처럼 쿼리까지 포함한 경로로 판정
     if ctx.p.startswith("/api/workspace/"):
         return workspace.handle_post(ctx, req)
+    if ctx.p.startswith("/api/idea/"):   # 아이디어로 만들기(LLM 이 수십 초 — DB 연결을 잡지 않고 idea 가 필요할 때만 엶)
+        return idea.handle_post(ctx, req)
     try:
         with db.db() as c:
             if path == "/api/pin":
