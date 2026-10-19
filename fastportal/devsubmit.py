@@ -259,7 +259,7 @@ def sandbox(sid, top, src):
 
 def _notify(user, sid, status, title, msg):
     try:
-        j = jobs.upsert(user, JOB_TOOL, status, f"{sid}-{secrets.token_hex(3)}", title[:200], f"/create?tab=dev&sub={sid}", msg[:400])
+        j = jobs.upsert(user, JOB_TOOL, status, f"{sid}-{secrets.token_hex(3)}", title[:200], f"/create?tab=make&m=dev&sub={sid}", msg[:400])
         if j:
             jobs.HUB.publish("job", j, j["user"])
     except Exception as e:

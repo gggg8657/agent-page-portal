@@ -3018,7 +3018,7 @@
      "portal"
     ],
     "x-permission": "self",
-    "description": "포털이 순서대로 도구 API 호출(X-Agent-User = 실행자 + 포털 서명). 사용자당 동시 1개(400), 단계별 시간 제한, 실패 단계에서 멈춤. 진행은 작업 알림(tool `flows`, link `/create?tab=flow&run=<id>`). 본문 상한 FLOW_RUN_MAX_BYTES(기본 40MB, 파일 하나 25MB)",
+    "description": "포털이 순서대로 도구 API 호출(X-Agent-User = 실행자 + 포털 서명). 사용자당 동시 1개(400), 단계별 시간 제한, 실패 단계에서 멈춤. 진행은 작업 알림(tool `flows`, link `/create?tab=make&m=flow&run=<id>`). 본문 상한 FLOW_RUN_MAX_BYTES(기본 40MB, 파일 하나 25MB)",
     "responses": {
      "200": {
       "description": "성공",

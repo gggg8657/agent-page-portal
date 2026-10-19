@@ -507,7 +507,7 @@ def start_run(c, uid, agent_user, req):
 
 def _job(agent_user, rid, status, name, msg, progress=None):
     try:
-        j = jobs.upsert(agent_user, JOB_TOOL, status, rid, f"흐름: {name}"[:200], f"/create?tab=flow&run={rid}", msg, progress)
+        j = jobs.upsert(agent_user, JOB_TOOL, status, rid, f"흐름: {name}"[:200], f"/create?tab=make&m=flow&run={rid}", msg, progress)
         if j:
             jobs.HUB.publish("job", j, j["user"])
     except Exception as e:   # 알림 실패가 실행을 멈추지 않게
