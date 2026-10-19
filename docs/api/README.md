@@ -144,7 +144,7 @@ const g  = await (await fetch('/t/saju-local/api/graph?dept=' + encodeURICompone
 | `GET /api/depts` | 부서 목록 | 누구나 |
 | `POST /api/start` `{"dir"}` | 꺼진 도구 켜기(켜진 도구 재시작은 관리자만, 같은 도구를 60초 안에 다시 누르면 409 `starting`). 숨긴 도구는 관리자만(일반 사용자는 404) | 로그인 |
 | `POST /api/stop` `{"dir"}` | 도구 끄기 | 관리자 |
-| `POST /api/open` · `/api/like` `{"dir"}` | 사용·좋아요 기록(순위에 반영) | 로그인 |
+| `POST /api/open` · `/api/like` `{"dir"}` | 사용·좋아요 기록(순위에 반영). 좋아요는 계정당 도구마다 1회 — 두 번째부터는 `{"ok":true,"liked":true,"already":true}` 로 무시(취소 없음) | 로그인 |
 | `POST /api/dwell` `{"visit", "seq", "screen", "tool"?, "seconds"}` | 활성 탭의 짧은 화면 체류 구간. 로그인 uid로 저장하고 중복 방문 순번은 무시. 화면이 보이고 최근 60초 안에 입력한 경우만 기록(구간은 최대 30초) | 로그인 |
 | `GET /api/lists` | 내 즐겨찾기·최근 사용 `{"fav": [dir…], "recent": [dir…]}` — 계정에 저장(브라우저 캐시와 무관) | 로그인 |
 | `POST /api/lists` `{"kind": "fav"\|"recent", "items": [dir…]}` | 그 목록을 통째로 바꿈. 등록된 도구만·중복 제거·최대 fav 100·recent 10. 응답은 정리된 목록 | 로그인 |

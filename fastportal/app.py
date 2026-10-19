@@ -280,6 +280,8 @@ def tool_action(ctx, c, path, req):
     t = tools.tool(req.get("dir"))
     if not t:
         return ctx.send({"error": "unknown tool"}, code=404)
+    if path == "/api/like" and c.execute("SELECT 1 FROM events WHERE kind='like' AND dir=? AND user=?", (t["dir"], ctx.uid)).fetchone():
+        return ctx.send({"ok": True, "liked": True, "already": True})   # 좋아요는 1인 1회(예전엔 누를 때마다 쌓였음)
     if path in ("/api/open", "/api/like"):
         c.execute("INSERT INTO events VALUES(?,?,?,?)", (path[5:], t["dir"], db.now(), ctx.uid))
     elif path in ("/api/start", "/api/stop") and tools.is_remote(t):
