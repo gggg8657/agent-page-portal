@@ -1003,6 +1003,49 @@
        "null"
       ],
       "description": "patch 일 때 실제 반영 개수"
+     },
+     "fill_report": {
+      "type": "object",
+      "description": "실제 원본 위치에 반영한 칸과 미반영 사유",
+      "properties": {
+       "filled": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       "ambiguous": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       "unmatched": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       "empty": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       "missing": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       }
+      },
+      "required": [
+       "filled",
+       "ambiguous",
+       "unmatched",
+       "empty",
+       "missing"
+      ]
      }
     }
    },

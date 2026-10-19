@@ -15,7 +15,7 @@ export TTS_VOICE=KR TTS_MODEL=melo TTS_DEVICE=cuda DEVICE=cuda WHISPER_DEVICE=cu
 # React 화면(agent-page-web 빌드)을 포털이 같은 출처 /app 아래로 내보냄(fastportal WEB_DIST·WEB_PREFIX). 값은 링크 — agent-page-web/scripts/deploy.sh 가
 # 새 빌드를 _web/releases/<시각> 에 두고 이 링크를 원자적으로 바꿔 끼우므로 포털 재시작 없이 새 화면이 나간다. 끄기: WEB_DIST= (빈 값)로 포털 재시작
 [ -z "${WEB_DIST+x}" ] && [ -e "$_PE_TOP/_web/app" ] && export WEB_DIST="$_PE_TOP/_web/app"
-# '/' 를 React 로 바꾸기(준비만 — 사용자 확인 전에는 켜지 말 것). 켜기: agent-page-web/scripts/deploy.sh --root 로 루트 빌드를 _web/root 에 둔 뒤
-# 아래 줄의 # 를 지우고 start-portal.sh. 되돌리기: 다시 # 를 붙이고 start-portal.sh(예전 포털 화면이 바로 돌아옴). 절차: agent-page-web/CUTOVER.md
+# '/' 를 React 로 — 2026-10-14 전환(운영 켬). 루트 빌드는 agent-page-web/scripts/deploy.sh --root 가 _web/root 에 둠.
+# 되돌리기: 아래 줄 앞에 # 를 붙이고 start-portal.sh(예전 포털 화면이 바로 돌아옴). 절차: agent-page-web/CUTOVER.md
 export WEB_ROOT=1 WEB_ROOT_DIST="$_PE_TOP/_web/root"
 unset _PE_TOP

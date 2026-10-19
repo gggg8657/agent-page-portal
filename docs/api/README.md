@@ -145,6 +145,10 @@ const g  = await (await fetch('/t/saju-local/api/graph?dept=' + encodeURICompone
 | `POST /api/start` `{"dir"}` | 꺼진 도구 켜기(켜진 도구 재시작은 관리자만, 같은 도구를 60초 안에 다시 누르면 409 `starting`). 숨긴 도구는 관리자만(일반 사용자는 404) | 로그인 |
 | `POST /api/stop` `{"dir"}` | 도구 끄기 | 관리자 |
 | `POST /api/open` · `/api/like` `{"dir"}` | 사용·좋아요 기록(순위에 반영) | 로그인 |
+| `POST /api/dwell` `{"visit", "seq", "screen", "tool"?, "seconds"}` | 활성 탭의 짧은 화면 체류 구간. 로그인 uid로 저장하고 중복 방문 순번은 무시. 화면이 보이고 최근 60초 안에 입력한 경우만 기록(구간은 최대 30초) | 로그인 |
+| `GET /api/lists` | 내 즐겨찾기·최근 사용 `{"fav": [dir…], "recent": [dir…]}` — 계정에 저장(브라우저 캐시와 무관) | 로그인 |
+| `POST /api/lists` `{"kind": "fav"\|"recent", "items": [dir…]}` | 그 목록을 통째로 바꿈. 등록된 도구만·중복 제거·최대 fav 100·recent 10. 응답은 정리된 목록 | 로그인 |
+| `GET /api/admin/dwell?days=30&uid=&screen=&tool=` | 관리자 화면 체류 집계(7·30·90일). 계정·화면·도구별 체류/방문과 도구 열기 버튼 수·끝난 작업 실행 시간을 별도 제공 | 관리자 |
 | `POST /api/post` · `/api/post_like` | 노하우 게시판 글쓰기·좋아요 | 로그인 |
 | `POST /api/account/theme` `{"theme"}` | 화면 테마 저장(`classic`·`trendy`·`v2` × `light`·`dark`·`auto`) | 로그인 |
 | `POST /api/pin` `{"pin", "new"}` | PIN 바꾸기(다른 기기 세션은 끊김, 지금 세션의 '로그인 유지'는 그대로). 외부 계정 저장소면 403 + 안내 | 로그인 |
@@ -311,4 +315,3 @@ npx @redocly/cli lint docs/api/openapi/openapi.json                             
 - 경로를 없애거나 바꿀 때는 최소 한 판 동안 예전 경로를 같이 둡니다(예: `GET /logout` ↔ `POST /api/logout`, `GET /api/account/notices` ↔ `POST`).
 - `build` = 포털 저장소 `git describe`(태그-커밋) — 문제를 알릴 때 같이 적어 주세요.
 - 바뀐 점(2026.10.14): `POST /api/logout`·`GET /api/version`·`GET /api/landing`·`POST /api/account/notices` 추가, 오류 `code`, 로그인 잠금 429, PUT·DELETE·PATCH·HEAD 프록시, CSRF 검사, 도구 서명·`/healthz`, CORS 설정(기본 꺼짐).
-

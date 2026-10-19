@@ -32,6 +32,51 @@
   }
  ],
  "paths": {
+  "/api/dwell": {
+   "post": {
+    "operationId": "portalDwellRecord",
+    "summary": "활성 화면 체류 구간 기록",
+    "description": "로그인 계정의 현재 uid로 저장. 화면은 정해진 포털 화면 키 또는 도구 화면이며 초는 1~30초. 중복 (방문 id, 순번)은 무시합니다.",
+    "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["visit", "seq", "screen", "seconds"], "properties": {
+     "visit": {"type": "string", "format": "uuid"}, "seq": {"type": "integer", "minimum": 0},
+     "screen": {"type": "string", "enum": ["home", "all", "fav", "recent", "work", "account", "approvals", "admin", "tool"]},
+     "tool": {"type": "string", "description": "screen=tool 일 때 등록된 도구 dir"}, "seconds": {"type": "integer", "minimum": 1, "maximum": 30}
+    }}}}},
+    "responses": {"200": {"description": "기록됨 또는 중복 구간 무시", "content": {"application/json": {"schema": {"type": "object", "properties": {"ok": {"type": "boolean"}}}}}}, "400": {"description": "값 형식 오류"}, "401": {"description": "로그인 필요"}},
+    "tags": ["portal"]
+   }
+  },
+  "/api/admin/dwell": {
+   "get": {
+    "operationId": "portalAdminDwell",
+    "summary": "관리자 체류·도구 사용 통계",
+    "description": "관리자 전용. days=7|30|90, uid·screen·tool 필터. 활성 체류는 화면별로 필터하며 도구 열기(events)·끝난 작업 실행 시간(jobs)은 화면 필터와 무관하게 계정·도구·기간 필터를 적용해 별도로 제공합니다.",
+    "x-permission": "admin",
+    "parameters": [
+     {"name": "days", "in": "query", "schema": {"type": "integer", "enum": [7,30,90], "default": 30}},
+     {"name": "uid", "in": "query", "schema": {"type": "string"}},
+     {"name": "screen", "in": "query", "schema": {"type": "string", "enum": ["home", "all", "fav", "recent", "work", "account", "approvals", "admin", "tool"]}},
+     {"name": "tool", "in": "query", "schema": {"type": "string"}}
+    ],
+    "responses": {"200": {"description": "집계 결과", "content": {"application/json": {"schema": {"type": "object", "required": ["days", "active_seconds", "visits", "rows", "tool_rows", "daily", "tool_opens", "finished_jobs", "job_runtime_seconds", "screens", "tools"], "properties": {
+     "days": {"type": "integer"}, "from": {"type": "string", "format": "date"}, "to": {"type": "string", "format": "date"},
+     "active_seconds": {"type": "integer"}, "visits": {"type": "integer"}, "tool_opens": {"type": "integer", "description": "도구 열기 버튼을 누른 횟수"},
+     "finished_jobs": {"type": "integer"}, "job_runtime_seconds": {"type": "integer", "description": "끝난 작업의 실제 실행 시간 합계"},
+     "rows": {"type": "array", "items": {"type": "object", "required": ["uid", "name", "screen", "screen_name", "tool", "tool_name", "seconds", "visits", "last"], "properties": {
+      "uid": {"type": "string", "description": "익명화 계정은 deleted-… 아이디"}, "name": {"type": "string"}, "dept": {"type": "string"}, "screen": {"type": "string"}, "screen_name": {"type": "string"},
+      "tool": {"type": "string"}, "tool_name": {"type": "string"}, "seconds": {"type": "integer"}, "visits": {"type": "integer"}, "last": {"type": "string", "format": "date-time"}
+     }}},
+     "tool_rows": {"type": "array", "description": "계정·도구별 활성 체류, 열기 버튼, 완료 작업, 실행 시간(화면 필터와 무관)", "items": {"type": "object", "properties": {
+      "uid": {"type": "string"}, "name": {"type": "string"}, "dept": {"type": "string"}, "tool": {"type": "string"}, "tool_name": {"type": "string"},
+      "active_seconds": {"type": "integer"}, "opens": {"type": "integer"}, "jobs": {"type": "integer"}, "job_seconds": {"type": "integer"}
+     }}},
+     "daily": {"type": "array", "items": {"type": "object", "properties": {"day": {"type": "string", "format": "date"}, "seconds": {"type": "integer"}}}},
+     "screens": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}}}},
+     "tools": {"type": "array", "items": {"type": "object", "properties": {"dir": {"type": "string"}, "name": {"type": "string"}}}}
+    }}}}}, "400": {"description": "필터 형식 오류"}, "403": {"description": "관리자만"}},
+    "tags": ["portal"]
+   }
+  },
   "/api/login": {
    "post": {
     "operationId": "portalLogin",
@@ -2084,6 +2129,293 @@
      }
     }
    }
+  },
+  "/api/workspace": {
+   "get": {
+    "operationId": "portalWorkList",
+    "summary": "내 작업 검색·페이지·즐겨찾기·휴지통",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "parameters": [
+     {
+      "name": "tool",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "q",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "view",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "offset",
+      "in": "query",
+      "schema": {
+       "type": "integer"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "계정 본인의 작업",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WorkList"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "404": {
+      "description": "본인에게 보이는 작업 없음"
+     },
+     "409": {
+      "description": "다른 창에서 저장된 버전과 충돌"
+     }
+    }
+   }
+  },
+  "/api/workspace/{id}": {
+   "get": {
+    "operationId": "portalWorkGet",
+    "summary": "내 작업 내용·과거 저장 버전 불러오기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "revision",
+      "in": "query",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "계정 본인의 작업",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WorkItem"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "404": {
+      "description": "본인에게 보이는 작업 없음"
+     },
+     "409": {
+      "description": "다른 창에서 저장된 버전과 충돌"
+     }
+    }
+   }
+  },
+  "/api/workspace/save": {
+   "post": {
+    "operationId": "portalWorkSave",
+    "summary": "계정별 작업 저장·새 버전 저장",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "uid는 로그인 세션에서 정함. 요청 본문의 uid나 사용자 헤더는 권한에 사용하지 않음.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/WorkSave"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "계정 본인의 작업",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WorkItem"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "404": {
+      "description": "본인에게 보이는 작업 없음"
+     },
+     "409": {
+      "description": "다른 창에서 저장된 버전과 충돌"
+     }
+    }
+   }
+  },
+  "/api/workspace/modify": {
+   "post": {
+    "operationId": "portalWorkModify",
+    "summary": "이름 변경·즐겨찾기·숨기기·복원",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "uid는 로그인 세션에서 정함. 요청 본문의 uid나 사용자 헤더는 권한에 사용하지 않음.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id",
+         "action"
+        ],
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "action": {
+          "type": "string",
+          "enum": [
+           "rename",
+           "star",
+           "archive",
+           "restore"
+          ]
+         },
+         "title": {
+          "type": "string"
+         },
+         "starred": {
+          "type": "boolean"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "계정 본인의 작업",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/WorkItem"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "404": {
+      "description": "본인에게 보이는 작업 없음"
+     },
+     "409": {
+      "description": "다른 창에서 저장된 버전과 충돌"
+     }
+    }
+   }
+  },
+  "/api/workspace/sync": {
+   "post": {
+    "operationId": "portalWorkSync",
+    "summary": "기존 도구 이력을 내 보관함 DB에 가져오기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "uid는 로그인 세션에서 정함. 요청 본문의 uid나 사용자 헤더는 권한에 사용하지 않음.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "tool": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "계정 본인의 작업",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "404": {
+      "description": "본인에게 보이는 작업 없음"
+     },
+     "409": {
+      "description": "다른 창에서 저장된 버전과 충돌"
+     }
+    }
+   }
   }
  },
  "components": {
@@ -3036,6 +3368,149 @@
       "type": "integer",
       "minimum": 0,
       "maximum": 100
+     }
+    }
+   },
+   "WorkItem": {
+    "type": "object",
+    "required": [
+     "id",
+     "tool",
+     "source",
+     "title",
+     "link",
+     "revision",
+     "created",
+     "updated",
+     "starred",
+     "legacy_shared"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "tool": {
+      "type": "string"
+     },
+     "source": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "link": {
+      "type": "string"
+     },
+     "revision": {
+      "type": "integer"
+     },
+     "created": {
+      "type": "string"
+     },
+     "updated": {
+      "type": "string"
+     },
+     "starred": {
+      "type": "boolean"
+     },
+     "legacy_shared": {
+      "type": "boolean"
+     },
+     "offline": {
+      "type": "boolean"
+     },
+     "payload": {
+      "type": "object",
+      "additionalProperties": true
+     },
+     "archived": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "selected_revision": {
+      "type": "integer"
+     },
+     "versions": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "revision",
+        "ts"
+       ],
+       "properties": {
+        "revision": {
+         "type": "integer"
+        },
+        "ts": {
+         "type": "string"
+        }
+       }
+      }
+     }
+    }
+   },
+   "WorkList": {
+    "type": "object",
+    "required": [
+     "items",
+     "total",
+     "limit",
+     "offset",
+     "sync"
+    ],
+    "properties": {
+     "items": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/WorkItem"
+      }
+     },
+     "total": {
+      "type": "integer"
+     },
+     "limit": {
+      "type": "integer"
+     },
+     "offset": {
+      "type": "integer"
+     },
+     "sync": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "additionalProperties": true
+      }
+     }
+    }
+   },
+   "WorkSave": {
+    "type": "object",
+    "required": [
+     "tool",
+     "title",
+     "payload"
+    ],
+    "properties": {
+     "tool": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+     },
+     "payload": {
+      "type": "object",
+      "additionalProperties": true
+     },
+     "id": {
+      "type": "string"
+     },
+     "revision": {
+      "type": "integer"
      }
     }
    }

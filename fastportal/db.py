@@ -34,6 +34,10 @@ def init_db(seed_depts=()):
         c.executescript("""
         PRAGMA journal_mode=WAL;
         CREATE TABLE IF NOT EXISTS events(kind TEXT, dir TEXT, ts TEXT, user TEXT);
+        CREATE TABLE IF NOT EXISTS dwell_segments(uid TEXT, visit TEXT, seq INTEGER, screen TEXT, tool TEXT, seconds INTEGER, ts TEXT, day TEXT,
+                                                   PRIMARY KEY(uid, visit, seq));
+        CREATE INDEX IF NOT EXISTS dwell_day_user ON dwell_segments(day, uid);
+        CREATE INDEX IF NOT EXISTS dwell_visit ON dwell_segments(visit);
         CREATE TABLE IF NOT EXISTS posts(id INTEGER PRIMARY KEY, title TEXT, body TEXT, author TEXT, dept TEXT, tags TEXT, ts TEXT);
         CREATE TABLE IF NOT EXISTS post_likes(post INTEGER, user TEXT, UNIQUE(post, user));
         CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY, name TEXT, dept TEXT, salt BLOB, hash BLOB, ts TEXT);

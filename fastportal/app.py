@@ -24,13 +24,15 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from starlette.concurrency import run_in_threadpool
 
-from . import accounts, auth, config, db, jobs, pages, proxy, sessions, tools
+from . import accounts, auth, config, db, dwell, jobs, lists, pages, proxy, sessions, tools, workspace
 from .config import OWNERS, TLS
 from .ctx import Ctx, TooBig, drain, length, not_implemented, parse_json, read_body, too_big
 
 db.init_db(t.get("dept") for t in tools.tools())
 with db.db() as _c:
     jobs.init(_c)   # 작업 알림 센터(jobs 표) — 예전 메모리 EVENTS 를 대체(재시작해도 남음)
+    workspace.init(_c)
+    lists.init(_c)   # 계정별 즐겨찾기·최근 사용
 jobs.load_self_report()
 _AB = auth.backend()   # 계정 저장소(AUTH_BACKEND) — 설정이 틀리면 여기서 멈춤
 if not auth.is_local() and hasattr(_AB, "ready") and not _AB.ready():
@@ -82,6 +84,13 @@ def get_sync(ctx):
     if p == "/api/me":
         with db.db() as c:
             return ctx.send(accounts.me(c, ctx.uid, ctx.uname))
+    if p == "/api/workspace" or p.startswith("/api/workspace/"):
+        return workspace.handle_get(ctx)
+    if p == "/api/lists":   # 즐겨찾기·최근 사용(계정 저장)
+        with db.db() as c:
+            return ctx.send(lists.get(c, ctx.uid))
+    if p == "/api/admin/dwell":
+        return dwell.report(ctx)
     if p in ("/account", "/approvals", "/admin"):
         return pages.account_page(ctx, p)
     if p == "/api/account" or p.startswith(("/api/account/", "/api/approvals", "/api/admin")):
@@ -285,10 +294,16 @@ def post_sync(ctx, body):
     except ValueError:
         return ctx.send({"error": "요청 본문은 JSON 객체여야 합니다"}, code=400)
     path = ctx.raw   # portal.py 처럼 쿼리까지 포함한 경로로 판정
+    if ctx.p.startswith("/api/workspace/"):
+        return workspace.handle_post(ctx, req)
     try:
         with db.db() as c:
             if path == "/api/pin":
                 return change_pin(ctx, c, req)
+            if path == "/api/lists":
+                return ctx.send(lists.put(c, ctx.uid, req))
+            if path == "/api/dwell":
+                return dwell.record(ctx, c, req)
             if path.startswith(("/api/account/", "/api/approvals/", "/api/admin/")):
                 return accounts.manage_post(ctx, c, path, req)
             if path == "/api/post":
