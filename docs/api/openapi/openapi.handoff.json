@@ -1196,6 +1196,89 @@
     "description": "좋아요는 계정당 도구마다 1회. 이미 눌렀으면 기록하지 않고 `{\"ok\": true, \"liked\": true, \"already\": true}`(취소 없음)."
    }
   },
+  "/api/lists": {
+   "get": {
+    "operationId": "portalListsGet",
+    "summary": "내 즐겨찾기·최근 사용",
+    "tags": [
+     "portal"
+    ],
+    "description": "로그인한 계정의 즐겨찾기·최근 사용 목록. 아직 저장한 적 없으면 빈 목록.",
+    "responses": {
+     "200": {
+      "description": "목록",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/UserLists"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    }
+   },
+   "post": {
+    "operationId": "portalListsPut",
+    "summary": "즐겨찾기·최근 사용 바꾸기",
+    "tags": [
+     "portal"
+    ],
+    "description": "`kind` 목록을 `items` 로 통째로 바꿈(부분 추가 아님 — 화면이 바꾼 전체 목록을 보냄). 등록되지 않은 도구는 빠지고 중복은 제거, fav 최대 100·recent 최대 10 으로 잘림. 응답은 정리된 그 목록 하나 `{\"<kind>\": [...]}`.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/UserListsUpdate"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "정리된 목록",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "description": "보낸 kind 하나만 담김",
+         "properties": {
+          "fav": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           }
+          },
+          "recent": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "kind 가 fav·recent 가 아니거나 items 가 문자열 목록이 아님",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    }
+   }
+  },
   "/api/post": {
    "post": {
     "operationId": "portalPost",
@@ -34619,6 +34702,55 @@
      "name",
      "dept"
     ]
+   },
+   "UserLists": {
+    "type": "object",
+    "description": "계정별 즐겨찾기·최근 사용(도구 dir 목록, 순서 유지). 브라우저 캐시와 무관하게 계정에 저장.",
+    "properties": {
+     "fav": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 100,
+      "description": "즐겨찾기(최대 100)"
+     },
+     "recent": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 10,
+      "description": "최근 사용(최신이 앞, 최대 10)"
+     }
+    },
+    "required": [
+     "fav",
+     "recent"
+    ]
+   },
+   "UserListsUpdate": {
+    "type": "object",
+    "required": [
+     "kind",
+     "items"
+    ],
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "fav",
+       "recent"
+      ]
+     },
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "도구 dir 목록 — 목록 전체를 이 값으로 바꿈"
+     }
+    }
    }
   },
   "responses": {
