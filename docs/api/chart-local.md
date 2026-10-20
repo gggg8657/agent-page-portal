@@ -16,6 +16,7 @@
 | POST | `api/suggest` | 표 → 그래프 후보 + SVG, 이력 저장 | 수백 ms | 예 (이력 생성·갱신) |
 | POST | `api/render` | 그래프 설정 하나 → SVG | - | - |
 | POST | `api/describe` | 후보마다 제목·한 줄 설명 (LLM) | **LLM**, 수 초~수십 초 (타임아웃 600초) | - |
+| POST | `api/rerank` | 규칙 후보 순서 다시 매기기 + 더 맞는 그래프 최대 3개 제안 (LLM, 선택) | **LLM**, 수 초 (한 번 90초·합쳐 120초 제한, 넘으면 규칙 순서) | 예 (`id` 를 주면 이력에 저장) |
 | POST | `api/export` | 고른 그래프들 → 문서 파일 생성 + 구조 검사 | 수 초 (HWPX 는 Node 실행으로 더 걸림) | 예 (파일 저장) |
 | GET | `api/history` | 이력 목록 (최근 200개) | - | 예 |
 | GET | `api/history/<id>` | 이력 하나 (표·후보·내보낸 파일 목록) | - | 예 |
@@ -112,11 +113,12 @@
   "formats": [{"id": "xlsx", "label": "엑셀 (XLSX)", "ok": true}, {"id": "hwpx", "label": "한글 (HWPX)", "ok": true}],
   "model": "<모델 이름>",
   "palette": ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"],
-  "kind_colors": {"waterfall": ["#1baf7a", "#e34948", "#2a78d6"], "candlestick": ["#e34948", "#2a78d6"]}
+  "kind_colors": {"waterfall": ["#1baf7a", "#e34948", "#2a78d6"], "candlestick": ["#e34948", "#2a78d6"]},
+  "rerank": {"max_candidates": 12, "max_extra": 3, "rate_n": 10, "rate_s": 600}
 }
 ```
 - `samples` 는 12개(2026-10-20부터 주가·역량 평가·월별 손익·채용 단계·목표 대비 실적·기준금리·시도별 지표·월별 운영 지표·월별 강수량 추가).
-- `formats[].ok`: HWPX 는 서버에 Node + kordoc 이 있을 때만 `true`. `model` 은 `api/describe` 가 기본으로 쓰는 모델.
+- `formats[].ok`: HWPX 는 서버에 Node + kordoc 이 있을 때만 `true`. `model` 은 `api/describe`·`api/rerank` 가 기본으로 쓰는 모델. `rerank` 는 `api/rerank` 한도(LLM 에 보내는 후보 수·제안 수·10분 호출 수).
 
 ### GET api/models
 - 응답: 문자열 배열 (예: `["qwen3:8b", "gemma4:31b"]`). LLM 서버가 안 되면 `[]`. 지금 화면은 부르지 않음.
@@ -163,7 +165,8 @@
                  "why": "…", "score": 90, "title": "연도별 예산 추이", "legend": "top", "labels": "auto",
                  "svg": "<svg …>…</svg>"}]}
 ```
-  - 후보는 점수 높은 순. 이력에는 `svg` 를 뺀 후보가 저장됨.
+  - 후보는 점수 높은 순. 이력에는 `svg` 를 뺀 후보가 저장됨. 규칙 후보는 `source: "rule"`.
+  - `rerank`(있을 때만): `id` 의 이력에 저장된 AI 순위(`api/rerank` 결과)가 지금 표·후보와 같으면 `stored: true` 로 함께 돌려줌(AI 제안 `svg` 는 다시 그림). 화면은 이때 LLM 을 다시 부르지 않음. 표가 바뀌면 저장된 AI 순위를 지움.
 - 오류(400): 숫자 열이 없으면 `"숫자 열이 없어 그래프를 만들 수 없습니다 — 열 타입을 '숫자'로 바꿔 보세요"`, 표 검사 실패 메시지.
 
 ### POST api/render
@@ -196,6 +199,34 @@
   - `dropped`: 표에 없는 숫자가 들어 있어 버린 문장 수.
 - 오류(400): `"LLM 서버 연결 실패: …"`(서버 주소는 넣지 않음), `"LLM HTTP 500: …"` 등.
 - 메모: 스트리밍 없음, 한 번에 응답. 모델 크기에 따라 수 초~수십 초 (서버 측 타임아웃 600초). 화면은 결과의 `title` 로 바꾼 뒤 각 후보를 `api/render` 로 다시 그림.
+
+### POST api/rerank  (LLM, 선택)
+규칙 후보를 먼저 보여 준 뒤 따로 부르는 단계입니다. 로컬 LLM 이 **보낸 후보 안에서만** 순서를 정하고, 지원 종류(`api/meta` 의 `kinds`) 중 더 알맞은 것이 있으면 **최대 3개 제안**합니다. 서버가 모두 검증하고, LLM 이 안 되면 오류 대신 규칙 순서를 돌려줍니다.
+
+| 필드 | 형식 | 필수 | 설명 |
+|---|---|---|---|
+| `table` | 표 | 예 | |
+| `candidates` | 설정 배열 | 아니오 | `api/suggest` 후보에서 `svg` 를 뺀 것(`id` = `c숫자`, `kind` 필수, 최대 60). 없으면 서버가 규칙 후보를 다시 만듦. LLM 에는 앞 12개만 보내고 나머지는 순서 뒤에 그대로 |
+| `id` | 문자열 | 아니오 | 이력 id — 주면 결과(`ok` 일 때)를 이력 `rerank` 에 저장 |
+| `model` | 문자열 | 아니오 | 모델 이름 (기본 `api/meta` 의 `model`) |
+
+- 응답(200):
+```json
+{"ok": true, "order": ["c1", "c3", "c10", "c4", "c2", "c8", "c6", "c5", "c7", "c9"],
+ "reasons": {"c1": "역량별 강점과 약점을 한눈에 비교하기에 가장 알맞음"},
+ "extra": [{"id": "a1", "source": "ai", "kind": "dumbbell", "name": "덤벨 (두 값 비교)", "x": "역량", "ys": ["김연구", "팀 평균"],
+            "why": "역량마다 개인 점수와 팀 평균의 차이를 길이로 비교", "title": "역량별 김연구와 팀 평균 비교",
+            "legend": "top", "labels": "auto", "svg": "<svg …>…</svg>"}],
+ "model": "<모델 이름>", "dropped": {"ids": 0, "reasons": 0, "extra": 1}, "notes": ["조건에 맞지 않거나 겹치는 제안 1개는 버림"],
+ "changed": true, "tries": 1, "sig": "…"}
+```
+  - `order`: 보낸 규칙 후보 id 의 새 순서(각 한 번). 모르는·겹친 id 는 버리고(`dropped.ids`), 빠진 id 는 규칙 순서대로 뒤에. AI 제안은 `order` 에 없음 — 화면은 맨 뒤에 붙임.
+  - `reasons`: 일부 후보의 AI 이유. 한국어 90자 이하, 표에 없는 숫자가 있거나 한국어 문장이 아니면 버림(`dropped.reasons`). 영문 종류 코드는 한국어 이름으로 바꿈.
+  - `extra`: AI 제안(최대 3, `a1`~`a3`, `source: "ai"`, `why` = AI 이유). 서버 검사 — 지원 종류, 열 존재·타입(값 열은 숫자, x 는 범주·날짜 / 산점도·거품은 숫자), 종류별 필요한 열(캔들 4열 순서·이중축 `y2`·누적+선 `y2` 같은 단위·불릿 `target` 같은 단위·거품 `size` 양수 등), 규칙과 같은 부적합 막기(원그래프·도넛·반원 2~6개·양수, 음수 있으면 누적·면적·방사형 금지, 시가·고가·저가·종가 쌓기·묶기 금지, 폭포는 양·음 섞임, 깔때기는 줄어드는 값, 로즈는 주기 범주, 항목 수 상한), **SVG 와 문서 블록을 실제로 만들어 보기**, 이미 있는 후보와 같은 `kind`+`x`+`ys`+`group` 제외. 통과 못 하면 `dropped.extra`. 내보내기(`api/export`)는 다른 설정과 같음.
+  - `ok: false` — LLM 연결 실패·시간 초과·형식 두 번 틀림: `order` = 규칙 순서, `reasons`·`extra` 빔, `note` 에 한 줄 안내(예: `"AI 순위를 받지 못해 규칙 순서를 그대로 둡니다"`). 오류 코드가 아님.
+- 오류: 표·후보 형식 400, 사용자당 동시 1개 넘음 429 `{"code": "busy"}`, 10분 10번 넘음 429 `{"code": "rate_limited"}`(`Retry-After: 60`).
+- LLM 에 보내는 것: 표 요약(열 이름·타입·단위·최소/최대/첫/끝 값·음수 수, 범주 값 8개까지 — 값 하나 40자·전체 3000자), 열 목록, 후보(종류 한국어 이름·열·규칙 이유·점수), 허용 종류와 한 줄 쓰임. 표 내용은 `<<<TABLE_DATA>>>` … `<<<END_TABLE_DATA>>>` 사이 데이터로만(안의 `<<<`·`>>>` 는 지움), 그 안의 지시문은 따르지 말라고 알림.
+- LLM 호출: JSON 스키마 안내 디코딩(OpenAI 호환 `response_format: json_schema` · Ollama `format`, 후보 id·종류·열 이름은 enum). 형식이 틀리거나 잘리면 한 번 더(JSON 객체 방식 + 앞 오류 알려 줌). 도구 전체 동시 LLM 2개.
 
 ### POST api/export
 고른 그래프들을 하나의 문서로 만들고, 만든 파일을 다시 열어 구조를 검사합니다.
@@ -282,10 +313,11 @@ const {svg, note} = await post('api/render', {table: j.table, spec});
 ## 화면만의 것 / 주의
 - **열 편집은 화면이 직접**: 열 이름·단위·타입을 바꾸는 것은 화면이 `table` 객체를 고친 뒤 `api/suggest` 를 다시 부르는 방식입니다(별도 API 없음). 지금 표를 전치할 때도 화면이 표를 TSV 로 되돌려(`이름(단위)` 머리글) `api/parse` 에 `transpose: true` 로 보냅니다.
 - **편집기 상태**: 고른 후보 목록, 사용자가 손으로 고친 제목인지(`edited_title`), LLM 설명(`insight`), 규칙 제목(`rule_title`) 은 화면만의 필드입니다. 화면은 `api/render`·`api/export` 로 보낼 때 `svg`·`insight`·`rule_title`·`note` 를 빼고 보냅니다.
-- **이력 저장 시점**: `api/suggest` 와 `api/export` 가 이력을 만들거나 고칩니다. `api/parse`·`api/render`·`api/describe` 는 저장하지 않습니다.
+- **이력 저장 시점**: `api/suggest` 와 `api/export` 가 이력을 만들거나 고칩니다. `api/rerank` 는 `id` 를 줬을 때 그 이력의 `rerank` 만 고칩니다. `api/parse`·`api/render`·`api/describe` 는 저장하지 않습니다.
+- **AI 순위 화면**: 규칙 후보를 먼저 그리고 `api/rerank` 를 따로 부릅니다(첫 화면을 막지 않음). 카드에 'AI 추천 순위 N'·'AI 제안' 배지, '규칙 순서로' 로 원래 순서. 실패면 규칙 순서 + 작은 안내.
 - **SVG**: 서버가 만든 SVG 문자열을 그대로 DOM 에 넣습니다. 색은 `api/meta` 의 `palette` 순서.
 - **권한**: owner 전용 엔드포인트 없음. 각 사용자는 자기 이력·파일만 보입니다(`X-Agent-User`). 공유 데이터는 샘플(`api/sample/*`)뿐.
 - **정적 파일**: `/static/…` 없음. 화면은 `ui.html` 한 파일이고, `api/…` 가 아닌 모든 GET 경로가 이 HTML 을 돌려줍니다(없는 GET 경로도 404 가 아니라 200 HTML).
 - **POST 경로는 정확히 일치해야 함**: 서버가 쿼리 문자열을 떼지 않고 경로를 비교하므로 `api/parse?x=1` 처럼 보내면 404 `{"error": "없는 경로"}` 입니다.
-- 오류 응답은 항상 `{"error": "한국어 메시지"}` — 입력 문제·LLM 실패 400, 크기 초과 413, 없음 404, 그 밖 500(`"예외이름: 메시지"`).
+- 오류 응답은 항상 `{"error": "한국어 메시지"}` — 입력 문제·LLM 실패 400(`api/rerank` 의 LLM 실패는 200 + `ok: false`), 동시·횟수 제한 429(`api/rerank`, `code`), 크기 초과 413, 없음 404, 그 밖 500(`"예외이름: 메시지"`).
 - 명령줄 사용(LLM 없이 추천 상위 4개를 문서로): `python3 app.py --cli 표.csv pptx 결과.pptx`.

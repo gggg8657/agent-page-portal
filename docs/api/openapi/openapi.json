@@ -329,7 +329,7 @@
    "x-docs-input": "file",
    "x-external-network": false,
    "x-response-style": "json",
-   "x-kind-note": "LLM 은 api/describe(제목·설명)에만",
+   "x-kind-note": "LLM 은 api/describe(제목·설명)·api/rerank(규칙 후보 순서·추가 제안, 서버 검증)에만 — 꺼져도 규칙 추천으로 동작",
    "x-docs-input-note": "표 텍스트(text) 또는 파일 base64(file_b64)",
    "x-response-style-note": "문서는 api/export JSON 의 url 로 파일 받기"
   },
@@ -12980,7 +12980,7 @@
     ],
     "operationId": "chartSuggest",
     "summary": "표 → 그래프 후보(최대 12, 점수순) + SVG, 이력 저장",
-    "description": "표 검사: 열·행이 비면 400, 최대 5000행 × 60열. 숫자 열이 없으면 400. id 가 있으면 그 이력 갱신, 없으면 새 이력.",
+    "description": "표 검사: 열·행이 비면 400, 최대 5000행 × 60열. 숫자 열이 없으면 400. id 가 있으면 그 이력 갱신, 없으면 새 이력. 이력에 같은 표·후보의 AI 순위(api/rerank)가 있으면 rerank 로 함께 돌려줌, 표가 바뀌면 지움.",
     "requestBody": {
      "required": true,
      "content": {
@@ -13026,6 +13026,14 @@
            "items": {
             "$ref": "#/components/schemas/ChartCandidate"
            }
+          },
+          "rerank": {
+           "allOf": [
+            {
+             "$ref": "#/components/schemas/ChartRerankResult"
+            }
+           ],
+           "description": "id 의 이력에 저장된 AI 순위가 지금 표·후보와 같을 때만(stored=true, 제안 svg 는 다시 그림) — 화면은 LLM 을 다시 부르지 않음"
           }
          },
          "required": [
@@ -13215,6 +13223,80 @@
      },
      "401": {
       "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-llm": true,
+    "x-long-running": true
+   }
+  },
+  "/t/chart-local/api/rerank": {
+   "post": {
+    "tags": [
+     "chart-local"
+    ],
+    "operationId": "chartRerank",
+    "summary": "AI 순위 다시 매기기 + 더 맞는 그래프 제안 (LLM, 선택)",
+    "description": "규칙 후보를 보여 준 뒤 따로 부르는 선택 단계. LLM 은 보낸 후보 안에서만 순서를 정하고(앞 12개만 보냄), 지원 종류(meta.kinds) 중 더 맞는 것이 있으면 최대 3개 제안. 서버가 모두 검증: 순서는 아는 id 각 한 번, 이유는 한국어·90자·표에 없는 숫자 금지, 제안은 열·타입·부적합 막기(원그래프 6개 초과·음수 누적·시가·고가·저가·종가 쌓기 등)·실제 SVG/문서 블록 시험·중복 제외. 표 내용은 구분자로 감싼 데이터로만 보냄(지시문 무시). JSON 스키마 안내 디코딩, 형식이 틀리면 한 번 더. LLM 이 꺼졌거나 느리거나 답이 틀리면 200 + ok=false + 규칙 순서. 사용자당 동시 1개(429 code=busy)·10분 10번(429 code=rate_limited, Retry-After). LLM 한 번 90초·다시 묻기 합쳐 120초 제한. id 를 주면 결과를 이력에 저장 — 같은 표로 api/suggest 하면 응답 rerank 로 되살아남.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "table"
+        ],
+        "properties": {
+         "table": {
+          "$ref": "#/components/schemas/ChartTable"
+         },
+         "candidates": {
+          "type": "array",
+          "maxItems": 60,
+          "items": {
+           "$ref": "#/components/schemas/ChartSpec"
+          },
+          "description": "api/suggest 후보에서 svg 를 뺀 것(id c숫자·kind 필수). 없으면 서버가 규칙 후보를 다시 만듦"
+         },
+         "id": {
+          "type": "string",
+          "pattern": "^\\d{8}-\\d{6}-[0-9a-f]{4}$",
+          "description": "이력 id — 주면 결과(ok 일 때)를 이력 rec.rerank 에 저장"
+         },
+         "model": {
+          "type": "string",
+          "description": "모델 이름(기본 meta.model)"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공(LLM 실패도 200 + ok=false)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ChartRerankResult"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
      },
      "502": {
       "$ref": "#/components/responses/BadGateway"
@@ -30176,6 +30258,14 @@
       "type": "string",
       "default": "합계",
       "description": "waterfall 끝 합계 막대 이름"
+     },
+     "source": {
+      "type": "string",
+      "enum": [
+       "rule",
+       "ai"
+      ],
+      "description": "rule = 규칙 추천(api/suggest), ai = AI 제안(api/rerank extra)"
      }
     },
     "required": [
@@ -30201,6 +30291,98 @@
        "svg"
       ]
      }
+    ]
+   },
+   "ChartRerankResult": {
+    "type": "object",
+    "description": "AI 순위 결과. ok=false 면 LLM 실패 — order 는 규칙 순서 그대로, reasons·extra 는 비고 note 에 짧은 안내(오류 아님)",
+    "properties": {
+     "ok": {
+      "type": "boolean",
+      "description": "LLM 답을 받아 검증까지 했으면 true"
+     },
+     "order": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "규칙 후보 id 의 새 순서(보낸 후보 각 한 번). 모르는·겹친 id 는 버리고 빠진 id 는 규칙 순서대로 뒤에. AI 제안(extra)은 들어가지 않음 — 화면은 뒤에 붙임"
+     },
+     "reasons": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": {
+       "type": "string",
+       "maxLength": 90
+      },
+      "description": "후보 id → AI 가 본 이유(한국어, 90자 이하, 표에 없는 숫자가 있으면 버림). 일부 후보만"
+     },
+     "extra": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+       "$ref": "#/components/schemas/ChartCandidate"
+      },
+      "description": "AI 제안 그래프(최대 3, id a1~a3, source=ai, why=AI 이유, svg 포함). 지원 종류·있는 열·맞는 열 타입·부적합 막기·서버 SVG/문서 블록 시험을 통과하고 기존 후보(kind+x+ys+group)와 겹치지 않는 것만. 내보내기는 다른 명세와 같음"
+     },
+     "model": {
+      "type": "string"
+     },
+     "dropped": {
+      "type": "object",
+      "properties": {
+       "ids": {
+        "type": "integer"
+       },
+       "reasons": {
+        "type": "integer"
+       },
+       "extra": {
+        "type": "integer"
+       }
+      },
+      "description": "서버가 버린 수 — 모르는·겹친 id, 이유 문장, 제안"
+     },
+     "notes": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "화면에 작게 보일 한국어 안내(버린 것 등)"
+     },
+     "note": {
+      "type": "string",
+      "description": "ok=false 일 때 이유(한국어 한 줄)"
+     },
+     "changed": {
+      "type": "boolean",
+      "description": "순서가 규칙과 달라졌는지"
+     },
+     "tries": {
+      "type": "integer",
+      "description": "LLM 호출 수(형식이 틀리면 한 번 더 물어 최대 2)"
+     },
+     "sig": {
+      "type": "string",
+      "description": "표·후보 지문 — 이력 복원 때 같은 표·후보인지 확인"
+     },
+     "stored": {
+      "type": "boolean",
+      "description": "api/suggest 가 이력에서 되살린 결과(LLM 다시 안 부름)"
+     },
+     "ts": {
+      "type": "string",
+      "description": "이력에 저장한 시각(되살린 결과에만)"
+     }
+    },
+    "required": [
+     "ok",
+     "order",
+     "reasons",
+     "extra",
+     "model",
+     "dropped",
+     "notes"
     ]
    },
    "ChartMeta": {
@@ -30282,6 +30464,24 @@
        }
       },
       "description": "계열 대신 뜻으로 색을 쓰는 종류의 기본색 — waterfall: [증가, 감소, 합계], candlestick: [상승, 하락]. spec.colors 같은 순서로 바꿈"
+     },
+     "rerank": {
+      "type": "object",
+      "description": "api/rerank 한도",
+      "properties": {
+       "max_candidates": {
+        "type": "integer"
+       },
+       "max_extra": {
+        "type": "integer"
+       },
+       "rate_n": {
+        "type": "integer"
+       },
+       "rate_s": {
+        "type": "integer"
+       }
+      }
      }
     },
     "required": [
@@ -30396,6 +30596,14 @@
        "$ref": "#/components/schemas/ChartSpec"
       },
       "description": "마지막 내보내기 specs(내보낸 적 있을 때만)"
+     },
+     "rerank": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/ChartRerankResult"
+       }
+      ],
+      "description": "마지막 AI 순위(api/rerank, ok 일 때) — extra 에는 svg 없음, ts = 저장 시각"
      }
     },
     "required": [
