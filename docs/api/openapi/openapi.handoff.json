@@ -28602,7 +28602,21 @@
      "heatmap",
      "panels",
      "index",
-     "dual"
+     "dual",
+     "radar",
+     "sparkline",
+     "candlestick",
+     "waterfall",
+     "funnel",
+     "bubble",
+     "step",
+     "lollipop",
+     "dumbbell",
+     "treemap",
+     "bullet",
+     "rose",
+     "stack_line",
+     "semi_doughnut"
     ],
     "description": "api/meta kinds 키"
    },
@@ -28639,7 +28653,7 @@
      },
      "y2": {
       "type": "string",
-      "description": "dual 오른쪽 축 열"
+      "description": "dual 오른쪽 축 열 · stack_line 꺾은선 열(같은 값 축)"
      },
      "dual_shape": {
       "type": "string",
@@ -28746,6 +28760,41 @@
      },
      "score": {
       "type": "number"
+     },
+     "target": {
+      "type": "string",
+      "description": "bullet 목표 열(가로 눈금)"
+     },
+     "volume": {
+      "type": "string",
+      "description": "candlestick 거래량 열(아래 막대, 선택). ys 는 시가·고가·저가·종가 순서 4개"
+     },
+     "size": {
+      "type": "string",
+      "description": "bubble 원 크기 열(양수, 넓이 ∝ 값). x 는 숫자 열"
+     },
+     "label": {
+      "type": "string",
+      "description": "bubble 점 이름(범주) 열"
+     },
+     "totals": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "waterfall 에서 0부터 그리는 합계 막대로 볼 x 값(누적을 그 값으로 다시 맞춤)"
+     },
+     "show_total": {
+      "type": [
+       "boolean",
+       "null"
+      ],
+      "description": "waterfall 끝에 누적 합계 막대 — 없으면 마지막 항목이 합계가 아닐 때만"
+     },
+     "total_label": {
+      "type": "string",
+      "default": "합계",
+      "description": "waterfall 끝 합계 막대 이름"
      }
     },
     "required": [
@@ -28841,6 +28890,17 @@
        "type": "string",
        "pattern": "^#[0-9a-fA-F]{6}$"
       }
+     },
+     "kind_colors": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "array",
+       "items": {
+        "type": "string",
+        "pattern": "^#[0-9a-fA-F]{6}$"
+       }
+      },
+      "description": "계열 대신 뜻으로 색을 쓰는 종류의 기본색 — waterfall: [증가, 감소, 합계], candlestick: [상승, 하락]. spec.colors 같은 순서로 바꿈"
      }
     },
     "required": [
@@ -29115,6 +29175,10 @@
         "items": {
          "type": "string"
         }
+       },
+       "sparklines": {
+        "type": "integer",
+        "description": "XLSX 엑셀 스파크라인(x14) 개수 — sparkline 종류"
        }
       },
       "required": [

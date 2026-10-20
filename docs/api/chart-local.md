@@ -52,12 +52,16 @@
 | 필드 | 설명 |
 |---|---|
 | `id` | 후보 id (`c1`, `c2` …) |
-| `kind` | 그래프 종류 (필수). `api/meta` 의 `kinds` 키: `col` `bar` `col_group` `bar_group` `col_stack` `col_stack100` `bar_stack` `line` `area` `area_stack` `scatter` `pie` `doughnut` `hist` `box` `heatmap` `panels` `index` `dual` |
+| `kind` | 그래프 종류 (필수). `api/meta` 의 `kinds` 키: `col` `bar` `col_group` `bar_group` `col_stack` `col_stack100` `bar_stack` `line` `area` `area_stack` `scatter` `pie` `doughnut` `hist` `box` `heatmap` `panels` `index` `dual` · (2026-10-20 추가) `radar` `sparkline` `candlestick` `waterfall` `funnel` `bubble` `step` `lollipop` `dumbbell` `treemap` `bullet` `rose` `stack_line` `semi_doughnut` — 아래 '종류별 필드' |
 | `name` | 종류의 한국어 이름 (표시용) |
 | `x` | x 축(범주·시간) 열 이름. 없으면 `null` (행 순서) |
 | `ys` | 값 열 이름 배열 |
 | `group` | 긴 형식 표를 계열로 펼칠 범주 열 (선택) |
-| `y2` | `dual` 일 때 오른쪽 축 열 |
+| `y2` | `dual` 일 때 오른쪽 축 열, `stack_line` 일 때 꺾은선 열(같은 값 축) |
+| `target` | `bullet` 목표 열 (가로 눈금) |
+| `volume` | `candlestick` 거래량 열 (아래 막대, 선택) |
+| `size`, `label` | `bubble` 원 크기 열(양수, 넓이 ∝ 값)·점 이름 열 |
+| `totals`, `show_total`, `total_label` | `waterfall`: 0부터 그리는 합계 막대로 볼 x 값 목록 · 끝 누적 합계 막대(없으면 마지막이 합계가 아닐 때만) · 그 이름(기본 `"합계"`) |
 | `dual_shape`, `panel_shape` | 이중축·2단 비교의 모양 (예: `"bar_line"`) |
 | `title`, `subtitle` | 그림 제목·부제 |
 | `x_title`, `y_title`, `y2_title` | 축 제목 (비우면 자동) |
@@ -73,6 +77,27 @@
 | `zero_base`, `unit`, `colors` | 0 기준 축, 단위 표기, 계열 색 (화면 편집기에서 씀) |
 | `why`, `score` | 추천 이유 문장·점수 (추천 결과에만, 그리기에는 영향 없음) |
 
+### 종류별 필드와 문서에 들어가는 방식 (2026-10-20 추가 종류)
+
+| kind | 이름 | 필요한 열 | XLSX | PPTX·DOCX | HWPX |
+|---|---|---|---|---|---|
+| `radar` | 방사형 | `x`=축 범주(3~12), `ys` 1~5 | 네이티브 radarChart | 네이티브 | 한글 차트(`hwp-native`) |
+| `sparkline` | 스파크라인 | `x`=시간, `ys` 여러 개(또는 `group`) | 엑셀 스파크라인(x14, `verify.sparklines`) | 계열마다 작은 꺾은선 차트 | 그림 |
+| `candlestick` | 캔들스틱 | `ys`=시가·고가·저가·종가 순서 4개, `volume` 선택 | 주식형 stockChart(+거래량 막대 차트) | 같음 | 그림 |
+| `waterfall` | 폭포 | `ys[0]`=증감, `totals` | 누적 막대(투명 기준 계열·수식) | 같음 | 그림 |
+| `funnel` | 깔때기 | `ys[0]`=단계 값 | 누적 가로 막대(투명 여백) | 같음 | 그림 |
+| `bubble` | 거품 | `x`·`ys[0]` 숫자, `size`, `label` | bubbleChart | 같음 | 그림 |
+| `lollipop` | 막대사탕 | `ys[0]` | 꺾은선 표식 + 오차 막대 줄기 | 같음 | 그림 |
+| `dumbbell` | 덤벨 | `ys` 앞 2개(또는 2수준 `group`) | 꺾은선 표식 + 최고-최저 선 | 같음 | 그림 |
+| `bullet` | 목표 대비 | `ys[0]`=실적, `target` | 막대 + 목표 표식(같은 축) | 같음 | 그림 |
+| `stack_line` | 누적 막대+꺾은선 | `ys` 쌓을 열, `y2` 선 | 누적 막대 + 꺾은선(같은 축) | 같음 | 그림 |
+| `semi_doughnut` | 반원 도넛 | `ys[0]` 양수 | 도넛 + 투명 아래 반 | 같음 | 그림 |
+| `step`, `treemap`, `rose` | 계단선·트리맵·로즈 | `ys[0]` | 그림(PNG)+데이터 표 | 그림+표 | 그림 |
+
+- 그림(`image`)은 서버의 `rsvg-convert` 로 만든 PNG — 없으면 데이터 표만(`table`). 오피스·한글 차트에 같은 형식이 없는 종류만 그림으로 넣고 `report[].modes`·`editable` 에 그대로 적음.
+- 폭포에서 누적이 0 아래로 내려가는 구간은 엑셀·파워포인트에서는 맞지만 LibreOffice 는 음수 누적 막대를 위로 그림(문서 주석에 안내).
+- `waterfall` 색은 `colors` = [증가, 감소, 합계], `candlestick` 은 [상승, 하락] — 기본값은 `api/meta` 의 `kind_colors`.
+
 ## 엔드포인트
 
 ### GET api/health
@@ -86,9 +111,11 @@
   "kinds": {"col": "세로 막대", "bar": "가로 막대", "...": "..."},
   "formats": [{"id": "xlsx", "label": "엑셀 (XLSX)", "ok": true}, {"id": "hwpx", "label": "한글 (HWPX)", "ok": true}],
   "model": "<모델 이름>",
-  "palette": ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"]
+  "palette": ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"],
+  "kind_colors": {"waterfall": ["#1baf7a", "#e34948", "#2a78d6"], "candlestick": ["#e34948", "#2a78d6"]}
 }
 ```
+- `samples` 는 12개(2026-10-20부터 주가·역량 평가·월별 손익·채용 단계·목표 대비 실적·기준금리·시도별 지표·월별 운영 지표·월별 강수량 추가).
 - `formats[].ok`: HWPX 는 서버에 Node + kordoc 이 있을 때만 `true`. `model` 은 `api/describe` 가 기본으로 쓰는 모델.
 
 ### GET api/models
@@ -194,7 +221,7 @@
             "checks": ["…검사한 항목…"], "errors": []}}
 ```
   - `url` 은 **상대 경로**: 포털 화면이면 `/t/chart-local/` 기준으로 붙이면 됨.
-  - `report[].modes`: 그림마다 들어간 방식 — `native`(네이티브 차트, 데이터 편집 가능), `table`(색 칠한 표), `image`(PNG + 데이터 표), `hwp-native`(한글 차트 개체). `editable` 은 `image` 가 없으면 `true`.
+  - `report[].modes`: 그림마다 들어간 방식 — `native`(네이티브 차트, 데이터 편집 가능), `table`(색 칠한 표, 또는 그림 변환기가 없을 때 데이터 표), `image`(PNG + 데이터 표), `hwp-native`(한글 차트 개체). `editable` 은 `image` 가 없으면 `true`.
   - `verify.ok` 가 `false` 여도 파일은 만들어지고 받을 수 있음 (`errors` 에 경고).
 - 오류(400): `"내보낼 그래프를 하나 이상 고르세요"`, `"한 문서에 그래프는 30개까지"`, `"형식은 xlsx|pptx|docx|hwpx"`, `"알 수 없는 그래프 종류"`, HWPX 생성기가 없을 때 안내 문구.
 - 메모: 수 초. HWPX 는 서버에서 Node(kordoc)를 실행하므로 더 걸릴 수 있음. 이력의 `exports` 목록에 기록됨.
