@@ -1,6 +1,6 @@
 """화면: HTML 틀·테마 끼워 넣기·저작자 표기·랜딩·사용법(?)·정적 파일(/guide · /theme · /landing) · React 빌드(WEB_DIST·WEB_ROOT).
 응답은 넘겨받은 ctx(app.Ctx: send·bare·redirect·auth·html_page)로만 만든다 — 이 모듈은 ctx 를 import 하지 않음(순환 없음)."""
-import base64, json, os, re, time, urllib.parse
+import base64, json, os, re, threading, time, urllib.parse
 
 from . import accounts, auth, config, sessions, tools, webguard
 from .config import THEME_DIR, V2_DIR, WEB_DIST, WEB_PREFIX, WEB_ROOT, WEB_ROOT_DIST
@@ -252,7 +252,7 @@ def web_file(ctx, p):
             nxt = prefix + nxt
         return ctx.redirect(nxt)
     dist = os.path.realpath(dist_env)
-    if any(x.startswith(".") for x in rel.split("/")) or rel.lower().endswith(".map"):   # .vite/(manifest)·.git·소스맵 등은 밖으로 안 냄
+    if any(x.startswith(".") for x in rel.split("/")) or rel.lower().endswith((".map", ".gz", ".br")):   # .vite/(manifest)·.git·소스맵·미리 압축본(.gz — 권한 판단을 비켜 가지 않게) 등은 밖으로 안 냄
         return ctx.send({"error": "not found"}, code=404)
     gated = None
     if rel.startswith("assets/"):   # 빌드 자산 권한(webguard): 로그인 화면 번들만 공개, 나머지 로그인, 관리·승인·개발자 화면 번들은 그 역할만
@@ -281,13 +281,89 @@ def web_file(ctx, p):
     immutable = f.startswith(os.path.join(dist, "assets") + os.sep)
     cc = "no-cache" if not immutable else "private, max-age=31536000, immutable" if gated else "public, max-age=31536000, immutable"   # 로그인·권한 번들은 브라우저에만(공유 캐시 안 됨)
     hd = [("ETag", etag), ("Cache-Control", cc), ("X-Content-Type-Options", "nosniff"), ("Referrer-Policy", "same-origin")]
-    if gated:
+    gz = _gz_twin(f, st) if ext in GZ_EXT else None   # 배포 때 미리 만든 <파일>.gz(agent-page-web scripts/deploy.sh) — 있으면 Vary 를 늘 붙임
+    if gz:
+        if accepts_gzip(ctx.headers.get("accept-encoding")):
+            f, etag = gz, etag[:-1] + '-gz"'
+            hd[0] = ("ETag", etag)
+            hd.append(("Content-Encoding", "gzip"))
+        else:
+            gz = None
+        hd.append(("Vary", "Cookie, Accept-Encoding" if gated else "Accept-Encoding"))
+    elif gated:
         hd.append(("Vary", "Cookie"))
     if ext == ".html":
         hd += [("Content-Security-Policy", WEB_CSP), ("X-Frame-Options", "SAMEORIGIN")]
     if ctx.headers.get("if-none-match") == etag:
         return ctx.bare(304, hd)
-    with open(f, "rb") as fh:
-        body = fh.read()
+    body = _asset_bytes(f) if immutable else None
+    if body is None:
+        with open(f, "rb") as fh:
+            body = fh.read()
     ctx.setcookie = None   # 정적 파일 응답엔 세션 연장 쿠키를 싣지 않음(캐시되는 응답)
     return ctx.send(body, WEB_TYPES.get(ext, "application/octet-stream"), headers=hd)
+
+
+# 해시 붙은 빌드 자산(assets/ — 내용이 바뀌면 이름이 바뀜) 바이트를 메모리에 둠(PORTAL_ASSET_CACHE_MB, 기본 64, 0 = 끔) — 요청마다 파일을 읽지 않게.
+# 키는 실제 경로 + 수정 시각 + 크기(배포로 바뀌면 새로 읽음). 넘치면 통째로 비움(배포 직후 몇 번 다시 읽을 뿐)
+ASSET_CACHE_MAX = int(float(os.environ.get("PORTAL_ASSET_CACHE_MB", "64")) * 1024 * 1024)
+_AC = {}
+_AC_SIZE = [0]
+_AC_LOCK = threading.Lock()
+
+
+def _asset_bytes(f):
+    if ASSET_CACHE_MAX <= 0:
+        return None
+    try:
+        st = os.stat(f)
+    except OSError:
+        return None
+    key = (st.st_mtime_ns, st.st_size)
+    with _AC_LOCK:
+        v = _AC.get(f)
+        if v and v[0] == key:
+            return v[1]
+    if st.st_size > ASSET_CACHE_MAX // 8:
+        return None
+    with open(f, "rb") as fh:
+        body = fh.read()
+    if len(body) != st.st_size:
+        return body
+    with _AC_LOCK:
+        old = _AC.pop(f, None)
+        if old:
+            _AC_SIZE[0] -= len(old[1])
+        if _AC_SIZE[0] + len(body) > ASSET_CACHE_MAX:
+            _AC.clear(); _AC_SIZE[0] = 0
+        _AC[f] = (key, body)
+        _AC_SIZE[0] += len(body)
+    return body
+
+
+GZ_EXT = {".js", ".mjs", ".css", ".svg", ".json", ".html", ".txt", ".wasm"}
+
+
+def _gz_twin(f, st):
+    """f 옆의 미리 압축본(f.gz) — 원본보다 오래되지 않았을 때만(옛 압축본을 내보내지 않게)"""
+    g = f + ".gz"
+    try:
+        gs = os.stat(g)
+    except OSError:
+        return None
+    return g if gs.st_mtime >= st.st_mtime and gs.st_size > 0 else None
+
+
+def accepts_gzip(ae):
+    """Accept-Encoding 에 gzip(또는 *)이 있고 q=0 이 아니면 True"""
+    for part in (ae or "").lower().split(","):
+        name, _, params = part.strip().partition(";")
+        if name.strip() in ("gzip", "*"):
+            q = params.replace(" ", "")
+            if q.startswith("q="):
+                try:
+                    return float(q[2:]) > 0
+                except ValueError:
+                    return False
+            return True
+    return False

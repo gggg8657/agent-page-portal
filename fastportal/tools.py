@@ -180,6 +180,48 @@ def guide(d):
 
 
 # ── 홈 목록 데이터(/api/tools): 사용 횟수·이용 순위·게시글 ─────────────────
+# 모두에게 같은 집계(usage·user_rank·게시글 목록과 좋아요 수)는 PORTAL_TOOLS_CACHE_S(기본 5초, 0 = 끔) 동안 메모리에 둠 — 홈을 열 때마다
+# events 전체 GROUP BY 를 다시 하지 않게. 이 포털에서 열기·좋아요·글·글 좋아요를 기록하면 stats_reset() 으로 바로 비움.
+# 사람마다 다른 값(게시글 liked)은 캐시하지 않고 요청마다 그 계정 것만 따로 읽음(post_likes 한 번)
+STATS_TTL = float(os.environ.get("PORTAL_TOOLS_CACHE_S", "5"))
+_STATS = {"t": 0.0, "gen": 0, "v": None}
+_STATS_LOCK = threading.Lock()
+
+
+def stats_reset():
+    with _STATS_LOCK:
+        _STATS["gen"] += 1
+        _STATS["v"] = None
+
+
+def _stats(c):
+    """(usage, rank, posts 공통 부분) — TTL 캐시. 계산 중에 stats_reset 이 불리면 그 결과는 넣지 않음"""
+    if STATS_TTL > 0:
+        with _STATS_LOCK:
+            if _STATS["v"] is not None and time.time() - _STATS["t"] < STATS_TTL:
+                return _STATS["v"]
+            gen = _STATS["gen"]
+    v = (usage(c), user_rank(c), _posts_common(c))
+    if STATS_TTL > 0:
+        with _STATS_LOCK:
+            if _STATS["gen"] == gen:
+                _STATS.update(t=time.time(), v=v)
+    return v
+
+
+def home_data(c, up, uid):
+    """/api/tools 의 tools·rank·posts — 공통 집계는 캐시, liked 는 이 계정 것"""
+    u, rank, common = _stats(c)
+    liked = {r[0] for r in c.execute("SELECT post FROM post_likes WHERE user=?", (uid,))} if common else set()
+    return {"tools": tool_list(c, up, uid, u), "rank": [dict(x) for x in rank],
+            "posts": [dict(p, tags=list(p["tags"]), liked=p["id"] in liked) for p in common]}
+
+
+def _posts_common(c):
+    return [dict(r) | {"tags": json.loads(r["tags"] or "[]")} for r in
+            c.execute("SELECT p.*, (SELECT COUNT(*) FROM post_likes WHERE post=p.id) likes FROM posts p ORDER BY id DESC LIMIT 50")]
+
+
 def usage(c):
     cut = (datetime.date.today() - datetime.timedelta(days=30)).isoformat()
     out = {}
@@ -201,9 +243,9 @@ def posts(c, user):
                       "(SELECT COUNT(*) FROM post_likes WHERE post=p.id AND user=?) liked FROM posts p ORDER BY id DESC LIMIT 50", (user,))]
 
 
-def tool_list(c, up, uid):
-    """/api/tools 의 tools 목록(켜짐·설치·사용 횟수 포함)"""
-    u = usage(c)
+def tool_list(c, up, uid, u=None):
+    """/api/tools 의 tools 목록(켜짐·설치·사용 횟수 포함). u: 미리 센 usage(없으면 지금 셈)"""
+    u = usage(c) if u is None else u
     return [{**t, "up": up.get(tool_addr(t), False), "installed": is_remote(t) or os.path.isdir(os.path.join(BASE, t["dir"])),
              "url": f"/t/{t['dir']}/", "usage": u.get(t["dir"], {"recent": 0, "total": 0, "users": 0, "likes": 0})}
             for t in tools() if config.SHOW_HIDDEN or not t.get("hidden")]

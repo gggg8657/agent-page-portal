@@ -2,7 +2,7 @@
 portal.py 와 같은 _data/portal.db 를 동시에 써도 되게 같은 표·열·마이그레이션 규칙을 따르고, 더한 것은 login_fails 표와
 users 의 새 열(비활성·익명화)·depts.archived·jobs 표(jobs.py)뿐(예전 코드는 모르는 표·열 — 무시됨).
 users 표는 '포털 쪽 사용자 정보'(이름·부서·테마·비활성 등)이고, 그중 salt·hash·iters(PIN)는 계정 저장소가 local 일 때만 쓴다(auth/local.py)."""
-import contextlib, datetime, os, sqlite3, subprocess, time
+import contextlib, datetime, os, sqlite3, subprocess, threading, time
 
 from . import config
 
@@ -13,15 +13,59 @@ def _connect():
     return c
 
 
+# 연결 재사용(PORTAL_DB_REUSE, 기본 1): 스레드마다 쉬는 연결을 몇 개(_KEEP) 두고 다시 씀 — 요청마다 connect/close(약 0.5 ms + GIL)를 없앰.
+# 한 스레드 안에서 db() 를 겹쳐 열면(예: 요청 트랜잭션 안에서 sessions.add_fail 이 따로 commit) 쉬는 연결이 없으므로 새 연결을 씀
+# → 예전처럼 서로 다른 연결·트랜잭션. 돌려받을 때 트랜잭션이 남아 있으면(있으면 안 됨) rollback 하고 버림. DB 파일이 바뀌면(복원) 다시 엶
+_REUSE = os.environ.get("PORTAL_DB_REUSE", "1") != "0"
+_KEEP = 2
+_TL = threading.local()
+
+
+def _ident():
+    try:
+        st = os.stat(config.DB_FILE)
+        return (config.DB_FILE, st.st_dev, st.st_ino, st.st_ctime_ns)   # ctime: 지우고 다시 만든 파일(같은 inode 재사용)도 구분 — WAL 이라 본 파일은 체크포인트 때만 바뀜
+    except OSError:
+        return None
+
+
 @contextlib.contextmanager
 def db():
-    """portal.py 의 `with db() as c` 와 같음(성공 commit, 예외 rollback) + 끝나면 닫음"""
-    c = _connect()
+    """portal.py 의 `with db() as c` 와 같음(성공 commit, 예외 rollback). 끝나면 닫거나(재사용 끔) 이 스레드의 쉬는 연결로 돌려놓음"""
+    if not _REUSE:
+        c = _connect()
+        try:
+            with c:
+                yield c
+        finally:
+            c.close()
+        return
+    idle = getattr(_TL, "idle", None)
+    if idle is None:
+        idle = _TL.idle = []
+    ident = _ident()
+    c = None
+    while idle:
+        x, xid = idle.pop()
+        if ident is not None and xid == ident:
+            c = x
+            break
+        x.close()
+    if c is None:
+        c = _connect()
+        ident = ident or _ident()   # 파일이 방금 만들어졌으면 그 정체로(그래도 없으면 돌려놓지 않음)
     try:
         with c:
             yield c
     finally:
-        c.close()
+        if ident is not None and not c.in_transaction and len(idle) < _KEEP:
+            idle.append((c, ident))
+        else:
+            try:
+                c.rollback()
+            except sqlite3.Error:
+                pass
+            c.close()
 
 
 def now():

@@ -309,6 +309,7 @@ def manage_post(ctx, c, p, req):
             if not nm:
                 raise ValueError("이름을 적어 주세요")
             c.execute("UPDATE users SET name=? WHERE id=?", (nm, uid))
+            sessions.invalidate_user(uid)   # 세션 확인 캐시에 든 이름도 바로 바뀌게
         elif p == "/api/account/dept":
             d = str(req.get("dept", ""))
             if d == (c.execute("SELECT dept FROM users WHERE id=?", (uid,)).fetchone()[0] or ""):

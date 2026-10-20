@@ -22,6 +22,8 @@ env: portal.py 와 같음(PORT 기본 8720, AGENT_DATA, AGENT_OWNERS, TLS_CERT·
      (모두 config.py 한곳에서 읽음 — 모두의 에이전트 값은 그 모듈 머리에서)
 tools.json 의 "host": 그 도구는 다른 컨테이너·서버(http://<host>:<port>) — 상태 확인·프록시만, 시작·중지는 409"""
 import asyncio, json, os, re, secrets, threading, time, urllib.parse
+
+import anyio, anyio.to_thread
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -48,15 +50,42 @@ if not auth.is_local() and hasattr(_AB, "ready") and not _AB.ready():
     print(f"경고: AUTH_BACKEND={config.AUTH_BACKEND} 연결 설정이 없음 — 로그인이 503 으로 실패함(fastportal/auth/README.md)", flush=True)
 
 
+# ── 스레드 풀 ───────────────────────────────────────────────────────────
+# 화면·API 용 기본 풀(anyio 기본 40)은 PORTAL_THREADS(기본 4)로 줄임 — 1프로세스 + GIL 에서 스레드가 많으면 서로 GIL 을 다투느라
+# 동시 16 이상에서 처리량이 1/6 로 떨어짐(_audit/loadtest-2026-10-20). 오래 걸리는 동기 일(아이디어 LLM·이력 가져오기·PIN 해시·
+# 개발자 업로드·패키지 목록 올리기)은 따로 PORTAL_SLOW_THREADS(기본 16)개까지 — 화면용 풀을 막지 않게
+THREADS = max(1, int(os.environ.get("PORTAL_THREADS") or 4))
+SLOW_THREADS = max(1, int(os.environ.get("PORTAL_SLOW_THREADS") or 16))
+_SLOW = None
+
+
+def slow_limiter():
+    global _SLOW
+    if _SLOW is None:
+        _SLOW = anyio.CapacityLimiter(SLOW_THREADS)
+    return _SLOW
+
+
+async def run_slow(fn, *args):
+    """오래 걸리는 동기 일 — 따로 둔 풀에서(화면·API 풀과 나눔)"""
+    return await anyio.to_thread.run_sync(fn, *args, limiter=slow_limiter())
+
+
+SLOW_POST = re.compile(r"/api/(idea/|workspace/sync$|pin$|admin/reset$)")   # post_sync 중 오래 걸리는 것(LLM·도구 이력·PIN 해시)
+SLOW_GET = re.compile(r"/api/workspace/[0-9a-f]{32}$")   # 작업 하나 열기 — 도구에서 상세 결과를 다시 읽음(workspace.refresh_detail)
+
+
 @asynccontextmanager
 async def lifespan(_app):
     jobs.HUB.loop = asyncio.get_running_loop()
+    anyio.to_thread.current_default_thread_limiter().total_tokens = THREADS
     proxy.open_client()
     if config.BACKUP:
         threading.Thread(target=db.backup_loop, daemon=True).start()
     if config.ANON_AUTO:   # 비활성 계정 익명화 정리 — 기본 꺼짐(PORTAL_ANON_AUTO=1 로 켬, 기한 PORTAL_ANON_AFTER_DAYS)
         threading.Thread(target=accounts.anon_loop, daemon=True).start()
-    print(f"fastportal → {'https' if TLS else 'http'} data={config.DATA} owners={sorted(OWNERS)} max_body={config.MAX_BODY} auth={_AB.name} backup={os.environ.get('BACKUP', '0')}  {pages._SIG}", flush=True)
+    print(f"fastportal → {'https' if TLS else 'http'} data={config.DATA} owners={sorted(OWNERS)} max_body={config.MAX_BODY} auth={_AB.name} backup={os.environ.get('BACKUP', '0')} "
+          f"threads={THREADS}/{SLOW_THREADS} session_cache={sessions.CACHE_S}s tools_cache={tools.STATS_TTL}s  {pages._SIG}", flush=True)
     yield
     await proxy.close_client()
 
@@ -173,7 +202,7 @@ def version_info():
 
 def tools_sync(ctx, up):
     with db.db() as c:
-        return ctx.send({"tools": tools.tool_list(c, up, ctx.uid), "rank": tools.user_rank(c), "posts": tools.posts(c, ctx.uid), "me": accounts.me(c, ctx.uid, ctx.uname)})
+        return ctx.send({**tools.home_data(c, up, ctx.uid), "me": accounts.me(c, ctx.uid, ctx.uname)})
 
 
 # ── POST ────────────────────────────────────────────────────────────────
@@ -374,6 +403,12 @@ def post_sync(ctx, body):
         return ctx.send({"error": str(e)}, code=503)
     except (ValueError, KeyError, TypeError) as e:   # TypeError: 값 형식이 틀린 JSON(예: title 이 숫자) — portal.py 는 연결이 끊겼음
         return ctx.send({"error": str(e) if not isinstance(e, TypeError) else "요청 값 형식이 틀립니다"}, code=400)
+    finally:
+        if path in STATS_PATHS:   # 커밋한 뒤 /api/tools 집계 캐시 비움(다음 홈 화면이 바로 새 수를 봄)
+            tools.stats_reset()
+
+
+STATS_PATHS = ("/api/open", "/api/like", "/api/post", "/api/post_like")
 
 
 # ── 진입점 ──────────────────────────────────────────────────────────────
@@ -442,7 +477,7 @@ async def route(ctx, request):
     if not csrf_ok(ctx):
         return ctx.send({"error": "다른 사이트에서 온 요청은 받지 않습니다", "code": "csrf"}, code=403)
     if ctx.method in ("GET", "HEAD"):
-        r = await run_in_threadpool(get_sync, ctx)
+        r = await (run_slow if SLOW_GET.match(ctx.p) else run_in_threadpool)(get_sync, ctx)
         if r == "proxy":
             return await proxy.proxy(ctx)
         if r == "jobs_stream":
@@ -466,7 +501,7 @@ async def route(ctx, request):
                 body = await read_body(ctx, config.MAX_JSON)
             except TooBig:
                 return too_big(ctx, config.MAX_JSON)
-            return await run_in_threadpool(login_sync, ctx, body)
+            return await run_slow(login_sync, ctx, body)   # PIN 해시(PBKDF2 60만 번)
         if ctx.raw == "/api/logout":   # JSON 로그아웃(로그인 안 돼 있어도 200 — 쿠키를 지움)
             await drain(request, length(ctx) or 0)
             await run_in_threadpool(sessions.end_session, ctx.cookie)
@@ -487,7 +522,7 @@ async def route(ctx, request):
                 body = await read_body(ctx, devsubmit.ZIP_MAX)
             except TooBig:
                 return too_big(ctx, devsubmit.ZIP_MAX)
-            return await run_in_threadpool(devsubmit.handle_submit, ctx, body)
+            return await run_slow(devsubmit.handle_submit, ctx, body)
         if ctx.p == "/api/admin/pkg-index":   # 폐쇄망 패키지 목록 파일 올리기(본문 = 글자, 8MB) — 관리자 확인을 본문보다 먼저
             if not ctx.is_owner:
                 return ctx.send({"error": "관리자만 할 수 있습니다", "code": "forbidden"}, code=403)
@@ -495,7 +530,7 @@ async def route(ctx, request):
                 body = await read_body(ctx, devsubmit.PKG_LIST_MAX)
             except TooBig:
                 return too_big(ctx, devsubmit.PKG_LIST_MAX)
-            return await run_in_threadpool(devsubmit.pkg_upload, ctx, body)
+            return await run_slow(devsubmit.pkg_upload, ctx, body)
         if ctx.raw == "/api/flows/run":   # 흐름 실행(파일 입력 base64 포함 — 상한 flows.RUN_MAX). 이미 실행 중이면 본문(40MB)을 읽기 전에 400(start_run 과 같은 문구)
             busy = flows.busy(ctx.uid)
             if busy:
@@ -509,7 +544,7 @@ async def route(ctx, request):
             body = await read_body(ctx, config.MAX_JSON)
         except TooBig:
             return too_big(ctx, config.MAX_JSON)
-        return await run_in_threadpool(post_sync, ctx, body)
+        return await (run_slow if SLOW_POST.match(ctx.p) else run_in_threadpool)(post_sync, ctx, body)
     return not_implemented(ctx.method)
 
 

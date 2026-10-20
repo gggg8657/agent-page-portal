@@ -1,6 +1,6 @@
 """세션·쿠키·로그인 유지·실패 잠금·로컬 주인 토큰·접속지 판정 — '누가 요청했나'를 정하는 곳.
 아이디·비밀번호(PIN) 확인 자체는 계정 저장소(auth/) 몫이고, 여기는 그 결과로 포털 세션을 만들고 쿠키를 읽는다."""
-import datetime, hashlib, hmac, os, re, secrets, time
+import datetime, hashlib, hmac, os, re, secrets, threading, time
 
 from . import config
 from .config import LOCAL, SESSION_S, SHORT_S, FAIL_WINDOW, FAIL_MAX
@@ -84,9 +84,83 @@ def new_session(c, uid, remember=True):
     return tok
 
 
+# ── 세션 확인 캐시 ──────────────────────────────────────────────────────
+# PORTAL_SESSION_CACHE_S(기본 2초, 0 = 끔): 같은 쿠키의 세션 확인 결과(sha256(token) → uid·이름·만료)를 잠깐 메모리에 둠 — 요청마다 DB 조회를 안 함.
+# 이 프로세스 안에서 세션을 끊는 곳(로그아웃·PIN 변경·PIN 초기화·비활성화·익명화·이름 변경)은 invalidate_*() 로 바로 지움.
+# 지운 계정·토큰은 _NOCACHE_S 동안 다시 캐시하지 않음(커밋 전에 다른 스레드가 옛 값을 다시 넣는 경쟁 방지).
+# 다른 프로세스(예전 portal.py·다른 포트의 포털)가 끊은 세션은 TTL 안에 반영됨 — 그래서 TTL 은 몇 초로만
+CACHE_S = float(os.environ.get("PORTAL_SESSION_CACHE_S", "2"))
+_CACHE_MAX = 10000
+_NOCACHE_S = 5.0
+_CLOCK = threading.Lock()
+_SC = {}          # sha256 → (uid, name, exp, 넣은 시각)
+_NO_UID = {}      # uid → 이 시각까지 캐시 안 함
+_NO_TOK = {}      # sha256 → 이 시각까지 캐시 안 함
+
+
+def _c_get(h):
+    if CACHE_S <= 0:
+        return None
+    with _CLOCK:
+        v = _SC.get(h)
+        if v is None:
+            return None
+        t = time.time()
+        if t - v[3] > CACHE_S or v[2] <= t:
+            _SC.pop(h, None)
+            return None
+        return v
+
+
+def _c_put(h, uid, name, exp):
+    if CACHE_S <= 0:
+        return
+    t = time.time()
+    with _CLOCK:
+        if _NO_UID.get(uid, 0) > t or _NO_TOK.get(h, 0) > t:
+            return
+        if len(_SC) >= _CACHE_MAX:
+            _SC.clear()
+        _SC[h] = (uid, name, exp, t)
+
+
+def _gc_marks(t):
+    for d in (_NO_UID, _NO_TOK):
+        if len(d) > 1000:
+            for k in [k for k, v in d.items() if v <= t]:
+                d.pop(k, None)
+
+
+def invalidate_user(uid):
+    """그 계정의 캐시된 세션을 모두 지움(PIN 변경·초기화·비활성화·익명화·이름 변경 — 세션을 끊거나 바꾸는 곳에서 부름)"""
+    t = time.time()
+    with _CLOCK:
+        _NO_UID[uid] = t + _NOCACHE_S
+        for k in [k for k, v in _SC.items() if v[0] == uid]:
+            _SC.pop(k, None)
+        _gc_marks(t)
+
+
+def invalidate_token(h):
+    t = time.time()
+    with _CLOCK:
+        _NO_TOK[h] = t + _NOCACHE_S
+        _SC.pop(h, None)
+        _gc_marks(t)
+
+
+def cache_clear():
+    with _CLOCK:
+        _SC.clear(); _NO_UID.clear(); _NO_TOK.clear()
+
+
 def session_user(tok):
-    """쿠키 값 → (uid, name, 새 Set-Cookie 또는 None). 마지막 접속(5분 단위)·하루 한 번 만료 연장(로그인 유지 켠 세션만)"""
+    """쿠키 값 → (uid, name, 새 Set-Cookie 또는 None). 마지막 접속(5분 단위)·하루 한 번 만료 연장(로그인 유지 켠 세션만).
+    캐시(CACHE_S)에 있으면 DB 를 보지 않음 — 마지막 접속·만료 연장은 캐시가 비는 다음 조회 때 함(5분·하루 단위라 몇 초 늦어도 같음)"""
     h = _h(tok)
+    v = _c_get(h)
+    if v is not None:
+        return v[0], v[1], None
     with db() as c:
         r = c.execute("SELECT s.uid, s.exp, u.name, u.seen, EXISTS(SELECT 1 FROM sess_short x WHERE x.token=s.token) short FROM sessions s "
                       "JOIN users u ON u.id=s.uid WHERE s.token=? AND s.exp>? AND NOT u.disabled", (h, time.time())).fetchone()
@@ -95,10 +169,13 @@ def session_user(tok):
         setc = None
         if (r["seen"] or "") < (datetime.datetime.now() - datetime.timedelta(minutes=5)).isoformat(timespec="seconds"):
             c.execute("UPDATE users SET seen=? WHERE id=?", (now(), r["uid"]))
+        exp = r["exp"]
         if not r["short"] and r["exp"] - time.time() < SESSION_S - 86400:
-            c.execute("UPDATE sessions SET exp=? WHERE token=?", (time.time() + SESSION_S, h))
+            exp = time.time() + SESSION_S
+            c.execute("UPDATE sessions SET exp=? WHERE token=?", (exp, h))
             setc = cookie(tok)
-        return r["uid"], r["name"], setc
+    _c_put(h, r["uid"], r["name"], exp)
+    return r["uid"], r["name"], setc
 
 
 def is_short(c, cookie_header):
@@ -111,11 +188,15 @@ def end_session(cookie_header):
     """로그아웃: 쿠키의 세션 하나를 지움"""
     m = SID_RE.search(cookie_header)
     if m:
+        h = _h(m[1])
+        invalidate_token(h)
         with db() as c:
-            c.execute("DELETE FROM sessions WHERE token=?", (_h(m[1]),))
+            c.execute("DELETE FROM sessions WHERE token=?", (h,))
+        invalidate_token(h)   # 커밋 뒤 한 번 더(그 사이 다른 요청이 넣었을 수 있음)
 
 
 def drop_user_sessions(c, uid):
+    invalidate_user(uid)
     c.execute("DELETE FROM sessions WHERE uid=?", (uid,))
 
 

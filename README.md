@@ -214,6 +214,12 @@ bash agent-page-portal/scripts/start-fastportal.sh stop
 | `PORTAL_MAX_BODY` | 600MB | 도구로 넘기는 요청 본문 상한 — 넘으면 본문을 읽어 버린 뒤 413 |
 | `PORTAL_MAX_JSON` | 1MB | 포털 API(JSON) 본문 상한 → 413 |
 | `TOOLS_ALIVE_TTL` | 5 | `/api/tools` 의 도구 켜짐 확인 캐시(초) — 탭 수백 개가 폴링해도 포트 확인은 5초에 한 번 |
+| `PORTAL_THREADS` | 4 | 화면·API 동기 처리 스레드 풀 상한(anyio 기본 40 대신). 2·4·6·8·16·40 을 재 보니 적을수록 몰릴 때 처리량이 높음(2 가 가장 높으나 DB 잠금 대기 하나가 절반을 잡으므로 4). 1프로세스 + GIL 에서 스레드가 많으면 동시 16 이상에서 처리량이 무너짐(부하 시험 2026-10-20 — 4·8·16·40 비교는 `_audit/loadtest-2026-10-20/REPORT.md` '빠른 개선') |
+| `PORTAL_SLOW_THREADS` | 16 | 오래 걸리는 동기 일 전용 풀 상한 — 로그인·가입(PIN 해시), `POST /api/idea/*`(LLM), `/api/workspace/sync`·작업 하나 열기(도구 이력 읽기), `/api/pin`·`/api/admin/reset`, 개발자 업로드·패키지 목록 올리기. 화면용 풀을 막지 않게 |
+| `PORTAL_DB_REUSE` | 1 | SQLite 연결 재사용(스레드마다 쉬는 연결 2개까지). 한 스레드에서 겹쳐 열면 새 연결(따로 commit 하는 실패 기록 등 예전 트랜잭션 구분 그대로). `0` 이면 예전처럼 요청마다 열고 닫음 |
+| `PORTAL_SESSION_CACHE_S` | 2 | 세션 확인 캐시(초, `0` 끔) — `sha256(토큰)` → 계정. 이 포털에서 로그아웃·PIN 변경·PIN 초기화·정지·비활성화·익명화·이름 변경을 하면 **바로** 지움(다음 요청부터 401). 다른 프로세스(예전 portal.py·다른 포트 포털)가 끊은 세션은 이 시간 안에 반영. 캐시에서 답한 요청은 '마지막 접속'·만료 연장을 다음 DB 조회 때로 미룸(5분·하루 단위라 같음) |
+| `PORTAL_TOOLS_CACHE_S` | 5 | `/api/tools` 공통 집계(사용 횟수·이용 순위·게시글·좋아요 수) 캐시(초, `0` 끔). 이 포털에서 열기·좋아요·글·글 좋아요를 기록하면 바로 비움. 내 글 좋아요 표시(`liked`)는 캐시하지 않고 계정마다 |
+| `PORTAL_ASSET_CACHE_MB` | 64 | React 빌드 해시 자산(`assets/`, 미리 압축본 포함) 바이트 메모리 캐시(MB, `0` 끔) — 경로·수정 시각·크기가 키라 배포하면 새로 읽음 |
 | `PORTAL_LOCAL_OWNER` | token | 로컬 주인(로그인 없이 관리자) 판정. `token`: 127.0.0.1 에서 쿠키 없이 + 헤더 `X-Local-Owner` 가 `_data/.local_owner_token`(처음 기동 때 무작위 32바이트로 만듦, 권한 600, git 밖) 과 같을 때만 — 브라우저(SSH 포트포워딩 `localhost:8700` 포함)는 이 헤더를 못 붙이므로 로그아웃이 제대로 됨. `1`: 예전 방식(127.0.0.1 쿠키 없음 = 주인 — 포트포워딩 브라우저가 로그아웃 뒤에도 주인이 됨). `0`: 끔. 리버스 프록시 뒤에 둘 때는 `token` 또는 `0` |
 | `TRUSTED_PROXIES` | 없음 | 쉼표 목록. 바로 앞 접속이 이 주소일 때만 `X-Forwarded-For` 를 읽어 실제 주소로 판정(목록 밖 주소 중 가장 오른쪽). 없으면 `X-Forwarded-For` 는 무시 |
 | `TOOL_BIND` | 127.0.0.1 | 포털이 도구를 띄울 때 넘기는 `BIND`(도구가 열 주소). 컨테이너에서 다른 컨테이너의 포털이 붙어야 하면 `0.0.0.0` |
@@ -238,7 +244,7 @@ bash agent-page-portal/scripts/start-fastportal.sh stop
 예: `{"dir": "protein-local", "port": 8781, "host": "tools-gpu", "name": "…"}`. 그 도구의 `README.md`(`/api/readme`)는 포털 쪽 폴더에 있어야 보입니다(사용법 `guides/<dir>.md` 는 포털 저장소).
 
 **React 화면(agent-page-web) — 같은 출처로**: `WEB_DIST=<빌드 폴더>` 를 주면 포털이 `WEB_PREFIX`(기본 `/app`) 아래에서 그 정적 파일을 직접 내보냅니다(따로 프록시 서버 없음 → 로컬 주인 판정이 섞이지 않음).
-`/app` → `/app/` 302 · 파일이 있으면 그 파일 · 없는 경로는 `index.html`(SPA 폴백: `/app/login`, `/app/tool/…`) · 없는 자산(`assets/…`·확장자 있는 이름)은 404 · `assets/`(해시 붙은 이름)는 `Cache-Control: public, max-age=31536000, immutable`, 그 밖(`index.html` 등)은 `no-cache` + ETag · HTML 엔 CSP(`'self'` 만)·`X-Frame-Options: SAMEORIGIN`.
+`/app` → `/app/` 302 · 파일이 있으면 그 파일 · 없는 경로는 `index.html`(SPA 폴백: `/app/login`, `/app/tool/…`) · 없는 자산(`assets/…`·확장자 있는 이름)은 404 · `assets/`(해시 붙은 이름)는 `Cache-Control: public, max-age=31536000, immutable`(로그인·권한 번들은 `private`), 배포 때 미리 만든 `<파일>.gz` 가 있고 `Accept-Encoding: gzip` 이면 그것을 `Content-Encoding: gzip`·`Vary: Accept-Encoding` 으로(권한은 원본 이름으로 판단, `.gz` 주소 직접 요청은 404 — agent-page-web `scripts/deploy.sh` 의 `PRECOMPRESS`), 그 밖(`index.html` 등)은 `no-cache` + ETag · HTML 엔 CSP(`'self'` 만)·`X-Frame-Options: SAMEORIGIN`.
 로그인 화면(`/app/login`)과 그 화면이 쓰는 자산만 로그인 없이 내보내고(나머지 자산은 로그인·권한 — 아래 'F12 코드 수집·엿보기 막기'), 그 밖의 화면 주소는 로그인 전이면 `/app/login?next=<라우터 경로>` 로 302(포털 `/` 처럼 — 화면이 401 을 받고 옮기는 것보다 빠르고 콘솔 오류 없음). API 는 예전처럼 401. 이미 로그인한 채 `/app/login` 이면 `next`(라우터 경로 `/all`·`/approvals`·`/admin`·`/tool/x` 는 `/app/…` 로, `/t/<dir>/` 는 `/app/tool/<dir>`, `/guide/` 같은 포털 경로는 그대로)로 302.
 운영 배포: agent-page-web `npm run deploy`(= `scripts/deploy.sh`) — 빌드를 `<상위>/_web/releases/<시각>` 에 두고 `_web/app` 링크를 원자적으로 바꿈(옛 해시 자산 유지, `--rollback`). 포털 재시작 필요 없음.
 React 랜딩이 읽는 `GET /web/landing.json`·`/app/web/landing.json`(분류·도구 수, 로그인 화면과 같은 값)도 이때만 열립니다. React 쪽은 빌드 base(`WEB_BASE`, 기본 `/app/`)를 라우터 `basename`·`toLogin`·로그아웃이 따릅니다(agent-page-web `src/lib/base.ts`). 이미지 빌드는 multi-stage(Node 단계 `npm ci && npm run build` → `dist` 를 포털 이미지의 `WEB_DIST` 로 복사, 빌드 결과는 저장소에 넣지 않음).
@@ -270,7 +276,7 @@ React 랜딩이 읽는 `GET /web/landing.json`·`/app/web/landing.json`(분류·
 | `PORTAL_PROBE_BLOCK_S`·`PORTAL_PROBE_BLOCK_MAX_S` | 60·3600 | 첫 차단 초·다시 걸릴 때 2배씩 늘리는 상한 |
 | `PORTAL_LEGACY_STRIP` | 1 | 기존 도구 화면 주석 걷기(일반 계정만) |
 
-워커는 **1개**(비동기)로 씁니다. 작업 알림 SSE 구독(작업 표는 DB 지만 실시간 전달은 프로세스 안 큐)·도구 켜짐 캐시·GPU 캐시가 프로세스 메모리라, 워커를 늘리면 이 셋을 공유 저장소(예: Redis pub/sub)로 옮겨야 합니다(세션·잠금·계정은 이미 DB). 막히는 일(DB·PIN 해시·nvidia-smi)은 스레드 풀에서 돌아 이벤트 루프를 막지 않습니다.
+워커는 **1개**(비동기)로 씁니다. 세션 확인 캐시·`/api/tools` 집계 캐시도 프로세스 메모리라 워커를 늘리면 그 TTL(2·5초) 동안은 다른 워커가 옛 값을 볼 수 있습니다(로그아웃 즉시 반영은 같은 워커만). 작업 알림 SSE 구독(작업 표는 DB 지만 실시간 전달은 프로세스 안 큐)·도구 켜짐 캐시·GPU 캐시가 프로세스 메모리라, 워커를 늘리면 이 셋을 공유 저장소(예: Redis pub/sub)로 옮겨야 합니다(세션·잠금·계정은 이미 DB). 막히는 일(DB·PIN 해시·nvidia-smi)은 스레드 풀에서 돌아 이벤트 루프를 막지 않습니다.
 
 계약 시험(`fastportal/tests/`): `contract_live.py --demo <id>:<pin> [--old <portal.py 포트>] [--new <fastportal 포트>]` 은 같은 요청을 예전 portal.py 와 새 포털에 보내(전환 뒤에는 portal.py 를 시험 포트에 따로 띄워 `--old` 로; 로컬 주인 요청엔 새 포털에만 토큰을 붙이고, 토큰 없는 로컬 = 401 도 확인) 상태·헤더·본문을 비교(읽기와 되돌리는 POST 만), `contract_fake.py` 는 임시 폴더에 두 포털과 가짜 도구를 띄워 프록시 헤더 규칙·본문·SSE·동시 스트림·끊김·잠금·프록시 뒤 판정·혼합형 `host`(127.0.0.2 에만 연 가짜 도구, 틀린 형식 7가지, start·stop 409)·`TOOL_BIND`·`WEB_DIST`(SPA 폴백·캐시·경로 넘기기·로그인 리디렉트·링크 바꿔 끼우기)·`WEB_ROOT`('/' 전환, 켠 경우·끈 경우)·삭제 대신 비활성화·익명화·탈퇴 요청·부서 보관·자동 정리(`PORTAL_ANON_AUTO`)·계정 저장소 바꿔 끼우기(`AUTH_BACKEND` — 가짜 외부 저장소로 로그인, 가입·PIN 변경 막힘, 설정 없는 external 503)를 확인, `ui_compare.js` 는 Playwright 로 화면을 캡처해 비교합니다.
 의존성 라이선스는 모두 MIT·BSD·Apache-2.0 계열(certifi 만 MPL-2.0)로 상업 이용 가능 — 정확한 목록은 `fastportal/requirements.txt` 의 각 패키지.
