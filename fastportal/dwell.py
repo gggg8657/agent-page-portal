@@ -5,7 +5,7 @@
 """
 import datetime, re, threading, urllib.parse
 
-from . import accounts, db, tools
+from . import accounts, db, timeutil, tools
 
 SCREENS = {
     "home": "홈", "all": "전체 에이전트", "fav": "즐겨찾기", "recent": "최근 사용",
@@ -32,7 +32,7 @@ def record(ctx, c, req):
             raise ValueError("도구 값이 틀립니다")
     elif tool_dir:
         raise ValueError("도구 화면만 도구 값이 필요합니다")
-    now = datetime.datetime.now()
+    now = timeutil.utcnow()   # 저장은 UTC(ts·day 모두 — 예전 행과 같은 기준). 집계는 report() 에서 KST 로
     ts, day = now.isoformat(timespec="seconds"), now.date().isoformat()
     c.execute("INSERT OR IGNORE INTO dwell_segments(uid,visit,seq,screen,tool,seconds,ts,day) VALUES(?,?,?,?,?,?,?,?)",
               (ctx.uid, visit.lower(), seq, screen, tool_dir, seconds, ts, day))
@@ -60,8 +60,10 @@ def report(ctx):
         return ctx.send({"error": "화면 값이 틀립니다"}, code=400)
     if tool_dir and not tools.tool(tool_dir):
         return ctx.send({"error": "도구 값이 틀립니다"}, code=400)
-    today = datetime.date.today()
+    today = timeutil.today_kst()   # 기간·날짜별 집계는 KST 달력(저장된 ts 는 UTC)
     start = today - datetime.timedelta(days=days - 1)
+    cut = timeutil.kst_day_start_utc(days - 1)            # KST start 0시 → UTC ISO(저장 형식)
+    cut_day = cut[:10]                                     # day(UTC 날짜) 색인으로 먼저 좁힘
     uid_clause, uid_args = "", []
     if uid:
         with db.db() as c:
@@ -70,24 +72,24 @@ def report(ctx):
         uid_clause, uid_args = " AND uid=?", [raw_uid]
     screen_clause, screen_args = (" AND screen=?", [screen]) if screen else ("", [])
     tool_clause, tool_args = (" AND tool=?", [tool_dir]) if tool_dir else ("", [])
-    where = "day>=?" + uid_clause + screen_clause + tool_clause
-    args = [start.isoformat(), *uid_args, *screen_args, *tool_args]
-    tool_where = "day>=?" + uid_clause + tool_clause
-    tool_args_full = [start.isoformat(), *uid_args, *tool_args]
+    where = "day>=? AND ts>=?" + uid_clause + screen_clause + tool_clause
+    args = [cut_day, cut, *uid_args, *screen_args, *tool_args]
+    tool_where = "day>=? AND ts>=?" + uid_clause + tool_clause
+    tool_args_full = [cut_day, cut, *uid_args, *tool_args]
     with db.db() as c:
         raw_rows = [dict(r) for r in c.execute(
             "SELECT uid,screen,tool,SUM(seconds) seconds,COUNT(DISTINCT visit) visits,MAX(ts) last "
             "FROM dwell_segments WHERE " + where + " GROUP BY uid,screen,tool ORDER BY seconds DESC", args)]
         daily = [dict(r) for r in c.execute(
-            "SELECT day,SUM(seconds) seconds FROM dwell_segments WHERE " + where + " GROUP BY day ORDER BY day", args)]
+            "SELECT date(ts,'+9 hours') day,SUM(seconds) seconds FROM dwell_segments WHERE " + where + " GROUP BY 1 ORDER BY 1", args)]
         # 기존 지표와 혼동되지 않도록 도구 열기 버튼 기록(events)과 끝난 작업 실행 시간(jobs)을 별도로 집계한다.
         base = "ts>=?" + (" AND user=?" if uid_clause else "") + (" AND dir=?" if tool_clause else "")
-        base_args = [start.isoformat(), *uid_args, *tool_args]
+        base_args = [cut, *uid_args, *tool_args]
         opened = c.execute("SELECT COUNT(*) FROM events WHERE kind='open' AND " + base, base_args).fetchone()[0]
         runtime = c.execute("SELECT COUNT(*),COALESCE(SUM(MAX(0,finished-started)),0) FROM jobs "
                             "WHERE finished IS NOT NULL AND started>=?" +
                             (" AND user=?" if uid_clause else "") + (" AND tool=?" if tool_clause else ""),
-                            [datetime.datetime.combine(start, datetime.time()).timestamp(), *uid_args, *tool_args]).fetchone()
+                            [timeutil.kst_day_start_epoch(start), *uid_args, *tool_args]).fetchone()
         tool_active = c.execute("SELECT uid,tool,SUM(seconds) seconds FROM dwell_segments WHERE " + tool_where +
                                 " AND screen='tool' GROUP BY uid,tool", tool_args_full).fetchall()
         tool_opens = c.execute("SELECT user uid,dir tool,COUNT(*) n FROM events WHERE kind='open' AND " + base +
@@ -95,7 +97,7 @@ def report(ctx):
         tool_jobs = c.execute("SELECT user uid,tool,COUNT(*) n,COALESCE(SUM(MAX(0,finished-started)),0) seconds FROM jobs "
                               "WHERE finished IS NOT NULL AND started>=?" +
                               (" AND user=?" if uid_clause else "") + (" AND tool=?" if tool_clause else "") +
-                              " GROUP BY user,tool", [datetime.datetime.combine(start, datetime.time()).timestamp(), *uid_args, *tool_args]).fetchall()
+                              " GROUP BY user,tool", [timeutil.kst_day_start_epoch(start), *uid_args, *tool_args]).fetchall()
         display = accounts.display_ids(c)
         names = {r["id"]: (r["name"], r["dept"] or "") for r in c.execute("SELECT id,name,dept FROM users")}
     tmap = {t["dir"]: t.get("name", t["dir"]) for t in tools.tools()}

@@ -4,7 +4,7 @@ users 의 새 열(비활성·익명화)·depts.archived·jobs 표(jobs.py)뿐(�
 users 표는 '포털 쪽 사용자 정보'(이름·부서·테마·비활성 등)이고, 그중 salt·hash·iters(PIN)는 계정 저장소가 local 일 때만 쓴다(auth/local.py)."""
 import contextlib, datetime, os, re, sqlite3, subprocess, threading, time
 
-from . import config
+from . import config, timeutil
 
 
 def _connect():
@@ -84,7 +84,8 @@ def own_row(c, table, rid, uid, missing, forbidden, owner=False):
 
 
 def now():
-    return datetime.datetime.now().isoformat(timespec="seconds")
+    """저장용 지금 시각 — UTC, 타임존 표시 없는 ISO(예전 값과 같은 형식). 규칙은 timeutil 머리말"""
+    return timeutil.now_iso()
 
 
 def init_db(seed_depts=()):
@@ -130,18 +131,17 @@ def init_db(seed_depts=()):
             c.execute("ALTER TABLE depts ADD COLUMN archived TEXT")
         if not c.execute("SELECT 1 FROM depts").fetchone():
             seed = {r[0] for r in c.execute("SELECT DISTINCT dept FROM users")} | set(seed_depts)
-            c.executemany("INSERT OR IGNORE INTO depts(name, ts) VALUES(?, datetime('now','localtime'))", [(d.strip(),) for d in seed if d and d.strip() and d.strip() != "개인"])
+            c.executemany("INSERT OR IGNORE INTO depts(name, ts) VALUES(?, datetime('now'))", [(d.strip(),) for d in seed if d and d.strip() and d.strip() != "개인"])
 
 
 # ── 매일 백업 — 기본 꺼짐(BACKUP=1 로 켬; 운영 포털 하나만 돌려야 함) ─────────
 def backup_loop():
     out = config.BACKUP_DIR
-    kst = datetime.timezone(datetime.timedelta(hours=9))
     while True:
         try:
             ages = [time.time() - os.path.getmtime(os.path.join(out, f)) for f in os.listdir(out) if f.startswith("agent-data-")] if os.path.isdir(out) else []
             age = min(ages) / 3600 if ages else 1e9
-            n = datetime.datetime.now(kst)
+            n = timeutil.now_kst()   # 03시 KST(= 18시 UTC) · 파일 이름도 KST 날짜(backup.sh 와 같음)
             today = os.path.exists(os.path.join(out, f"agent-data-{n:%Y-%m-%d}.tar.gz"))
             if (n.hour == 3 and not today) or age > 30:
                 sh = os.path.join(config.BASE, "backup.sh")

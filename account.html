@@ -36,7 +36,9 @@
 const V = location.pathname.slice(1) || 'account';
 const E = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ST = { pending: '대기', approved: '승인', rejected: '거절', cancelled: '취소' };
-const T = ts => ts ? String(ts).slice(0, 16).replace('T', ' ') : '-';
+// 시각: 저장값은 UTC(타임존 표시 없으면 UTC) → 한국 시간 'YYYY-MM-DD HH:MM'
+const T = ts => { if (!ts) return '-'; const s = String(ts), d = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : s.replace(' ', 'T') + 'Z');
+  return isNaN(d) ? s.slice(0, 16).replace('T', ' ') : new Date(d.getTime() + 9 * 36e5).toISOString().slice(0, 16).replace('T', ' '); };
 const tag = (t, c) => `<span class="tag ${c || t}">${E(t)}</span>`;
 async function api(u, body) {
   const r = await fetch(u, body === undefined ? {} : { method: 'POST', body: JSON.stringify(body) });

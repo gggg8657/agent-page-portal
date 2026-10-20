@@ -7,7 +7,7 @@ POST /api/admin/agent   {id, enabled, reason?} — 빌더 POST /api/agents/<id>/
 감사: tool_disable·tool_enable(toolstate) · tool_stop · agent_disable·agent_enable(내용 = 이유)"""
 import datetime, json, os, time, urllib.error, urllib.request
 
-from . import accounts, community, config, flows, jobs, tools, toolstate
+from . import accounts, community, config, flows, jobs, timeutil, tools, toolstate
 from .db import db
 
 
@@ -30,7 +30,7 @@ def active_jobs(c, d):
 def tools_get(ctx, up):
     if not ctx.is_owner:
         return _forbidden(ctx)
-    cut = (datetime.date.today() - datetime.timedelta(days=30)).isoformat()
+    cut = timeutil.kst_day_start_utc(30)   # 최근 30일(KST 달력) — 저장값은 UTC
     with db() as c:
         st = toolstate.rows(c)
         use = {r[0]: (r[1] or 0, r[2] or 0) for r in c.execute(

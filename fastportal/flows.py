@@ -9,7 +9,7 @@ API: GET /api/flows · /api/flows/adapters · /api/flows/<id> · /api/flows/runs
      POST /api/flows/save · /api/flows/delete · /api/flows/run (run 만 본문 상한 RUN_MAX — 파일 입력)"""
 import base64, csv, io, json, os, re, secrets, threading, time, urllib.error, urllib.request
 
-from . import accounts, config, jobs, tools, toolstate
+from . import accounts, config, jobs, timeutil, tools, toolstate
 from .db import db, now, own_row
 
 MIN_STEPS, MAX_STEPS = 2, 6
@@ -596,7 +596,7 @@ def community(c):
     """GET /api/flows/stats — 모두의 에이전트 참여 현황(포털 쪽 수만, 개인 내용 없음): 흐름·실행·도구 사용·개발자 등록 도구"""
     import datetime as _dt
     week = time.time() - 7 * 86400
-    since = (_dt.datetime.now() - _dt.timedelta(days=7)).isoformat(timespec="seconds")
+    since = (timeutil.utcnow() - _dt.timedelta(days=7)).isoformat(timespec="seconds")
     one = lambda q, a=(): (c.execute(q, a).fetchone() or [0])[0] or 0
     has = lambda t: bool(c.execute("SELECT 1 FROM sqlite_master WHERE name=?", (t,)).fetchone())
     return {"flows": one("SELECT COUNT(*) FROM flows"), "flow_makers": one("SELECT COUNT(DISTINCT uid) FROM flows"),

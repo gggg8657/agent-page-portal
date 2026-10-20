@@ -6,7 +6,7 @@ GET /api/lists → {"fav": [...], "recent": [...], "home": "clean"|"plaza"} · P
 import datetime
 import json
 
-from . import tools, toolstate
+from . import timeutil, tools, toolstate
 from .db import now
 
 KINDS = {"fav": 100, "recent": 10}   # 종류 → 최대 개수
@@ -43,7 +43,7 @@ def _seen_default(c, uid):
         made = datetime.datetime.fromisoformat(str(r[0])[:19])
     except ValueError:
         return "?"
-    return "" if datetime.datetime.now() - made < datetime.timedelta(days=1) else "?"
+    return "" if timeutil.utcnow() - made < datetime.timedelta(days=1) else "?"
 
 
 def put(c, uid, req):

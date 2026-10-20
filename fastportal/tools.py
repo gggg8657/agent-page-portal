@@ -1,7 +1,7 @@
 """도구 목록(tools.json)·시작·중지·등록·켜짐 확인(캐시)·혼합형 host(다른 컨테이너)·GPU 현황·홈 목록 데이터(사용 횟수·순위·게시글)."""
 import asyncio, datetime, json, os, re, socket, subprocess, threading, time, urllib.request
 
-from . import config
+from . import config, timeutil
 from .config import BASE
 
 # ── tools.json ──────────────────────────────────────────────────────────
@@ -172,7 +172,7 @@ def add_tool(t):
         t = {k: re.sub(r"[<>\"'`\\]", "", str(v))[:200] for k, v in t.items()}
         row = {"dir": d, "port": port, "name": t.get("name") or d, "title": t.get("title") or d, "desc": t.get("desc", ""), "group": t.get("group") or "기타",
                "tags": [x for x in (t.get("tags") or "").replace("#", "").split() if x], "dept": t.get("dept", ""), "author": t.get("author", ""),
-               "added": datetime.date.today().isoformat()}
+               "added": timeutil.today_kst().isoformat()}
         row["tags"] = ["#" + x for x in row["tags"]]
         ts.append(row)
         tmp = config.TOOLS_FILE + ".tmp"   # 다른 요청이 쓰는 중인 반쪽 파일을 읽거나, 쓰다 죽어 깨진 tools.json 으로 포털이 못 뜨지 않게
@@ -244,7 +244,7 @@ def _posts_common(c):
 
 
 def usage(c):
-    cut = (datetime.date.today() - datetime.timedelta(days=30)).isoformat()
+    cut = timeutil.kst_day_start_utc(30)   # 최근 30일(KST 달력) — 저장값은 UTC
     out = {}
     for r in c.execute("SELECT dir, SUM(kind='open') total, SUM(kind='open' AND ts>=?) recent, "
                        "COUNT(DISTINCT CASE WHEN kind='open' THEN user END) users, SUM(kind='like') likes FROM events GROUP BY dir", (cut,)):
@@ -253,7 +253,7 @@ def usage(c):
 
 
 def user_rank(c):
-    cut = (datetime.date.today() - datetime.timedelta(days=30)).isoformat()
+    cut = timeutil.kst_day_start_utc(30)   # 최근 30일(KST 달력) — 저장값은 UTC
     return [{"user": r["name"], "n": r["n"]} for r in
             c.execute("SELECT u.name, COUNT(*) n FROM events e JOIN users u ON u.id=e.user WHERE e.kind='open' AND e.ts>=? GROUP BY e.user ORDER BY n DESC LIMIT 5", (cut,))]
 

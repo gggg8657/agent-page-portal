@@ -9,7 +9,7 @@ cd "$(dirname "$0")/../.."   # agent-page-portal/scripts → 상위 폴더 (상�
 BASE="$PWD" DATA="${AGENT_DATA:-$PWD/_data}" OUT="${AGENT_BACKUP_DIR:-$HOME/agent-page-backup}" KEEP="${BACKUP_KEEP:-7}"
 umask 077   # 백업에는 PIN 해시·세션·비밀 파일이 들어 있음 — 주인만 읽게
 mkdir -p "$OUT" && chmod 700 "$OUT"
-exec 9>"$OUT/.lock"; flock -n 9 || { echo "$(date '+%F %T') 이미 백업 중 — 건너뜀" >> "$BASE/backup.log"; exit 0; }
+exec 9>"$OUT/.lock"; flock -n 9 || { echo "$(TZ=Asia/Seoul date '+%F %T KST') 이미 백업 중 — 건너뜀" >> "$BASE/backup.log"; exit 0; }
 {
   t0=$(date +%s); day=$(TZ=Asia/Seoul date +%F)
   stage=$(mktemp -d "$OUT/.stage.XXXX"); trap 'rm -rf "$stage" "$OUT/.part.tar" "$OUT/.part.tar.gz"' EXIT
@@ -37,8 +37,8 @@ for rel in sys.stdin.read().split():
   if [ $rc -le 1 ]; then   # 1 = 백업 중에 파일이 바뀜(쓰는 중인 로그 등) — 정상으로 본다
     mv -f "$OUT/.part.tar.gz" "$OUT/agent-data-$day.tar.gz"
     ls -1t "$OUT"/agent-data-*.tar.gz | tail -n +$((KEEP + 1)) | xargs -r rm -f
-    echo "$(date '+%F %T') OK agent-data-$day.tar.gz $(du -h "$OUT/agent-data-$day.tar.gz" | cut -f1) $(( $(date +%s) - t0 ))s · 보관 $(ls "$OUT"/agent-data-*.tar.gz | wc -l)개 · 남은 공간 $(df -h "$OUT" | awk 'NR==2{print $4}')"
+    echo "$(TZ=Asia/Seoul date '+%F %T KST') OK agent-data-$day.tar.gz $(du -h "$OUT/agent-data-$day.tar.gz" | cut -f1) $(( $(date +%s) - t0 ))s · 보관 $(ls "$OUT"/agent-data-*.tar.gz | wc -l)개 · 남은 공간 $(df -h "$OUT" | awk 'NR==2{print $4}')"
   else
-    echo "$(date '+%F %T') 실패 tar rc=$rc"; exit $rc
+    echo "$(TZ=Asia/Seoul date '+%F %T KST') 실패 tar rc=$rc"; exit $rc
   fi
 } >> "$BASE/backup.log" 2>&1

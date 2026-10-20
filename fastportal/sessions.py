@@ -2,7 +2,7 @@
 아이디·비밀번호(PIN) 확인 자체는 계정 저장소(auth/) 몫이고, 여기는 그 결과로 포털 세션을 만들고 쿠키를 읽는다."""
 import datetime, hashlib, hmac, os, re, secrets, threading, time
 
-from . import config
+from . import config, timeutil
 from .config import LOCAL, SESSION_S, SHORT_S, FAIL_WINDOW, FAIL_MAX
 from .db import db, now
 
@@ -167,7 +167,7 @@ def session_user(tok):
         if not r:
             return None, None, None
         setc = None
-        if (r["seen"] or "") < (datetime.datetime.now() - datetime.timedelta(minutes=5)).isoformat(timespec="seconds"):
+        if (r["seen"] or "") < (timeutil.utcnow() - datetime.timedelta(minutes=5)).isoformat(timespec="seconds"):
             c.execute("UPDATE users SET seen=? WHERE id=?", (now(), r["uid"]))
         exp = r["exp"]
         if not r["short"] and r["exp"] - time.time() < SESSION_S - 86400:

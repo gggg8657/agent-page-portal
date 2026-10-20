@@ -2,7 +2,7 @@
 포털 쪽 사용자 정보(users 표의 이름·부서·테마·비활성 등)는 계정 저장소가 무엇이든 여기서 다룬다 — 사용자 키는 아이디."""
 import datetime, json, re, secrets, time
 
-from . import auth, config, sessions
+from . import auth, config, sessions, timeutil
 from .auth.local import ITERS
 from .config import OWNERS, ANON_AFTER_DAYS
 from .db import db, now
@@ -174,7 +174,7 @@ def display_ids(c):
 def anon_sweep(days=None, actor="system"):
     """비활성화한 지 days 일 지난 계정 익명화 — 정리 작업(PORTAL_ANON_AUTO=1 일 때만 app 이 하루 한 번 부름). 익명화한 아이디 목록"""
     days = ANON_AFTER_DAYS if days is None else days
-    cut = (datetime.datetime.now() - datetime.timedelta(days=days)).isoformat(timespec="seconds")
+    cut = (timeutil.utcnow() - datetime.timedelta(days=days)).isoformat(timespec="seconds")
     done = []
     with db() as c:
         for r in c.execute("SELECT id FROM users WHERE deactivated IS NOT NULL AND deactivated<=? AND anonymized IS NULL", (cut,)).fetchall():
@@ -269,7 +269,7 @@ def manage_get(ctx, p):
             if not (ctx.is_owner or heads):
                 return ctx.send({"error": "부서장·관리자만 볼 수 있습니다"}, code=403)
             pend = [r for r in req_rows(c, "status='pending'") if can_decide(c, ctx.uid, r)]
-            cut = (datetime.date.today() - datetime.timedelta(days=30)).isoformat()
+            cut = timeutil.kst_day_start_utc(30)   # 최근 30일(KST 달력) — 저장값은 UTC
             members = {d: [dict(r) for r in c.execute(
                 "SELECT u.id, u.name, u.seen, (SELECT COUNT(*) FROM events e WHERE e.user=u.id AND e.kind='open') total, "
                 "(SELECT COUNT(*) FROM events e WHERE e.user=u.id AND e.kind='open' AND e.ts>=?) recent, "

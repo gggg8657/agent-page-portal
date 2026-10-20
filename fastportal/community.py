@@ -11,7 +11,7 @@ API: GET /api/community/summary?t=agent:<id>,tool:<dir>,… · /api/community/re
           /api/community/request {kind,id,type,title,body} · /request/status {id,status,note} · /request/vote {id,on} · /request/delete {id} · /request/hide {id,hidden}(관리자)"""
 import json, os, re, secrets, threading, time, urllib.error, urllib.request, urllib.parse
 
-from . import accounts, jobs, tools, toolstate
+from . import accounts, jobs, timeutil, tools, toolstate
 from .db import db, now, own_row
 
 KINDS = ("agent", "flow", "tool")
@@ -363,7 +363,7 @@ W_USE, W_FORK, W_REVIEW, W_DONE = 1, 10, 5, 20
 def ranking():
     """최근 30일 기여 점수 = 질문 수 + 10×복제당한 수 + 5×받은 리뷰 수 + 20×반영한 요청 수. 부서에 공개한 사람(빌더) + 리뷰·요청 받은 사람.
     응답에 계정 id 는 넣지 않음(이름·부서·수만)"""
-    since = (__import__("datetime").datetime.now() - __import__("datetime").timedelta(days=30)).isoformat(timespec="seconds")
+    since = (timeutil.utcnow() - __import__("datetime").timedelta(days=30)).isoformat(timespec="seconds")
     st, b = _builder("owner", "/api/stats")
     people = {}
     for x in (b or {}).get("creators_detail") or []:
