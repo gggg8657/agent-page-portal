@@ -1,6 +1,6 @@
 """부서·부서장·요청/승인·관리·감사·비활성화/익명화·탈퇴 요청·부서 보관 + 계정 설정·승인·관리 API(/api/account·/api/approvals·/api/admin).
 포털 쪽 사용자 정보(users 표의 이름·부서·테마·비활성 등)는 계정 저장소가 무엇이든 여기서 다룬다 — 사용자 키는 아이디."""
-import datetime, re, secrets, time
+import datetime, json, re, secrets, time
 
 from . import auth, config, sessions
 from .auth.local import ITERS
@@ -228,15 +228,30 @@ def archive_dept(c, actor, name):
     c.execute("UPDATE depts SET archived=?, hidden=1 WHERE name=?", (now(), name))
 
 
+TUT_ID = re.compile(r"[a-z0-9-]{1,40}")
+
+
+def tut_seen(raw):
+    """users.tut_seen(JSON) → {따라 하기 id: 본 판}. 깨진 값은 빈 것으로"""
+    try:
+        v = json.loads(raw or "{}")
+    except ValueError:
+        return {}
+    return {k: n for k, n in v.items() if isinstance(k, str) and TUT_ID.fullmatch(k) and isinstance(n, int)} if isinstance(v, dict) else {}
+
+
 def me(c, uid, uname):
     is_owner = is_admin(uid)
-    u = c.execute("SELECT dept, onboarded, tour_seen FROM users WHERE id=?", (uid,)).fetchone()
+    u = c.execute("SELECT dept, onboarded, tour_seen, tut_seen FROM users WHERE id=?", (uid,)).fetchone()
     pend = c.execute("SELECT dept FROM requests WHERE uid=? AND kind='dept_join' AND status='pending'", (uid,)).fetchone()
     n = sum(can_decide(c, uid, r) for r in c.execute("SELECT * FROM requests WHERE status='pending'"))
     return {"id": uid, "name": uname, "owner": is_owner, "agent_user": "owner" if is_owner else uid, "role": role(c, uid),
             "dept": u["dept"] if u else "", "dept_pending": pend["dept"] if pend else "", "heads": my_heads(c, uid), "approvals": n,
             "account": bool(u), "onboarded": bool(u["onboarded"]) if u else True,
             "tour_seen": (u["tour_seen"] or 0) if u else config.TOUR_VERSION, "tour_version": config.TOUR_VERSION,
+            "tutorials": tut_seen(u["tut_seen"]) if u else None,
+            # 전에 연 적 있는 도구(events open) — 처음 여는 도구에서만 따라 하기를 저절로(이미 쓰던 도구는 안 띄움)
+            "used": [r[0] for r in c.execute("SELECT DISTINCT dir FROM events WHERE user=? AND kind='open'", (uid,))] if u else [],
             "developer": bool(c.execute("SELECT 1 FROM sqlite_master WHERE name='developers'").fetchone() and c.execute("SELECT 1 FROM developers WHERE uid=?", (uid,)).fetchone())}
 
 
@@ -328,6 +343,17 @@ def manage_post(ctx, c, p, req):
                 c.execute("UPDATE users SET onboarded=1, tour_seen=MAX(COALESCE(tour_seen, 0), ?) WHERE id=?", (config.TOUR_VERSION, uid))
             else:
                 c.execute("UPDATE users SET onboarded=0 WHERE id=?", (uid,))
+        elif p == "/api/account/tutorial":   # 따라 하기 본 것 기록 {id, version} / 지우기 {reset: true}(계정 설정 '사용법 진행 기록 초기화')
+            seen = {} if req.get("reset") is True else tut_seen(c.execute("SELECT tut_seen FROM users WHERE id=?", (uid,)).fetchone()[0])
+            if req.get("reset") is not True:
+                tid, ver = str(req.get("id") or ""), req.get("version", 1)
+                if not TUT_ID.fullmatch(tid) or not isinstance(ver, int) or isinstance(ver, bool) or not 1 <= ver <= 1000:
+                    raise ValueError("id 는 영문 소문자·숫자·- 1~40자, version 은 1~1000 정수")
+                if tid not in seen and len(seen) >= 200:
+                    raise ValueError("따라 하기 기록이 너무 많습니다")
+                seen[tid] = max(ver, seen.get(tid, 0))
+            c.execute("UPDATE users SET tut_seen=? WHERE id=?", (json.dumps(seen, separators=(",", ":")) if seen else None, uid))
+            return ctx.send({"ok": True, "tutorials": seen})
         elif p == "/api/account/withdraw":   # 탈퇴 요청 — 관리자 승인 목록으로(바로 지우지 않음). 승인되면 비활성화
             withdraw_request(c, uid, req.get("reason", ""))
         elif p == "/api/account/cancel":

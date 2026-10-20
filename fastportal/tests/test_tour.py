@@ -88,6 +88,48 @@ class TourTest(unittest.TestCase):
         self.assertTrue(m["onboarded"])
         self.assertEqual(m["tour_seen"], m["tour_version"], "계정 없는 로컬 접속엔 안내를 안 띄움")
 
+    def tut(self, uid, body):
+        with db.db() as c:
+            return accounts.manage_post(Ctx(uid), c, "/api/account/tutorial", body)
+
+    def test_tutorial_seen_per_account(self):
+        db.init_db()
+        with db.db() as c:
+            c.execute("INSERT INTO users(id,name,dept,ts) VALUES('a','A','','2026-10-20')")
+            c.execute("INSERT INTO users(id,name,dept,ts) VALUES('b','B','','2026-10-20')")
+        self.assertEqual(self.me("a")["tutorials"], {}, "처음엔 본 따라 하기 없음 → 도구 첫 방문에 자동 시작")
+        code, r = self.tut("a", {"id": "chart", "version": 1})
+        self.assertEqual((code, r["tutorials"]), (200, {"chart": 1}))
+        self.tut("a", {"id": "chart", "version": 1})   # 같은 것 다시 — 그대로
+        self.tut("a", {"id": "mail"})                  # version 생략 = 1
+        self.assertEqual(self.me("a")["tutorials"], {"chart": 1, "mail": 1})
+        self.assertEqual(self.me("b")["tutorials"], {}, "다른 계정과 섞이지 않음")
+        self.tut("a", {"id": "chart", "version": 2})
+        self.tut("a", {"id": "chart", "version": 1})   # 낮은 판으로 되돌리지 않음
+        self.assertEqual(self.me("a")["tutorials"]["chart"], 2)
+        self.tut("a", {"reset": True})                 # 계정 설정 '사용법 진행 기록 초기화'
+        self.assertEqual(self.me("a")["tutorials"], {})
+        for bad in ({"id": "../x"}, {"id": ""}, {"id": "chart", "version": 0}, {"id": "chart", "version": "1"}, {"id": "chart", "version": True}, {"id": "x" * 41}):
+            with self.assertRaises(ValueError):
+                self.tut("a", bad)
+        self.assertIsNone(self.me("owner")["tutorials"], "계정 없는 로컬 접속은 기록 없음(자동 시작 안 함)")
+
+    def test_used_tools(self):
+        db.init_db()
+        with db.db() as c:
+            c.execute("INSERT INTO users(id,name,dept,ts) VALUES('a','A','','2026-10-20')")
+            c.executemany("INSERT INTO events VALUES(?,?,?,?)", [("open", "chart-local", "2026-10-20", "a"), ("open", "chart-local", "2026-10-20", "a"),
+                                                                  ("like", "mail-local", "2026-10-20", "a"), ("open", "kordoc-local", "2026-10-20", "b")])
+        self.assertEqual(self.me("a")["used"], ["chart-local"], "연 적 있는 도구만(좋아요·남의 기록 제외)")
+
+    def test_tutorial_seen_corrupt(self):
+        db.init_db()
+        with db.db() as c:
+            c.execute("INSERT INTO users(id,name,dept,ts,tut_seen) VALUES('a','A','','2026-10-20','not json')")
+        self.assertEqual(self.me("a")["tutorials"], {})
+        self.tut("a", {"id": "chart"})
+        self.assertEqual(self.me("a")["tutorials"], {"chart": 1})
+
 
 if __name__ == "__main__":
     unittest.main()

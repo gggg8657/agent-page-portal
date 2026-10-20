@@ -78,6 +78,7 @@ def init_db(seed_depts=()):
         c.executescript("""
         PRAGMA journal_mode=WAL;
         CREATE TABLE IF NOT EXISTS events(kind TEXT, dir TEXT, ts TEXT, user TEXT);
+        CREATE INDEX IF NOT EXISTS events_user ON events(user, kind);
         CREATE TABLE IF NOT EXISTS dwell_segments(uid TEXT, visit TEXT, seq INTEGER, screen TEXT, tool TEXT, seconds INTEGER, ts TEXT, day TEXT,
                                                    PRIMARY KEY(uid, visit, seq));
         CREATE INDEX IF NOT EXISTS dwell_day_user ON dwell_segments(day, uid);
@@ -100,7 +101,9 @@ def init_db(seed_depts=()):
         for col, ddl in (("iters", "INTEGER DEFAULT 200000"), ("disabled", "INTEGER DEFAULT 0"), ("seen", "TEXT"), ("theme", "TEXT"), ("onboarded", "INTEGER DEFAULT 0"),
                          ("deactivated", "TEXT"), ("deact_reason", "TEXT"), ("anonymized", "TEXT"), ("anon_id", "TEXT"),
                          # tour_seen: 이 계정이 본(또는 닫은) 둘러보기 판(config.TOUR_VERSION). 열을 처음 더할 때 모두 0 → 기존 계정은 '새 기능 둘러보기' 안내를 판마다 한 번만
-                         ("tour_seen", "INTEGER DEFAULT 0")):
+                         ("tour_seen", "INTEGER DEFAULT 0"),
+                         # tut_seen: 본(또는 닫은) 따라 하기 {id: 판} JSON — 도구 첫 방문 자동 시작을 계정 단위로(PC·캐시와 무관)
+                         ("tut_seen", "TEXT")):
             if col not in cols:
                 c.execute(f"ALTER TABLE users ADD COLUMN {col} {ddl}")
                 if col == "onboarded":

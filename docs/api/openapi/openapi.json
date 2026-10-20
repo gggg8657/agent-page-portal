@@ -1758,6 +1758,74 @@
     "description": "`done: true`(기본) — 둘러보기를 마치거나 건너뜀, '새 기능 둘러보기' 안내를 닫음: onboarded=1, tour_seen=tour_version. `done: false` — 다음 로그인 때 둘러보기를 다시 자동으로(onboarded=0)."
    }
   },
+  "/api/account/tutorial": {
+   "post": {
+    "operationId": "portalAccountTutorial",
+    "summary": "따라 하기 본 것 기록 / 모두 지우기",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]{1,40}$"
+         },
+         "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+         },
+         "reset": {
+          "type": "boolean"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "기록 후 전체",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "ok",
+          "tutorials"
+         ],
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "tutorials": {
+           "type": "object",
+           "additionalProperties": {
+            "type": "integer"
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "400": {
+      "description": "잘못된 id·version"
+     }
+    },
+    "x-permission": "self",
+    "tags": [
+     "portal"
+    ],
+    "description": "`{id, version?}`(version 기본 1) — 그 따라 하기를 본 것으로(닫기·Esc·건너뛰기·마치기·시작). 같은 id 는 더 높은 판만 남김. `{reset: true}` — 모두 지움(계정 설정 '사용법 진행 기록 초기화'). 응답 `{ok, tutorials}`. 계정당 200개까지."
+   }
+  },
   "/api/pin": {
    "post": {
     "operationId": "portalPin",
@@ -25199,6 +25267,21 @@
      "tour_version": {
       "type": "integer",
       "description": "지금 둘러보기 판(포털 config.TOUR_VERSION)"
+     },
+     "tutorials": {
+      "type": "object",
+      "nullable": true,
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "description": "본(또는 닫은) 따라 하기 {id: 판}. 없는 id 의 도구 화면에 처음 들어가면 그 따라 하기가 저절로 시작됨. 계정 없는 로컬 접속은 null"
+     },
+     "used": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "전에 연 적 있는 도구 dir(events open). 처음 여는 도구에서만 따라 하기가 저절로 뜸"
      },
      "developer": {
       "type": "boolean",
