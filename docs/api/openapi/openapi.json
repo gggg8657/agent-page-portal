@@ -12999,6 +12999,41 @@
          "source": {
           "type": "string",
           "description": "출처 메모"
+         },
+         "palette": {
+          "type": "string",
+          "enum": [
+           "default",
+           "pastel",
+           "vivid",
+           "contrast",
+           "okabe",
+           "print",
+           "warm",
+           "cool",
+           "mono",
+           "report",
+           "custom",
+           "source"
+          ],
+          "description": "모든 후보에 적용할 색 프로필. custom = palette_colors, source = source_colors(열 이름으로 원본 그림 색을 찾아 custom 으로 바꿈)"
+         },
+         "palette_colors": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+           "type": "string",
+           "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "description": "palette=custom 일 때 색"
+         },
+         "source_colors": {
+          "type": "object",
+          "additionalProperties": {
+           "type": "string",
+           "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "description": "palette=source 일 때 열 이름 → 색 (api/parse 의 source_colors)"
          }
         },
         "required": [
@@ -13269,6 +13304,41 @@
          "model": {
           "type": "string",
           "description": "모델 이름(기본 meta.model)"
+         },
+         "palette": {
+          "type": "string",
+          "enum": [
+           "default",
+           "pastel",
+           "vivid",
+           "contrast",
+           "okabe",
+           "print",
+           "warm",
+           "cool",
+           "mono",
+           "report",
+           "custom",
+           "source"
+          ],
+          "description": "AI 제안에 적용할 색 프로필. custom = palette_colors, source = source_colors(열 이름으로 원본 그림 색을 찾아 custom 으로 바꿈) — AI 제안 그림에 적용(제안이 고른 팔레트가 있으면 그것)"
+         },
+         "palette_colors": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+           "type": "string",
+           "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "description": "palette=custom 일 때 색"
+         },
+         "source_colors": {
+          "type": "object",
+          "additionalProperties": {
+           "type": "string",
+           "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "description": "palette=source 일 때 열 이름 → 색 (api/parse 의 source_colors)"
          }
         }
        }
@@ -30383,6 +30453,32 @@
        "ai"
       ],
       "description": "rule = 규칙 추천(api/suggest), ai = AI 제안(api/rerank extra)"
+     },
+     "palette": {
+      "type": "string",
+      "enum": [
+       "default",
+       "pastel",
+       "vivid",
+       "contrast",
+       "okabe",
+       "print",
+       "warm",
+       "cool",
+       "mono",
+       "report",
+       "custom"
+      ],
+      "description": "색 프로필 id(meta.palettes). custom 이면 palette_colors 를 씀. 모르는 id 는 서버가 버림(기본 색). 계열 colors 가 먼저"
+     },
+     "palette_colors": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+       "type": "string",
+       "pattern": "^#[0-9a-fA-F]{6}$"
+      },
+      "description": "palette=custom 일 때 계열 순서 색('내 색 프로필'·'원본 그림 색')"
      }
     },
     "required": [
@@ -30677,6 +30773,13 @@
        "type": "string"
       },
       "description": "막대 추세선(trend: linear|ma)을 쓰는 종류"
+     },
+     "palettes": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/ChartPalette"
+      },
+      "description": "고를 수 있는 색 프로필(첫째 default = palette 와 같은 색)"
      }
     },
     "required": [
@@ -30862,6 +30965,14 @@
        "string",
        "null"
       ]
+     },
+     "source_colors": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "string",
+       "pattern": "^#[0-9a-fA-F]{6}$"
+      },
+      "description": "디지타이저가 내보낸 XLSX('보정' 시트의 '계열 색' 줄)일 때만: 값 열 이름 → 원본 그림 계열 색. suggest 의 palette=source 에 넘김"
      }
     },
     "required": [
@@ -37470,6 +37581,93 @@
        "type": "string"
       },
       "description": "도구 dir 목록 — 목록 전체를 이 값으로 바꿈"
+     }
+    }
+   },
+   "ChartPalette": {
+    "type": "object",
+    "description": "색 프로필(팔레트) — 명세 palette 에 id 를 넣어 고름. 계열 colors 가 있으면 그것이 먼저",
+    "required": [
+     "id",
+     "name",
+     "kind",
+     "colors"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "enum": [
+       "default",
+       "pastel",
+       "vivid",
+       "contrast",
+       "okabe",
+       "print",
+       "warm",
+       "cool",
+       "mono",
+       "report"
+      ]
+     },
+     "name": {
+      "type": "string",
+      "description": "한국어 이름"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "categorical",
+       "sequential",
+       "print"
+      ],
+      "description": "categorical 계열마다 다른 색 · sequential 한 색의 명도 단계 · print 흑백 인쇄(회색 + 막대 무늬·선 모양)"
+     },
+     "colors": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "pattern": "^#[0-9a-fA-F]{6}$"
+      },
+      "description": "계열 순서 색(8개)"
+     },
+     "seq": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "pattern": "^#[0-9a-fA-F]{6}$"
+      },
+      "description": "히트맵·트리맵 명도 단계(옅음→진함, 13개)"
+     },
+     "desc": {
+      "type": "string"
+     },
+     "line_colors": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "pattern": "^#[0-9a-fA-F]{6}$"
+      },
+      "description": "print 만: 선 계열에 쓰는 진한 회색"
+     },
+     "patterns": {
+      "type": "array",
+      "items": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "description": "print 만: 순서별 막대·조각 무늬(diag·dots·cross·horz·vert·back·grid, null=무늬 없음)"
+     },
+     "dashes": {
+      "type": "array",
+      "items": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "description": "print 만: 순서별 선 모양(SVG stroke-dasharray, null=실선)"
      }
     }
    }

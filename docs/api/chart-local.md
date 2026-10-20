@@ -124,6 +124,13 @@
 - 문서: 묶은·한 계열 막대(세로·가로)는 **오피스 추세선**(`c:trendline` linear·movingAvg) — 값을 고치면 따라 바뀜. 누적 막대는 오피스가 추세선을 못 붙여 `합계 추세` 꺾은선 계열(XLSX 는 순서·`=SUM`·`=TREND`/`=AVERAGE` 수식 열, PPTX·DOCX 는 계산값). HWPX 는 그림 + 표.
 - 추천: x 가 기간이고 막대 후보가 있으면 `"<계열> 막대 위에 계열별 추세선…"` 후보 하나(`trend: "linear"`).
 
+### 색 프로필 (`palette`, 2026-10-20 추가 — 추가 필드, 없으면 예전과 같은 색)
+- `spec.palette`: `api/meta` 의 `palettes[].id` — `default`(기본) · `pastel`(파스텔) · `vivid`(선명) · `contrast`(고대비) · `okabe`(색각이상 배려, Okabe–Ito) · `print`(흑백 인쇄) · `warm`(따뜻한 색) · `cool`(차가운 색) · `mono`(단색 계열) · `report`(보고서용), 또는 `custom` + `palette_colors: ["#rrggbb", …]`(최대 12, '내 색 프로필'·'원본 그림 색'). 모르는 id·빈 custom 은 서버가 버림(기본 색).
+- 우선순위: 계열별 `colors` > `palette` > 기본. 모든 종류에 적용 — 막대·선·원 조각·누적·방사형·트리맵·히트맵(팔레트 주 색의 명도 단계 `seq`). `candlestick`·`ohlc` 는 상승·하락 관례 색을 그대로 두고 이동평균·볼린저·MACD·RSI·매물대 선만 팔레트 색(상승·하락 색과 먼 색부터). `waterfall` 은 증가·감소 색을 두고 합계만 팔레트 주 색.
+- `print`(흑백 인쇄): 회색 단계 + 막대·조각·면은 **무늬**(빗금·점·격자 …), 선은 **진한 회색 + 선 모양**(점선·파선 …). 범례 견본도 같은 모양. 주가 상승·하락은 옅은/진한 회색. 오피스 문서(XLSX·PPTX·DOCX)는 네이티브 차트 XML 의 `a:pattFill`·`a:prstDash` 로 같은 구분. HWPX 한글 차트는 무늬가 없어 회색 단계(선은 진한 회색)만, 그림으로 넣는 종류는 무늬 포함.
+- 문서: 오피스 네이티브 차트의 계열 채우기·선·원 조각 색, 히트맵 칠한 표·XLSX 조건부 서식 색조, HWPX 한글 차트 `colors` 가 모두 팔레트 색.
+- 값 라벨 글자색은 색 칸마다 흰색·잉크 중 대비가 큰 쪽(모든 팔레트 4.4:1 이상, selftest 확인).
+
 ## 엔드포인트
 
 ### GET api/health
@@ -138,6 +145,9 @@
   "formats": [{"id": "xlsx", "label": "엑셀 (XLSX)", "ok": true}, {"id": "hwpx", "label": "한글 (HWPX)", "ok": true}],
   "model": "<모델 이름>",
   "palette": ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"],
+  "palettes": [{"id": "default", "name": "기본", "kind": "categorical", "colors": ["#2a78d6", "…"], "seq": ["#cde2fb", "…", "#0d366b"], "desc": "…"},
+               {"id": "print", "name": "흑백 인쇄", "kind": "print", "colors": ["#3d3d3d", "…"], "line_colors": ["#000000", "…"],
+                "patterns": [null, "diag", "dots", "…"], "dashes": [null, "6 3", "…"], "seq": ["…"], "desc": "…"}],
   "kind_colors": {"waterfall": ["#1baf7a", "#e34948", "#2a78d6"], "candlestick": ["#e34948", "#2a78d6"], "ohlc": ["#e34948", "#2a78d6"]},
   "updown_colors": {"kr": ["#e34948", "#2a78d6"], "intl": ["#1baf7a", "#e34948"]},
   "fin": {"ma_default": [5, 20, 60, 120], "ma_max": 250, "panels": ["volume", "macd", "rsi"], "bb": {"period": 20, "k": 2},
@@ -147,6 +157,7 @@
 }
 ```
 - `samples` 는 13개(2026-10-20부터 주가·역량 평가·월별 손익·채용 단계·목표 대비 실적·기준금리·시도별 지표·월별 운영 지표·월별 강수량, 이어서 `stock_daily` 주가 일봉 160일(가상 데이터) 추가).
+- `palettes`(2026-10-20 추가): 색 프로필 10개 — `kind` 는 `categorical`·`sequential`(한 색의 명도 단계)·`print`(흑백 인쇄, `line_colors`·`patterns`·`dashes` 도 줌). 첫째 `default` 는 `palette` 와 같은 색.
 - `formats[].ok`: HWPX 는 서버에 Node + kordoc 이 있을 때만 `true`. `model` 은 `api/describe`·`api/rerank` 가 기본으로 쓰는 모델. `rerank` 는 `api/rerank` 한도(LLM 에 보내는 후보 수·제안 수·10분 호출 수).
 
 ### GET api/models
@@ -175,6 +186,7 @@
  "sheets": ["Sheet1", "Sheet2"], "sheet": "Sheet1"}
 ```
   - `notes`: 서버가 자동으로 처리한 것의 한국어 설명. 값이 모두 빈 열은 빼고 알림(예: `"값이 모두 빈 열 '막대 끝' 을(를) 뺌"`).
+  - `source_colors`(있을 때만, 2026-10-20 추가): 디지타이저(`digitizer-local`)가 내보낸 XLSX 의 '보정' 시트에 `['계열 색', 계열 이름, '#rrggbb']` 줄이 있으면 **값 열 이름 → 원본 그림 색**. 열 이름이 계열 이름과 같거나 `이름 y`·`이름 (…)` 처럼 그 이름으로 시작하면 짝. '데이터'(첫) 시트를 읽을 때만. `api/suggest` 의 `palette: "source"` 로 넘김.
   - 열 타입: `1월…12월`·`1분기`·`Q1`·`2026년`·`1주차` 처럼 숫자+기간 글자만 있는 열은 숫자(단위 '월')가 아니라 **기간(date)** — 값이 서로 다르거나 머리글이 범주·항목·구분·기간 같은 말일 때. `3개`·`5명` 같은 수량은 그대로 숫자. `sheets`·`sheet` 는 엑셀일 때만 값이 있고 아니면 `null`.
 - 오류(400): `{"error": "표 데이터를 찾지 못했습니다"}`, `"파일이 너무 큽니다 (20MB 이하)"`, `.xls` 안내 등.
 - 메모: 업로드는 multipart 가 아니라 **JSON 안의 base64** 입니다. 디코드 후 20MB, 요청 본문 약 28MB 를 넘으면 413 `{"error": "요청이 너무 큽니다 (파일 20MB 이하)"}`(포털을 거쳐도 413).
@@ -187,6 +199,9 @@
 | `table` | 표 | 예 | |
 | `id` | 문자열 | 아니오 | 기존 이력 id. 있으면 그 이력을 갱신, 없거나 못 찾으면 새 이력 |
 | `source` | 문자열 | 아니오 | 출처 메모 (예: `"붙여넣기"`, 파일 이름) — 이력 목록에 표시 |
+| `palette` | 문자열 | 아니오 | 모든 후보에 적용할 색 프로필 id, `custom`(`palette_colors` 함께), `source`(`source_colors` 함께 — 후보의 값 열 이름으로 색을 찾아 `custom` 으로 바꿈, 그룹 계열 후보는 기본 색). 모르는 값 400 (2026-10-20 추가) |
+| `palette_colors` | `#rrggbb` 배열 | `custom` 일 때 | 최대 12 |
+| `source_colors` | {열 이름: `#rrggbb`} | `source` 일 때 | `api/parse` 의 `source_colors` |
 
 - 응답:
 ```json
@@ -239,6 +254,7 @@
 | `candidates` | 설정 배열 | 아니오 | `api/suggest` 후보에서 `svg` 를 뺀 것(`id` = `c숫자`, `kind` 필수, 최대 60). 없으면 서버가 규칙 후보를 다시 만듦. LLM 에는 앞 12개만 보내고 나머지는 순서 뒤에 그대로 |
 | `id` | 문자열 | 아니오 | 이력 id — 주면 결과(`ok` 일 때)를 이력 `rerank` 에 저장 |
 | `model` | 문자열 | 아니오 | 모델 이름 (기본 `api/meta` 의 `model`) |
+| `palette`, `palette_colors`, `source_colors` | | 아니오 | `api/suggest` 와 같음 — AI 제안(`extra`) 그림에 적용(제안이 스스로 아는 팔레트 id 를 고르면 그것). AI 제안 명세의 `palette` 는 아는 id 만 받음 (2026-10-20 추가) |
 
 - 응답(200):
 ```json
