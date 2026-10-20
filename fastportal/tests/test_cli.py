@@ -36,6 +36,11 @@ class AddUserTest(unittest.TestCase):
             self.assertEqual(c.execute("SELECT name, dept FROM users WHERE id='kim'").fetchone(), ("김", "연구"), "안 준 값은 그대로")
             self.assertEqual(c.execute("SELECT COUNT(*) FROM sessions WHERE uid='kim'").fetchone()[0], 0, "초기화하면 세션 끊김")
 
+    def test_fresh_db(self):
+        self.env["AGENT_DATA"] = tempfile.mkdtemp(prefix="fastportal-cli-")   # 표 없는 새 폴더
+        r = self.cli("first", "--pin", "1234")
+        self.assertEqual(r.returncode, 0, r.stderr)
+
     def test_rejects_bad_input(self):
         for a in (["owner", "--pin", "1234"], ["kim", "--pin", "12"], ["Bad id", "--pin", "1234"]):
             self.assertNotEqual(self.cli(*a).returncode, 0, a)

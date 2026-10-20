@@ -18,6 +18,7 @@ def add_user(argv):
     if not ID_RE.match(uid) or uid == "owner" or not (PIN_RE.match(pin) or (o.password and 6 <= len(o.password) <= 64)):
         sys.exit("아이디(영문 소문자·숫자 2~32자, owner 불가)·PIN(숫자 4~8) 또는 --password(6~64자) 확인")
     b = auth.backend()
+    db.init_db()   # 포털을 한 번도 안 띄운 새 DB 에서도(표가 있으면 그대로)
     with db.db() as c:
         if b.get_user(c, uid):
             b.set_password(c, uid, pin)
