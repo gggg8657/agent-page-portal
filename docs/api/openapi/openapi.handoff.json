@@ -14526,6 +14526,14 @@
               "maxItems": 2
              },
              "description": "다른 선 밑에 완전히 가려 보간한 구간 — [시작 x, 끝 x] 그림 픽셀. 이 구간 안의 px 점은 '보간됨'(2026-10-20)"
+            },
+            "axis": {
+             "type": "string",
+             "enum": [
+              "left",
+              "right"
+             ],
+             "description": "막대: 오른쪽 축 계열이면 표 머리글에 '(오른쪽 축)'"
             }
            },
            "required": [
@@ -14562,6 +14570,18 @@
          },
          "table": {
           "description": "화면이 실어 보내지만 서버는 무시"
+         },
+         "calib2": {
+          "$ref": "#/components/schemas/DigitizerCalib",
+          "description": "막대: 오른쪽 값축 보정 — axis 가 right 인 막대는 이것으로 값을 바꿈(2026-10-20)"
+         },
+         "lines": {
+          "type": "array",
+          "description": "막대: 콤보 선(api/auto 의 bar.lines 모양) — xlsx 에 '선 <이름>' 시트(x 그림 픽셀·가까운 범주·값)",
+          "items": {
+           "type": "object",
+           "additionalProperties": true
+          }
          }
         },
         "required": [
@@ -29534,6 +29554,14 @@
           "maxItems": 2
          },
          "description": "다른 선 밑에 완전히 가려 보간한 구간 — [시작 x, 끝 x] 그림 픽셀. 이 구간 안의 px 점은 '보간됨'(2026-10-20)"
+        },
+        "axis": {
+         "type": "string",
+         "enum": [
+          "left",
+          "right"
+         ],
+         "description": "오른쪽 축 계열이면 'right'(calib 가 calib2). 막대 모드에서는 막대 위를 지나는 선만 점이 있음(2026-10-20)"
         }
        }
       }
@@ -29617,7 +29645,15 @@
       },
       "description": "[위 끝, 아래 끝] 픽셀"
      },
-     "open": {}
+     "open": {},
+     "axis": {
+      "type": "string",
+      "enum": [
+       "left",
+       "right"
+      ],
+      "description": "이중축 막대: 'right' 면 오른쪽 값축(bar.calib2)으로 잰 막대 — 값은 bar.calib2 로 바꾼다. 없으면 왼쪽(2026-10-20)"
+     }
     },
     "description": "group·note·label·key·open 의 형식은 코드 확인 필요"
    },
@@ -29671,7 +29707,15 @@
         "legend": {
          "type": "boolean"
         },
-        "legend_box": {}
+        "legend_box": {},
+        "axis": {
+         "type": "string",
+         "enum": [
+          "left",
+          "right"
+         ],
+         "description": "계열이 쓰는 값축 — 축 눈금·제목 글자 색, 범례(AI)의 축으로 정함(2026-10-20)"
+        }
        }
       }
      },
@@ -29694,6 +29738,56 @@
      },
      "box": {
       "$ref": "#/components/schemas/DigitizerBox"
+     },
+     "calib2": {
+      "$ref": "#/components/schemas/DigitizerCalib",
+      "description": "오른쪽 값축 보정(이중축). 오른쪽 축을 쓰는 막대·선이 있을 때만(2026-10-20)"
+     },
+     "lines": {
+      "type": "array",
+      "description": "막대 위를 지나는 선(추세선·선 계열, 콤보 차트) — 막대를 잴 때는 지우고 따로 뽑은 선. detect.series 에도 같은 것(2026-10-20)",
+      "items": {
+       "type": "object",
+       "additionalProperties": true,
+       "properties": {
+        "name": {
+         "type": "string",
+         "description": "범례(AI)에서 색이 같고 막대 계열이 쓰지 않은 항목, 없으면 '선 N'"
+        },
+        "color": {
+         "type": "string"
+        },
+        "px": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+         },
+         "description": "[x, y] 그림 픽셀"
+        },
+        "axis": {
+         "type": "string",
+         "enum": [
+          "left",
+          "right"
+         ]
+        },
+        "kind": {
+         "type": "string",
+         "enum": [
+          "line"
+         ]
+        },
+        "calib": {
+         "$ref": "#/components/schemas/DigitizerCalib",
+         "description": "오른쪽 축 선이면 calib2"
+        }
+       }
+      }
      }
     },
     "required": [
