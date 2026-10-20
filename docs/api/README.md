@@ -43,7 +43,7 @@
 | `GET /login` | 로그인 화면(랜딩). 이미 로그인했으면 `next`(같은 사이트 경로만, 아니면 `/`)로 302 |
 | `POST /api/logout` | **새 화면은 이것**: 세션 삭제 + 쿠키 지움 → `{"ok": true}`(로그인 안 돼 있어도 200) |
 | `GET /logout` | (예전 화면용) 세션 삭제 후 `/login` 으로 302. 다른 사이트에서 건 링크(`Sec-Fetch-Site: cross-site`)로는 로그아웃하지 않고 `/` 로 |
-| `GET /api/version` | 로그인 전에도: `{"api": "2026.10.14", "build": "<포털 git describe>", "auth": {…/api/auth 와 같음}, "cors": false}` — [10. 버전](#10-버전호환) |
+| `GET /api/version` | 로그인 전에도: `{"api": "2026.10.19", "build": "<포털 git describe>", "auth": {…/api/auth 와 같음}, "cors": false}` — [10. 버전](#10-버전호환) |
 | `GET /api/landing` | 로그인 전에도: 랜딩의 분류·도구 수 `{"groups": [{name, n, names}], "tools"}` |
 | `GET /api/me` | 지금 사용자 `{"id", "name", "role", "dept", "owner", "onboarded", …}` — `onboarded`: 첫 로그인 둘러보기를 봤거나 건너뜀 |
 
@@ -326,7 +326,8 @@ npx @redocly/cli lint docs/api/openapi/openapi.json                             
 
 ## 10. 버전·호환
 
-- `GET /api/version` 의 `api`(지금 `2026.10.14`) = 이 문서와 `openapi/*.json` 의 `info.version`. **응답 모양을 바꾸면(필드 삭제·이름 변경·의미 변경) 올립니다.** 필드를 더하는 것은 호환(화면은 모르는 필드를 무시해 주세요).
+- `GET /api/version` 의 `api`(지금 `2026.10.19`) = 이 문서와 `openapi/*.json` 의 `info.version`. **응답 모양을 바꾸면(필드 삭제·이름 변경·의미 변경) 올립니다.** 필드를 더하는 것은 호환(화면은 모르는 필드를 무시해 주세요).
 - 경로를 없애거나 바꿀 때는 최소 한 판 동안 예전 경로를 같이 둡니다(예: `GET /logout` ↔ `POST /api/logout`, `GET /api/account/notices` ↔ `POST`).
 - `build` = 포털 저장소 `git describe`(태그-커밋) — 문제를 알릴 때 같이 적어 주세요.
+- 바뀐 점(2026.10.19): `POST /api/like` 가 계정당 도구마다 1회로 바뀜(두 번째부터 `{"ok":true,"liked":true,"already":true}`, 취소 없음 — 의미 변경이라 버전을 올림). 추가(호환): `GET·POST /api/lists`(계정별 즐겨찾기·최근 사용), 외부 전달용 명세에 모두의 에이전트(`/api/community/*`)·연결 흐름(`/api/flows*`)·아이디어로 만들기(`/api/idea/*`)·내 작업(`/api/workspace*`)·패키지 찾기(`/api/pkg-index*`)·`/api/dwell`.
 - 바뀐 점(2026.10.14): `POST /api/logout`·`GET /api/version`·`GET /api/landing`·`POST /api/account/notices` 추가, 오류 `code`, 로그인 잠금 429, PUT·DELETE·PATCH·HEAD 프록시, CSRF 검사, 도구 서명·`/healthz`, CORS 설정(기본 꺼짐).

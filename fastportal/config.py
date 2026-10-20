@@ -56,7 +56,7 @@ def secret_file(name):
 
 
 # ── 외부 화면·도구 서명(보안) ────────────────────────────────────────────
-API_VERSION = "2026.10.14"   # 포털 API 계약 버전(GET /api/version) — 응답 모양이 바뀌면 올림(docs/api/README.md '버전')
+API_VERSION = "2026.10.19"   # 포털 API 계약 버전(GET /api/version) — 응답 모양이 바뀌면 올림(docs/api/README.md '버전')
 # 도구로 가는 요청에 포털 서명(X-Agent-Auth)을 붙이고, 도구를 띄울 때 PORTAL_TOOL_KEY 를 넘김(도구 portal_auth.py 가 확인). 0 이면 끔(옛 도구와 시험용)
 TOOL_AUTH = os.environ.get("PORTAL_TOOL_AUTH", "1") != "0"
 _list = lambda v: {x.strip().rstrip("/") for x in (os.environ.get(v) or "").split(",") if x.strip()}
