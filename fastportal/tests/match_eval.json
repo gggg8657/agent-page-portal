@@ -1,0 +1,589 @@
+{
+ "note": "검색어 → 기대 도구(순서 없음). capabilities.json 을 보기 전에 사람이 쓰는 말로 적은 평가 묶음 — 고칠 때 카탈로그 문구를 베끼지 말 것. scripts/match_eval.py 가 recall@3·MRR 을 셈 · hard: 카탈로그를 본 뒤 낱말이 겹치지 않게 돌려 말한 검색어(의미 검색 확인용)",
+ "queries": [
+  {
+   "q": "회의록",
+   "expect": [
+    "meeting-local",
+    "kordoc-local",
+    "weekly-local"
+   ]
+  },
+  {
+   "q": "회의록 작성",
+   "expect": [
+    "meeting-local",
+    "kordoc-local"
+   ]
+  },
+  {
+   "q": "회의 녹음 정리",
+   "expect": [
+    "meeting-local"
+   ]
+  },
+  {
+   "q": "미팅 노트",
+   "expect": [
+    "meeting-local",
+    "kordoc-local"
+   ]
+  },
+  {
+   "q": "회의 결과 보고",
+   "expect": [
+    "meeting-local",
+    "kordoc-local",
+    "weekly-local"
+   ]
+  },
+  {
+   "q": "녹음 파일 받아쓰기",
+   "expect": [
+    "meeting-local"
+   ]
+  },
+  {
+   "q": "회의 후속 메일",
+   "expect": [
+    "mail-local",
+    "writer-local"
+   ]
+  },
+  {
+   "q": "그래프 숫자 뽑기",
+   "expect": [
+    "digitizer-local"
+   ]
+  },
+  {
+   "q": "논문 그림에서 데이터 추출",
+   "expect": [
+    "digitizer-local"
+   ]
+  },
+  {
+   "q": "그래프 이미지를 엑셀로",
+   "expect": [
+    "digitizer-local"
+   ]
+  },
+  {
+   "q": "표로 차트",
+   "expect": [
+    "chart-local"
+   ]
+  },
+  {
+   "q": "엑셀 표로 그래프 그리기",
+   "expect": [
+    "chart-local"
+   ]
+  },
+  {
+   "q": "막대그래프 만들기",
+   "expect": [
+    "chart-local"
+   ]
+  },
+  {
+   "q": "그래프",
+   "expect": [
+    "chart-local",
+    "digitizer-local"
+   ]
+  },
+  {
+   "q": "보도자료",
+   "expect": [
+    "kordoc-local",
+    "writer-local"
+   ]
+  },
+  {
+   "q": "보도자료 초안",
+   "expect": [
+    "kordoc-local",
+    "writer-local"
+   ]
+  },
+  {
+   "q": "공문 초안",
+   "expect": [
+    "kordoc-local"
+   ]
+  },
+  {
+   "q": "기안문 쓰기",
+   "expect": [
+    "kordoc-local"
+   ]
+  },
+  {
+   "q": "한글 파일 요약",
+   "expect": [
+    "kordoc-local"
+   ]
+  },
+  {
+   "q": "hwp 문서 질문",
+   "expect": [
+    "kordoc-local",
+    "notebook-local"
+   ]
+  },
+  {
+   "q": "보고서",
+   "expect": [
+    "kordoc-local",
+    "weekly-local"
+   ]
+  },
+  {
+   "q": "주간보고",
+   "expect": [
+    "weekly-local"
+   ]
+  },
+  {
+   "q": "주간 업무 보고 취합",
+   "expect": [
+    "weekly-local"
+   ]
+  },
+  {
+   "q": "코딩 연습",
+   "expect": [
+    "codingtest-local"
+   ]
+  },
+  {
+   "q": "알고리즘 문제 풀기",
+   "expect": [
+    "codingtest-local"
+   ]
+  },
+  {
+   "q": "코테 준비",
+   "expect": [
+    "codingtest-local"
+   ]
+  },
+  {
+   "q": "단백질 구조",
+   "expect": [
+    "protein-local"
+   ]
+  },
+  {
+   "q": "단백질 결합 예측",
+   "expect": [
+    "protein-local"
+   ]
+  },
+  {
+   "q": "아미노산 서열로 3차원 구조",
+   "expect": [
+    "protein-local"
+   ]
+  },
+  {
+   "q": "메일 답장",
+   "expect": [
+    "mail-local"
+   ]
+  },
+  {
+   "q": "이메일 쓰기",
+   "expect": [
+    "mail-local"
+   ]
+  },
+  {
+   "q": "영문 메일 다듬기",
+   "expect": [
+    "mail-local"
+   ]
+  },
+  {
+   "q": "건배사",
+   "expect": [
+    "writer-local"
+   ]
+  },
+  {
+   "q": "부고 안내",
+   "expect": [
+    "writer-local"
+   ]
+  },
+  {
+   "q": "공지문 작성",
+   "expect": [
+    "writer-local",
+    "kordoc-local"
+   ]
+  },
+  {
+   "q": "번역투 고치기",
+   "expect": [
+    "humanize-kr-local"
+   ]
+  },
+  {
+   "q": "AI가 쓴 글 자연스럽게",
+   "expect": [
+    "humanize-kr-local"
+   ]
+  },
+  {
+   "q": "맞춤법 검사",
+   "expect": [
+    "coach-local"
+   ]
+  },
+  {
+   "q": "글 첨삭",
+   "expect": [
+    "coach-local"
+   ]
+  },
+  {
+   "q": "상장 만들기",
+   "expect": [
+    "award-local"
+   ]
+  },
+  {
+   "q": "감사장 출력",
+   "expect": [
+    "award-local"
+   ]
+  },
+  {
+   "q": "순서도 그리기",
+   "expect": [
+    "diagram-local"
+   ]
+  },
+  {
+   "q": "업무 흐름도",
+   "expect": [
+    "diagram-local"
+   ]
+  },
+  {
+   "q": "손으로 그린 그림을 논문 그림으로",
+   "expect": [
+    "sketch-local"
+   ]
+  },
+  {
+   "q": "포스터 이미지 생성",
+   "expect": [
+    "image-local"
+   ]
+  },
+  {
+   "q": "사진 배경 바꾸기",
+   "expect": [
+    "image-local"
+   ]
+  },
+  {
+   "q": "글을 음성으로 읽어 주기",
+   "expect": [
+    "tts-local"
+   ]
+  },
+  {
+   "q": "말하는 캐릭터 영상",
+   "expect": [
+    "avatar-local"
+   ]
+  },
+  {
+   "q": "데이터베이스 질의",
+   "expect": [
+    "sql-local"
+   ]
+  },
+  {
+   "q": "자연어로 SQL",
+   "expect": [
+    "sql-local"
+   ]
+  },
+  {
+   "q": "논문 투고 전 점검",
+   "expect": [
+    "review-local"
+   ]
+  },
+  {
+   "q": "논문 심사평 예상",
+   "expect": [
+    "review-local"
+   ]
+  },
+  {
+   "q": "방사선 차폐 두께",
+   "expect": [
+    "shield-local"
+   ]
+  },
+  {
+   "q": "선량 계산",
+   "expect": [
+    "shield-local"
+   ]
+  },
+  {
+   "q": "배터리 수명 예측",
+   "expect": [
+    "battery-local"
+   ]
+  },
+  {
+   "q": "리튬이온 충방전 시뮬레이션",
+   "expect": [
+    "battery-local"
+   ]
+  },
+  {
+   "q": "3D 부품 도면",
+   "expect": [
+    "agent-cad-local"
+   ]
+  },
+  {
+   "q": "DXF 수정",
+   "expect": [
+    "agent-cad-local"
+   ]
+  },
+  {
+   "q": "규정 질문 챗봇 만들기",
+   "expect": [
+    "agent-builder-local"
+   ]
+  },
+  {
+   "q": "자료 올려서 질문하기",
+   "expect": [
+    "notebook-local",
+    "agent-builder-local"
+   ]
+  },
+  {
+   "q": "참고문헌 기반 답변",
+   "expect": [
+    "notebook-local"
+   ]
+  },
+  {
+   "q": "파동이 춤추게",
+   "expect": [
+    "padong-local"
+   ]
+  },
+  {
+   "q": "녹음해서 공문으로",
+   "expect": [
+    "meeting-local",
+    "kordoc-local"
+   ]
+  },
+  {
+   "q": "발표 원고 낭독 음성",
+   "expect": [
+    "tts-local"
+   ]
+  }
+ ],
+ "hard": [
+  {
+   "q": "팀장님께 드릴 어제 회의 내용 정리",
+   "expect": [
+    "meeting-local",
+    "kordoc-local"
+   ]
+  },
+  {
+   "q": "녹취한 인터뷰를 글로 옮기고 싶어",
+   "expect": [
+    "meeting-local"
+   ]
+  },
+  {
+   "q": "PDF 논문 속 곡선 값을 다시 쓰고 싶다",
+   "expect": [
+    "digitizer-local"
+   ]
+  },
+  {
+   "q": "측정값 몇 줄로 보기 좋은 시각화",
+   "expect": [
+    "chart-local"
+   ]
+  },
+  {
+   "q": "기자들에게 배포할 문서",
+   "expect": [
+    "kordoc-local",
+    "writer-local"
+   ]
+  },
+  {
+   "q": "결재 올릴 문서 작성",
+   "expect": [
+    "kordoc-local"
+   ]
+  },
+  {
+   "q": "이번 주에 한 일 정리해서 제출",
+   "expect": [
+    "weekly-local"
+   ]
+  },
+  {
+   "q": "파이썬 실력 늘리기",
+   "expect": [
+    "codingtest-local"
+   ]
+  },
+  {
+   "q": "효소가 어떻게 접히는지 보고 싶어",
+   "expect": [
+    "protein-local"
+   ]
+  },
+  {
+   "q": "거래처에 보낼 정중한 편지",
+   "expect": [
+    "mail-local"
+   ]
+  },
+  {
+   "q": "송년회에서 할 한마디",
+   "expect": [
+    "writer-local"
+   ]
+  },
+  {
+   "q": "챗GPT가 쓴 티 나는 문장",
+   "expect": [
+    "humanize-kr-local"
+   ]
+  },
+  {
+   "q": "오탈자 잡아줘",
+   "expect": [
+    "coach-local"
+   ]
+  },
+  {
+   "q": "우수 직원 시상 준비",
+   "expect": [
+    "award-local"
+   ]
+  },
+  {
+   "q": "결재 절차를 그림으로",
+   "expect": [
+    "diagram-local"
+   ]
+  },
+  {
+   "q": "화이트보드 사진을 깔끔한 도식으로",
+   "expect": [
+    "sketch-local"
+   ]
+  },
+  {
+   "q": "행사 홍보 포스터 그림",
+   "expect": [
+    "image-local"
+   ]
+  },
+  {
+   "q": "안내 방송 녹음 대신",
+   "expect": [
+    "tts-local"
+   ]
+  },
+  {
+   "q": "부서별 매출 합계 조회",
+   "expect": [
+    "sql-local"
+   ]
+  },
+  {
+   "q": "저널에 내기 전에 약점 찾기",
+   "expect": [
+    "review-local"
+   ]
+  },
+  {
+   "q": "콘크리트 벽 몇 cm 필요",
+   "expect": [
+    "shield-local"
+   ]
+  },
+  {
+   "q": "전기차 셀 열화",
+   "expect": [
+    "battery-local"
+   ]
+  },
+  {
+   "q": "브래킷 모델링",
+   "expect": [
+    "agent-cad-local"
+   ]
+  },
+  {
+   "q": "사내 규정 물어보는 봇",
+   "expect": [
+    "agent-builder-local"
+   ]
+  },
+  {
+   "q": "여러 PDF 읽고 근거 있는 답",
+   "expect": [
+    "notebook-local"
+   ]
+  },
+  {
+   "q": "우리 마스코트 움직이게",
+   "expect": [
+    "padong-local"
+   ]
+  },
+  {
+   "q": "말하는 얼굴 영상",
+   "expect": [
+    "avatar-local"
+   ]
+  },
+  {
+   "q": "회의 끝나고 참석자에게 공유",
+   "expect": [
+    "mail-local",
+    "meeting-local"
+   ]
+  },
+  {
+   "q": "표를 PPT에 넣을 그래프로",
+   "expect": [
+    "chart-local"
+   ]
+  },
+  {
+   "q": "한글 문서 내용 빨리 파악",
+   "expect": [
+    "kordoc-local"
+   ]
+  }
+ ]
+}

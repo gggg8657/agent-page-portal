@@ -208,8 +208,8 @@ def theme_file(ctx, p):
 # '/' 전환(WEB_ROOT=1): 포털 화면 주소(/ · /login · /all · /fav · /recent · /account · /approvals · /admin · /tool/*)와
 # 빌드 자산(/assets/* · /theme-boot.js · /fonts.css)을 WEB_ROOT_DIST(agent-page-web `npm run build:root`·deploy.sh --root)에서 내보낸다.
 # /api · /t · /theme · /guide · /logout · /landing 과 /app(WEB_DIST)은 그대로.
-WEB_SPA = re.compile(r"/($|[?#]|(all|fav|recent|work|create|account|approvals|admin)([/?#]|$)|tool/)")   # React 라우터 경로(agent-page-web Landing.tsx SPA 와 같음)
-WEB_ROOT_PATH = re.compile(r"/($|login|(all|fav|recent|work|create|account|approvals|admin)/?|tool/.+|assets/.+|theme-boot\.js|fonts\.css)")
+WEB_SPA = re.compile(r"/($|[?#]|(all|fav|recent|plaza|ask|work|create|account|approvals|admin)([/?#]|$)|tool/)")   # React 라우터 경로(agent-page-web Landing.tsx SPA 와 같음)
+WEB_ROOT_PATH = re.compile(r"/($|login|(all|fav|recent|plaza|ask|work|create|account|approvals|admin)/?|tool/.+|assets/.+|theme-boot\.js|fonts\.css)")
 WEB_CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; "
            "connect-src 'self'; frame-src 'self'; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'")
 

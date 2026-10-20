@@ -24712,6 +24712,518 @@
      }
     ]
    }
+  },
+  "/api/match": {
+   "get": {
+    "operationId": "portalMatch",
+    "summary": "할 일로 도구 찾기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "검색어(≤200자)·파일 확장자로 도구 순위. 도구별 '할 수 있는 일' 카탈로그(포털 저장소 capabilities.json)에 낱말(한글 자모 비교·조사 떼기)·같은 뜻 표현(syn·유의어 묶음)·임베딩 뜻(EMBED_* — Ollama bge-m3, 없으면 빼고)을 합침. 숨긴 도구·관리자가 끈 도구는 빠지고, 팀 밸런스 맵(owner_only)은 관리자에게만. 여러 단계를 뜻하면 flow(연결 흐름 제안). 계정당 1분에 MATCH_RATE_N(120)번",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MatchResult"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류 {error, code: bad_request} — q 200자 초과·ext 형식·limit"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "429": {
+      "description": "너무 잦음 {code: rate_limited} + Retry-After"
+     }
+    },
+    "parameters": [
+     {
+      "name": "q",
+      "in": "query",
+      "schema": {
+       "type": "string",
+       "maxLength": 200
+      }
+     },
+     {
+      "name": "ext",
+      "in": "query",
+      "schema": {
+       "type": "string",
+       "examples": [
+        ".pdf"
+       ]
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 20,
+       "default": 8
+      }
+     }
+    ]
+   }
+  },
+  "/api/internal/match": {
+   "post": {
+    "operationId": "portalInternalMatch",
+    "summary": "도구 → 포털 할 일 검색(파동이 펫 추천)",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "tool",
+    "description": "쿠키 없음 — 접속지(로컬·그 도구 host) + 헤더 X-Portal-Jobs-Token(포털이 도구를 켤 때 넘긴 PORTAL_JOBS_TOKEN). user 는 도구가 받은 X-Agent-User(주인은 owner — 팀 밸런스 맵은 주인·관리자만)",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "tools": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "dir": {
+              "type": "string"
+             },
+             "name": {
+              "type": "string"
+             },
+             "score": {
+              "type": "number"
+             },
+             "reason": {
+              "type": "string"
+             },
+             "link": {
+              "type": "string"
+             },
+             "caps": {
+              "type": "array",
+              "items": {
+               "type": "string"
+              }
+             }
+            }
+           }
+          },
+          "task": {
+           "type": "boolean"
+          },
+          "semantic": {
+           "type": "boolean"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류"
+     },
+     "403": {
+      "description": "접속지·토큰이 틀림"
+     },
+     "429": {
+      "description": "너무 잦음"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "tool",
+         "q"
+        ],
+        "properties": {
+         "tool": {
+          "type": "string"
+         },
+         "user": {
+          "type": "string"
+         },
+         "q": {
+          "type": "string",
+          "maxLength": 200
+         },
+         "limit": {
+          "type": "integer",
+          "maximum": 8
+         }
+        }
+       }
+      }
+     }
+    },
+    "security": []
+   }
+  },
+  "/api/ask/send": {
+   "post": {
+    "operationId": "portalAskSend",
+    "summary": "물어보기 — 질문 보내기(스트림)",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "포털 LLM(LLM_* — vLLM gemma4:31b)이 답을 text/event-stream(data: JSON)으로: 먼저 {meta: {conv, cards, flow, file?, route}}, 이어서 {delta}, 끝에 {done: {msg_id, conv}} 또는 {error, code}. 말에 할 일이 있으면 할 일 검색이 고른 도구 카드(애매하면 LLM 이 판단 — 사용자 글은 구분자 안 데이터). LLM 은 도구를 실행하지 않음. 파일은 올리지 않음 — file 에 이름·크기·종류와 글 파일 앞부분(≤2000자, 검색에만·저장 안 함)만. 사용자당 동시 1(409 busy)·10분 ASK_RATE_N(30)번(429)·포털 전체 ASK_MAX_GLOBAL(4)(503 busy_global)·답 ASK_MAX_TOKENS(1024). 끊기면 쓴 데까지 저장(partial)",
+    "responses": {
+     "200": {
+      "description": "SSE",
+      "content": {
+       "text/event-stream": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류 {code: bad_request}"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "409": {
+      "description": "이전 답을 쓰는 중 {code: busy}"
+     },
+     "413": {
+      "description": "본문 64KB 초과"
+     },
+     "429": {
+      "description": "10분 상한 {code: rate_limited} + Retry-After"
+     },
+     "503": {
+      "description": "포털 전체 동시 상한 {code: busy_global}"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "text": {
+          "type": "string",
+          "maxLength": 4000
+         },
+         "conv": {
+          "type": "string",
+          "description": "이어 쓸 내 대화 id(없으면 새 대화)"
+         },
+         "file": {
+          "type": "object",
+          "required": [
+           "name"
+          ],
+          "properties": {
+           "name": {
+            "type": "string"
+           },
+           "size": {
+            "type": "integer"
+           },
+           "type": {
+            "type": "string"
+           },
+           "snippet": {
+            "type": "string",
+            "maxLength": 2000
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    },
+    "x-llm": true,
+    "x-long-running": true
+   }
+  },
+  "/api/ask/convs": {
+   "get": {
+    "operationId": "portalAskConvs",
+    "summary": "물어보기 — 내 대화 목록",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "최근 수정 순(최대 200). 보관 기한 ASK_KEEP_DAYS(90)일 지난 대화는 지움",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "convs": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/AskConv"
+           }
+          },
+          "keep_days": {
+           "type": "integer"
+          },
+          "limits": {
+           "type": "object",
+           "properties": {
+            "rate_n": {
+             "type": "integer"
+            },
+            "rate_s": {
+             "type": "integer"
+            },
+            "text_max": {
+             "type": "integer"
+            },
+            "max_tokens": {
+             "type": "integer"
+            },
+            "file_snippet": {
+             "type": "integer"
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "로그인 필요"
+     }
+    }
+   }
+  },
+  "/api/ask/convs/{id}": {
+   "get": {
+    "operationId": "portalAskConv",
+    "summary": "물어보기 — 대화 하나",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "내 대화만 — 남의 대화는 관리자라도 404",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "conv": {
+           "$ref": "#/components/schemas/AskConv"
+          },
+          "messages": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/AskMessage"
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "404": {
+      "description": "없음(남의 대화 포함) {code: not_found}"
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/ask/rename": {
+   "post": {
+    "operationId": "portalAskRename",
+    "summary": "물어보기 — 대화 이름 바꾸기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "제목 ≤60자. 내 대화만",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "conv": {
+           "$ref": "#/components/schemas/AskConv"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "404": {
+      "description": "없음"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id",
+         "title"
+        ],
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "title": {
+          "type": "string",
+          "maxLength": 60
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/ask/delete": {
+   "post": {
+    "operationId": "portalAskDelete",
+    "summary": "물어보기 — 대화 지우기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "대화와 마디 모두. 내 대화만",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "404": {
+      "description": "없음"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id"
+        ],
+        "properties": {
+         "id": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/ask/clear": {
+   "post": {
+    "operationId": "portalAskClear",
+    "summary": "물어보기 — 내 대화 모두 지우기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "되돌릴 수 없음",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "deleted": {
+           "type": "integer"
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "로그인 필요"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object"
+       }
+      }
+     }
+    }
+   }
   }
  },
  "components": {
@@ -43304,6 +43816,262 @@
      },
      "reason": {
       "type": "string"
+     }
+    }
+   },
+   "MatchCap": {
+    "type": "object",
+    "description": "도구 하나가 할 수 있는 일(capabilities.json) — link 는 그 기능을 미리 골라 여는 화면 주소",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "task": {
+      "type": "string"
+     },
+     "in": {
+      "type": "string"
+     },
+     "out": {
+      "type": "string"
+     },
+     "link": {
+      "type": "string",
+      "examples": [
+       "/tool/kordoc-local?task=draft&preset=회의록"
+      ]
+     }
+    }
+   },
+   "MatchTool": {
+    "type": "object",
+    "properties": {
+     "dir": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "score": {
+      "type": "number"
+     },
+     "reason": {
+      "type": "string"
+     },
+     "link": {
+      "type": "string"
+     },
+     "signals": {
+      "type": "object",
+      "properties": {
+       "lexical": {
+        "type": "number"
+       },
+       "synonyms": {
+        "type": "number"
+       },
+       "semantic": {
+        "type": "number"
+       },
+       "file": {
+        "type": "number"
+       }
+      }
+     },
+     "caps": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+       "$ref": "#/components/schemas/MatchCap"
+      }
+     }
+    }
+   },
+   "FlowSuggest": {
+    "type": "object",
+    "description": "여러 단계를 뜻하는 검색어 — 연결 흐름 어댑터 순서. link 는 만들기 → 에이전트 연결 편집기에 미리 채우는 주소(저장은 사용자가)",
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "link": {
+      "type": "string"
+     },
+     "steps": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "adapter": {
+         "type": "string"
+        },
+        "title": {
+         "type": "string"
+        },
+        "tool": {
+         "type": "string"
+        },
+        "link": {
+         "type": "string"
+        }
+       }
+      }
+     }
+    }
+   },
+   "MatchResult": {
+    "type": "object",
+    "properties": {
+     "q": {
+      "type": "string"
+     },
+     "ext": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "tools": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/MatchTool"
+      }
+     },
+     "flow": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/FlowSuggest"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "semantic": {
+      "type": "boolean",
+      "description": "임베딩 신호를 썼는지(없으면 낱말·같은 뜻 표현만)"
+     },
+     "ms": {
+      "type": "integer"
+     }
+    }
+   },
+   "AskConv": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "created": {
+      "type": "number"
+     },
+     "updated": {
+      "type": "number"
+     },
+     "n": {
+      "type": "integer"
+     }
+    }
+   },
+   "AskCard": {
+    "type": "object",
+    "properties": {
+     "dir": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "link": {
+      "type": "string"
+     },
+     "reason": {
+      "type": "string"
+     },
+     "score": {
+      "type": "number"
+     },
+     "caps": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/MatchCap"
+      }
+     }
+    }
+   },
+   "AskMessage": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "integer"
+     },
+     "role": {
+      "type": "string",
+      "enum": [
+       "user",
+       "assistant"
+      ]
+     },
+     "text": {
+      "type": "string"
+     },
+     "ts": {
+      "type": "number"
+     },
+     "cards": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/AskCard"
+      }
+     },
+     "flow": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/FlowSuggest"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "file": {
+      "type": "object",
+      "properties": {
+       "name": {
+        "type": "string"
+       },
+       "ext": {
+        "type": "string"
+       },
+       "size": {
+        "type": "integer"
+       }
+      }
+     },
+     "route": {
+      "type": "string",
+      "enum": [
+       "sure",
+       "llm",
+       "fallback",
+       "file",
+       "none"
+      ]
+     },
+     "error": {
+      "type": "string"
+     },
+     "partial": {
+      "type": "boolean"
      }
     }
    }

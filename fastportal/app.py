@@ -18,6 +18,7 @@ env: portal.py 와 같음(PORT 기본 8720, AGENT_DATA, AGENT_OWNERS, TLS_CERT·
      PORTAL_JOBS_SECRET(도구 토큰을 만드는 비밀값 — 없으면 _data/.portal_jobs_secret) PORTAL_JOBS_ALLOW(내부 경로를 더 받을 IP, 쉼표) PORTAL_JOBS_KEEPALIVE(SSE 빈 줄 초, 25)
      모두의 에이전트(flows.py·devsubmit.py): FLOW_RUN_MAX_BYTES(흐름 실행 본문 상한, 40MB) FLOW_MAX_RUNS(포털 전체 동시 흐름, 4)
      DEVSUBMIT_ZIP_MAX(개발자 zip 상한, 50MB) DEVCHECK_DOCKER_HOST(tcp://127.0.0.1:2375) DEVCHECK_IMAGE(dongjukim/agent-portal:v2) DEVCHECK_PYTHON DEVCHECK_TIMEOUT(180초)
+     할 일 검색·물어보기(match.py·ask.py): MATCH_RATE_N·MATCH_EMBED_TIMEOUT·MATCH_QCACHE_S · ASK_KEEP_DAYS(90)·ASK_RATE_N(30/10분)·ASK_MAX_TOKENS(1024)·ASK_MAX_GLOBAL(4)·ASK_LLM_TIMEOUT
      F12 코드 수집·엿보기 막기: PORTAL_PROBE·PORTAL_PROBE_MAX·PORTAL_PROBE_WINDOW·PORTAL_PROBE_BLOCK_S·PORTAL_PROBE_BLOCK_MAX_S(probe.py) PORTAL_LEGACY_STRIP(proxy.py·strip.py) — 빌드 자산 권한은 webguard.py
      (모두 config.py 한곳에서 읽음 — 모두의 에이전트 값은 그 모듈 머리에서)
 tools.json 의 "host": 그 도구는 다른 컨테이너·서버(http://<host>:<port>) — 상태 확인·프록시만, 시작·중지는 409"""
@@ -29,7 +30,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from starlette.concurrency import run_in_threadpool
 
-from . import accounts, admintools, auth, community, config, db, relay, devsubmit, dwell, flows, idea, jobs, lists, pages, pkgindex, probe, proxy, sessions, tools, toolstate, workspace
+from . import accounts, admintools, ask, auth, community, config, db, relay, devsubmit, dwell, flows, idea, jobs, lists, match, pages, pkgindex, probe, proxy, sessions, tools, toolstate, workspace
 from .config import OWNERS, TLS
 from .ctx import Ctx, TooBig, drain, length, not_implemented, parse_json, read_body, too_big
 
@@ -44,6 +45,7 @@ with db.db() as _c:
     pkgindex.init(_c)   # 폐쇄망 pip 패키지 목록(비어 있으면 _data/pkg-index/*.txt 에서)
     idea.init(_c)   # 모두의 에이전트 — 아이디어로 만들기(최근 아이디어)
     toolstate.init(_c)   # 관리자 도구 켜기·끄기(tool_state — 없으면 켜짐)
+    ask.init(_c)   # 물어보기 — 계정별 대화 기록(보관 기한 지난 것 지움)
 toolstate.write_file()   # 파동이 펫 등이 읽는 꺼진 도구 목록(DATA/tools-disabled.json)
 flows.recover(); devsubmit.recover()
 jobs.load_self_report()
@@ -74,7 +76,7 @@ async def run_slow(fn, *args):
 
 
 SLOW_POST = re.compile(r"/api/(idea/|workspace/sync$|pin$|admin/reset$)")   # post_sync 중 오래 걸리는 것(LLM·도구 이력·PIN 해시)
-SLOW_GET = re.compile(r"/api/workspace/[0-9a-f]{32}$")   # 작업 하나 열기 — 도구에서 상세 결과를 다시 읽음(workspace.refresh_detail)
+SLOW_GET = re.compile(r"/api/workspace/[0-9a-f]{32}$|/api/match$")   # 작업 하나 열기(도구에서 상세 결과를 다시 읽음) · 할 일 검색(검색어 임베딩 — 최대 MATCH_EMBED_TIMEOUT 초)
 
 
 @asynccontextmanager
@@ -82,6 +84,7 @@ async def lifespan(_app):
     jobs.HUB.loop = asyncio.get_running_loop()
     anyio.to_thread.current_default_thread_limiter().total_tokens = THREADS
     proxy.open_client()
+    match.warm()   # 할 일 검색 — 할 일 벡터를 뒤에서 준비(_data/match/ 캐시가 있으면 바로)
     if config.BACKUP:
         threading.Thread(target=db.backup_loop, daemon=True).start()
     if config.ANON_AUTO:   # 비활성 계정 익명화 정리 — 기본 꺼짐(PORTAL_ANON_AUTO=1 로 켬, 기한 PORTAL_ANON_AFTER_DAYS)
@@ -146,6 +149,10 @@ def get_sync(ctx):
         return flows.handle_get(ctx)
     if p.startswith("/api/idea/"):   # 아이디어로 만들기 — 최근 아이디어·저장된 결과(내 것만)
         return idea.handle_get(ctx)
+    if p == "/api/match":   # 할 일로 도구 찾기(capabilities.json — 숨김 빼고, 팀 밸런스 맵은 관리자에게만)
+        return match.handle(ctx)
+    if p.startswith("/api/ask/"):   # 물어보기 — 내 대화 목록·대화 하나(남의 것은 404)
+        return ask.handle_get(ctx)
     if p.startswith("/api/community/"):   # 리뷰·요청·기여 순위(볼 수 있는 대상만 — community.target)
         return community.handle_get(ctx)
     if p in ("/api/pkg-index", "/api/pkg-index/check"):   # 폐쇄망 pip 패키지 찾기·확인(로그인)
@@ -368,6 +375,8 @@ def post_sync(ctx, body):
         return admintools.agent_post(ctx, req)
     if ctx.p.startswith("/api/idea/"):   # 아이디어로 만들기(LLM 이 수십 초 — DB 연결을 잡지 않고 idea 가 필요할 때만 엶)
         return idea.handle_post(ctx, req)
+    if ctx.p.startswith("/api/ask/"):   # 물어보기 — 대화 이름 바꾸기·지우기·모두 지우기(보내기는 route 에서 스트림으로)
+        return ask.handle_post(ctx, req)
     try:
         with db.db() as c:
             if path == "/api/pin":
@@ -512,6 +521,12 @@ async def route(ctx, request):
             except TooBig:
                 return too_big(ctx, 64 * 1024)
             return await run_in_threadpool(jobs.internal_post, ctx, body)
+        if ctx.raw == "/api/internal/match":   # 도구 → 포털 할 일 검색(쿠키 없음, 접속지 + 도구 토큰 — 파동이 펫 추천)
+            try:
+                body = await read_body(ctx, 8 * 1024)
+            except TooBig:
+                return too_big(ctx, 8 * 1024)
+            return await run_slow(match.internal_post, ctx, body)
         if ctx.raw in ("/api/login", "/api/signup"):
             try:
                 body = await read_body(ctx, config.MAX_JSON)
@@ -547,6 +562,12 @@ async def route(ctx, request):
             except TooBig:
                 return too_big(ctx, devsubmit.PKG_LIST_MAX)
             return await run_slow(devsubmit.pkg_upload, ctx, body)
+        if ctx.raw == "/api/ask/send":   # 물어보기 — 답을 SSE 로(비동기 httpx, 사용자당 동시 1·10분 ASK_RATE_N 번). 본문은 글 + 파일 정보만(64KB)
+            try:
+                body = await read_body(ctx, 64 * 1024)
+            except TooBig:
+                return too_big(ctx, 64 * 1024)
+            return ask.send_stream(ctx, body)
         if ctx.raw == "/api/flows/run":   # 흐름 실행(파일 입력 base64 포함 — 상한 flows.RUN_MAX). 이미 실행 중이면 본문(40MB)을 읽기 전에 400(start_run 과 같은 문구)
             busy = flows.busy(ctx.uid)
             if busy:
