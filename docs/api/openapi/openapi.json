@@ -30069,6 +30069,7 @@
      "radar",
      "sparkline",
      "candlestick",
+     "ohlc",
      "waterfall",
      "funnel",
      "bubble",
@@ -30187,7 +30188,25 @@
       ]
      },
      "trend": {
-      "type": "boolean"
+      "description": "scatter: true = 추세선(직선). 막대 종류(col·col_group·bar·bar_group·col_stack·bar_stack): \"linear\" = 계열별 최소제곱 직선, \"ma\" = 이동평균(창 trend_n), \"none\"/없음 = 끔 — 누적은 합계 추세 하나",
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "string",
+        "enum": [
+         "none",
+         "linear",
+         "ma"
+        ]
+       }
+      ]
+     },
+     "trend_n": {
+      "type": "integer",
+      "minimum": 2,
+      "description": "막대 추세선 이동평균 창(trend=ma, 없으면 3)"
      },
      "zero_base": {
       "type": "boolean",
@@ -30230,7 +30249,105 @@
      },
      "volume": {
       "type": "string",
-      "description": "candlestick 거래량 열(아래 막대, 선택). ys 는 시가·고가·저가·종가 순서 4개"
+      "description": "candlestick·ohlc 거래량 열(거래량 칸·매물대에 씀, 선택). ys 는 시가·고가·저가·종가 순서 4개"
+     },
+     "ma": {
+      "type": "array",
+      "items": {
+       "type": "integer",
+       "minimum": 2,
+       "maximum": 250
+      },
+      "description": "candlestick·ohlc 이동평균 창(종가 단순 평균). 기간 수보다 긴 창은 빠지고, 앞 창−1 칸은 빈칸. 예 [5, 20, 60, 120]"
+     },
+     "bb": {
+      "type": [
+       "object",
+       "null"
+      ],
+      "description": "candlestick·ohlc 볼린저 밴드 — period 일 평균 ± k × 모집단 표준편차. 없거나 null = 끔",
+      "properties": {
+       "period": {
+        "type": "integer",
+        "default": 20,
+        "minimum": 2,
+        "maximum": 200
+       },
+       "k": {
+        "type": "number",
+        "default": 2,
+        "minimum": 0.5,
+        "maximum": 4
+       }
+      }
+     },
+     "panels": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "enum": [
+        "volume",
+        "macd",
+        "rsi"
+       ]
+      },
+      "description": "candlestick·ohlc 가격 아래 칸(같은 날짜 축) — volume(거래량 열 필요)·macd(12,26,9)·rsi(14, 와일더). 키가 없으면 예전처럼 거래량 열이 있을 때 거래량 칸만"
+     },
+     "vprofile": {
+      "type": [
+       "object",
+       "null"
+      ],
+      "description": "candlestick·ohlc 매물대(가격대별 거래량, 오른쪽). 거래량 열 필요. 기간마다 거래량을 저가~고가에 고르게 나눔, POC·가치 영역(70%) 표시",
+      "properties": {
+       "bins": {
+        "type": "integer",
+        "default": 24,
+        "minimum": 4,
+        "maximum": 100
+       },
+       "va": {
+        "type": "boolean",
+        "default": true,
+        "description": "가치 영역 70% 표시"
+       }
+      }
+     },
+     "colors_updown": {
+      "type": "string",
+      "enum": [
+       "kr",
+       "intl"
+      ],
+      "description": "candlestick·ohlc 상승·하락 색 관례(없으면 kr) — kr: 상승 빨강·하락 파랑, intl: 상승 초록·하락 빨강 (colors 0·1 을 직접 고르면 그 색이 먼저)"
+     },
+     "macd": {
+      "type": "object",
+      "description": "MACD 기간(선택, 기본 12·26·9)",
+      "properties": {
+       "fast": {
+        "type": "integer",
+        "default": 12
+       },
+       "slow": {
+        "type": "integer",
+        "default": 26
+       },
+       "signal": {
+        "type": "integer",
+        "default": 9
+       }
+      }
+     },
+     "rsi": {
+      "type": "object",
+      "description": "RSI 기간(선택, 기본 14)",
+      "properties": {
+       "period": {
+        "type": "integer",
+        "default": 14
+       }
+      }
      },
      "size": {
       "type": "string",
@@ -30463,7 +30580,7 @@
         "pattern": "^#[0-9a-fA-F]{6}$"
        }
       },
-      "description": "계열 대신 뜻으로 색을 쓰는 종류의 기본색 — waterfall: [증가, 감소, 합계], candlestick: [상승, 하락]. spec.colors 같은 순서로 바꿈"
+      "description": "계열 대신 뜻으로 색을 쓰는 종류의 기본색 — waterfall: [증가, 감소, 합계], candlestick·ohlc: [상승, 하락]. spec.colors 같은 순서로 바꿈"
      },
      "rerank": {
       "type": "object",
@@ -30482,6 +30599,84 @@
         "type": "integer"
        }
       }
+     },
+     "updown_colors": {
+      "type": "object",
+      "description": "colors_updown 관례별 [상승, 하락] 기본색",
+      "properties": {
+       "kr": {
+        "type": "array",
+        "items": {
+         "type": "string",
+         "pattern": "^#[0-9a-fA-F]{6}$"
+        }
+       },
+       "intl": {
+        "type": "array",
+        "items": {
+         "type": "string",
+         "pattern": "^#[0-9a-fA-F]{6}$"
+        }
+       }
+      }
+     },
+     "fin": {
+      "type": "object",
+      "description": "캔들·OHLC 지표 기본값(화면 편집 칸용)",
+      "properties": {
+       "ma_default": {
+        "type": "array",
+        "items": {
+         "type": "integer"
+        }
+       },
+       "ma_max": {
+        "type": "integer"
+       },
+       "panels": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       "bb": {
+        "type": "object",
+        "properties": {
+         "period": {
+          "type": "integer"
+         },
+         "k": {
+          "type": "number"
+         }
+        }
+       },
+       "macd": {
+        "type": "array",
+        "items": {
+         "type": "integer"
+        }
+       },
+       "rsi": {
+        "type": "integer"
+       },
+       "vprofile_bins": {
+        "type": "integer"
+       },
+       "ma_colors": {
+        "type": "array",
+        "items": {
+         "type": "string",
+         "pattern": "^#[0-9a-fA-F]{6}$"
+        }
+       }
+      }
+     },
+     "trend_kinds": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "막대 추세선(trend: linear|ma)을 쓰는 종류"
      }
     },
     "required": [

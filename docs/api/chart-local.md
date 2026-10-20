@@ -53,14 +53,16 @@
 | 필드 | 설명 |
 |---|---|
 | `id` | 후보 id (`c1`, `c2` …) |
-| `kind` | 그래프 종류 (필수). `api/meta` 의 `kinds` 키: `col` `bar` `col_group` `bar_group` `col_stack` `col_stack100` `bar_stack` `line` `area` `area_stack` `scatter` `pie` `doughnut` `hist` `box` `heatmap` `panels` `index` `dual` · (2026-10-20 추가) `radar` `sparkline` `candlestick` `waterfall` `funnel` `bubble` `step` `lollipop` `dumbbell` `treemap` `bullet` `rose` `stack_line` `semi_doughnut` — 아래 '종류별 필드' |
+| `kind` | 그래프 종류 (필수). `api/meta` 의 `kinds` 키: `col` `bar` `col_group` `bar_group` `col_stack` `col_stack100` `bar_stack` `line` `area` `area_stack` `scatter` `pie` `doughnut` `hist` `box` `heatmap` `panels` `index` `dual` · (2026-10-20 추가) `radar` `sparkline` `candlestick` `waterfall` `funnel` `bubble` `step` `lollipop` `dumbbell` `treemap` `bullet` `rose` `stack_line` `semi_doughnut` · (2026-10-20 추가) `ohlc` — 아래 '종류별 필드' |
 | `name` | 종류의 한국어 이름 (표시용) |
 | `x` | x 축(범주·시간) 열 이름. 없으면 `null` (행 순서) |
 | `ys` | 값 열 이름 배열 |
 | `group` | 긴 형식 표를 계열로 펼칠 범주 열 (선택) |
 | `y2` | `dual` 일 때 오른쪽 축 열, `stack_line` 일 때 꺾은선 열(같은 값 축) |
 | `target` | `bullet` 목표 열 (가로 눈금) |
-| `volume` | `candlestick` 거래량 열 (아래 막대, 선택) |
+| `volume` | `candlestick`·`ohlc` 거래량 열 (거래량 칸·매물대에 씀, 선택) |
+| `ma`, `bb`, `panels`, `vprofile`, `colors_updown`, `macd`, `rsi` | `candlestick`·`ohlc` 주가 지표 (2026-10-20 추가) — 아래 '주가 지표' |
+| `trend_n` | 막대 추세선 이동평균 창 (`trend: "ma"`, 기본 3) |
 | `size`, `label` | `bubble` 원 크기 열(양수, 넓이 ∝ 값)·점 이름 열 |
 | `totals`, `show_total`, `total_label` | `waterfall`: 0부터 그리는 합계 막대로 볼 x 값 목록 · 끝 누적 합계 막대(없으면 마지막이 합계가 아닐 때만) · 그 이름(기본 `"합계"`) |
 | `dual_shape`, `panel_shape` | 이중축·2단 비교의 모양 (예: `"bar_line"`) |
@@ -74,7 +76,7 @@
 | `top` | 앞에서 N 개 범주만 |
 | `agg` | 같은 x 가 여러 행일 때 `"sum"`(기본) \| `"mean"` |
 | `bins` | 히스토그램 구간 수 (비우면 자동) |
-| `trend` | 산점도 추세선 (참이면 표시) |
+| `trend` | 산점도: `true` = 추세선. 막대 종류(`col` `col_group` `bar` `bar_group` `col_stack` `bar_stack`): `"linear"`(계열별 최소제곱 직선) \| `"ma"`(이동평균, 창 `trend_n`) \| `"none"` — 누적은 합계의 추세 하나 (2026-10-20 추가) |
 | `zero_base`, `unit`, `colors` | 0 기준 축, 단위 표기, 계열 색 (화면 편집기에서 씀) |
 | `why`, `score` | 추천 이유 문장·점수 (추천 결과에만, 그리기에는 영향 없음) |
 
@@ -97,7 +99,30 @@
 
 - 그림(`image`)은 서버의 `rsvg-convert` 로 만든 PNG — 없으면 데이터 표만(`table`). 오피스·한글 차트에 같은 형식이 없는 종류만 그림으로 넣고 `report[].modes`·`editable` 에 그대로 적음.
 - 폭포에서 누적이 0 아래로 내려가는 구간은 엑셀·파워포인트에서는 맞지만 LibreOffice 는 음수 누적 막대를 위로 그림(문서 주석에 안내).
-- `waterfall` 색은 `colors` = [증가, 감소, 합계], `candlestick` 은 [상승, 하락] — 기본값은 `api/meta` 의 `kind_colors`.
+- `waterfall` 색은 `colors` = [증가, 감소, 합계], `candlestick`·`ohlc` 는 [상승, 하락] — 기본값은 `api/meta` 의 `kind_colors`(`colors_updown: "intl"` 이면 `updown_colors.intl`).
+
+### 주가 지표 (`candlestick`·`ohlc`, 2026-10-20 추가 — 모두 추가 필드, 없으면 예전과 같음)
+
+| 필드 | 형식 | 설명 |
+|---|---|---|
+| `ma` | 정수 배열 | 이동평균 창(종가 단순 평균), 예 `[5, 20, 60, 120]`. 기간 수보다 긴 창은 빠지고(응답 `note` 에 안내) 앞 창−1 칸은 빈칸 |
+| `bb` | `{"period": 20, "k": 2}` \| 없음 | 볼린저 밴드 = period 일 평균 ± k × **모집단** 표준편차(n 으로 나눔, 엑셀 STDEV.P·STDEVP). 채운 띠로 가격에 겹침 |
+| `panels` | `["volume","macd","rsi"]` 중 | 가격 아래 칸(같은 날짜 축). `volume` 은 거래량 열 필요(막대 색 = 그날 상승·하락), `macd` 는 기간 34개 이상(12·26·9), `rsi` 는 15개 이상(14, 와일더 평활, 30·70 기준선). **키가 없으면** 예전처럼 거래량 열이 있을 때 거래량 칸만 |
+| `vprofile` | `{"bins": 24, "va": true}` \| 없음 | 매물대 — 가격 오른쪽의 가격대별 거래량. 기간마다 거래량을 그 기간 저가~고가에 **고르게 나눠** 겹치는 길이만큼 구간에 더함(고가=저가면 그 구간에 전부). POC = 최다 구간, `va` = POC 에서 위·아래 많은 쪽을 붙여 70% |
+| `colors_updown` | `"kr"`(기본) \| `"intl"` | 상승 빨강·하락 파랑 \| 상승 초록·하락 빨강. `colors` 0·1 을 직접 고르면 그 색이 먼저 |
+| `macd`, `rsi` | `{"fast","slow","signal"}`, `{"period"}` | 기간 바꾸기(선택) |
+
+- 계산: EMA = SMA 로 시작(앞 n 개 평균) 후 이전 + 2/(n+1)×(값 − 이전) · MACD = EMA12 − EMA26, 시그널 = MACD 의 EMA9, 히스토그램 = 차 · RSI = 100 − 100/(1 + 평균 상승/평균 하락), 첫 평균은 14개 단순 평균, 이후 (이전×13 + 이번)/14, 평균 하락 0 이면 100(둘 다 0 이면 50).
+- `ohlc` = 몸통 없는 OHLC 막대(세로선 고가~저가, 왼쪽 눈금 시가, 오른쪽 눈금 종가).
+- 문서: XLSX·PPTX·DOCX 는 모두 **네이티브 차트** — 가격 = 이동평균·볼린저 꺾은선(보이는 주 축) + 주식형 stockChart(같은 범위로 고정한 숨은 보조 축, 범례에서 시가·고가·저가·종가는 지움), 거래량 = 상승·하락 두 계열 겹친 막대, MACD = 히스토그램 막대 + MACD·시그널 꺾은선(같은 축), RSI = 꺾은선 + 70·30 기준선(0~100), 매물대 = 가로 막대(가격 축을 함께 쓰지 않는 별도 차트, POC·가치 영역 색 계열). `ohlc` 문서 차트는 주식형의 고가~저가 선 + 시가(점)·종가(가로 표식, 상승·하락 색). 볼린저 띠 채움은 그림에서만(문서는 선 3개).
+- **XLSX 는 지표가 엑셀 수식**: 그림 시트 표의 가격·거래량 칸은 데이터 시트 참조, 이동평균 `=AVERAGE(창)`, 볼린저 `=AVERAGE ± k*STDEVP(창)`, EMA·시그널 재귀 수식, RSI 와일더 재귀 수식, 매물대 구간 경계(`MIN`/`MAX`)·구간 거래량(`SUMPRODUCT`)·POC(`MAX`) — 데이터 시트 가격을 고치면 다시 계산됨. 창이 차기 전 칸은 `=NA()`(차트에서 빈칸). 계산값도 셀에 함께 저장(열자마자 보임, LibreOffice 재계산과 1e-9 안에서 같음 확인). 가치 영역 70% 표시만 내보낼 때 값.
+- PPTX·DOCX 내장 워크북은 **계산값**(수식 아님) — 값을 고치면 차트는 바뀌지만 지표는 다시 계산되지 않음. HWPX 는 그림 + 표(지표 값 포함).
+
+### 막대 추세선 (`trend: "linear"|"ma"`, 2026-10-20 추가)
+- x = 1, 2, … (엑셀 범주 축 추세선과 같음). `linear` 는 빈 값을 뺀 점으로 최소제곱 직선, `ma` 는 앞 `trend_n` 개 평균(앞 창−1 칸 빈칸).
+- 그림: 계열색을 어둡게 한 점선, 범례 `<계열> 추세`. 누적 막대는 `합계 추세` 하나.
+- 문서: 묶은·한 계열 막대(세로·가로)는 **오피스 추세선**(`c:trendline` linear·movingAvg) — 값을 고치면 따라 바뀜. 누적 막대는 오피스가 추세선을 못 붙여 `합계 추세` 꺾은선 계열(XLSX 는 순서·`=SUM`·`=TREND`/`=AVERAGE` 수식 열, PPTX·DOCX 는 계산값). HWPX 는 그림 + 표.
+- 추천: x 가 기간이고 막대 후보가 있으면 `"<계열> 막대 위에 계열별 추세선…"` 후보 하나(`trend: "linear"`).
 
 ## 엔드포인트
 
@@ -113,11 +138,15 @@
   "formats": [{"id": "xlsx", "label": "엑셀 (XLSX)", "ok": true}, {"id": "hwpx", "label": "한글 (HWPX)", "ok": true}],
   "model": "<모델 이름>",
   "palette": ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"],
-  "kind_colors": {"waterfall": ["#1baf7a", "#e34948", "#2a78d6"], "candlestick": ["#e34948", "#2a78d6"]},
+  "kind_colors": {"waterfall": ["#1baf7a", "#e34948", "#2a78d6"], "candlestick": ["#e34948", "#2a78d6"], "ohlc": ["#e34948", "#2a78d6"]},
+  "updown_colors": {"kr": ["#e34948", "#2a78d6"], "intl": ["#1baf7a", "#e34948"]},
+  "fin": {"ma_default": [5, 20, 60, 120], "ma_max": 250, "panels": ["volume", "macd", "rsi"], "bb": {"period": 20, "k": 2},
+          "macd": [12, 26, 9], "rsi": 14, "vprofile_bins": 24, "ma_colors": ["#eda100", "#e87ba4", "#4a3aa7", "#008300", "#eb6834", "#52514e"]},
+  "trend_kinds": ["bar", "bar_group", "bar_stack", "col", "col_group", "col_stack"],
   "rerank": {"max_candidates": 12, "max_extra": 3, "rate_n": 10, "rate_s": 600}
 }
 ```
-- `samples` 는 12개(2026-10-20부터 주가·역량 평가·월별 손익·채용 단계·목표 대비 실적·기준금리·시도별 지표·월별 운영 지표·월별 강수량 추가).
+- `samples` 는 13개(2026-10-20부터 주가·역량 평가·월별 손익·채용 단계·목표 대비 실적·기준금리·시도별 지표·월별 운영 지표·월별 강수량, 이어서 `stock_daily` 주가 일봉 160일(가상 데이터) 추가).
 - `formats[].ok`: HWPX 는 서버에 Node + kordoc 이 있을 때만 `true`. `model` 은 `api/describe`·`api/rerank` 가 기본으로 쓰는 모델. `rerank` 는 `api/rerank` 한도(LLM 에 보내는 후보 수·제안 수·10분 호출 수).
 
 ### GET api/models
@@ -145,7 +174,8 @@
  "notes": ["첫 줄 '…' 을(를) 제목로 사용", "머리글 아래 단위 행을 열 단위로 사용"],
  "sheets": ["Sheet1", "Sheet2"], "sheet": "Sheet1"}
 ```
-  - `notes`: 서버가 자동으로 처리한 것의 한국어 설명. `sheets`·`sheet` 는 엑셀일 때만 값이 있고 아니면 `null`.
+  - `notes`: 서버가 자동으로 처리한 것의 한국어 설명. 값이 모두 빈 열은 빼고 알림(예: `"값이 모두 빈 열 '막대 끝' 을(를) 뺌"`).
+  - 열 타입: `1월…12월`·`1분기`·`Q1`·`2026년`·`1주차` 처럼 숫자+기간 글자만 있는 열은 숫자(단위 '월')가 아니라 **기간(date)** — 값이 서로 다르거나 머리글이 범주·항목·구분·기간 같은 말일 때. `3개`·`5명` 같은 수량은 그대로 숫자. `sheets`·`sheet` 는 엑셀일 때만 값이 있고 아니면 `null`.
 - 오류(400): `{"error": "표 데이터를 찾지 못했습니다"}`, `"파일이 너무 큽니다 (20MB 이하)"`, `.xls` 안내 등.
 - 메모: 업로드는 multipart 가 아니라 **JSON 안의 base64** 입니다. 디코드 후 20MB, 요청 본문 약 28MB 를 넘으면 413 `{"error": "요청이 너무 큽니다 (파일 20MB 이하)"}`(포털을 거쳐도 413).
 
