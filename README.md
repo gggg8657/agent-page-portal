@@ -37,10 +37,10 @@ ORDER BY "예산합계" DESC LIMIT 500
 
 ## 포털이 하는 일
 - **목록·검색** — `tools.json`(요청마다 다시 읽음)에 적힌 도구를 카드로 보여 줌. "+ 내 에이전트 만들기"로도 추가. `"hidden": true` 면 목록에서 숨김(프록시는 됨).
-- **시작/중지** — 각 도구 폴더의 `setup.sh` 를 `PORT`·`WORKSPACE` 를 넘겨 실행. `python3 portal.py start-all` / `stop-all`.
+- **시작/중지** — 각 도구 폴더의 `setup.sh` 를 `PORT`·`WORKSPACE` 를 넘겨 실행. 모두 켜기는 `scripts/autostart.sh`.
 - **단일 진입점(프록시)** — 모든 도구를 `http://<포털>:8700/t/<도구폴더>/` 로 리버스 프록시(SSE·파일 다운로드 포함). 포트 하나만 열면 되고, 도구 UI 는 상대경로만 씀. 도구는 `127.0.0.1` 에만 열려 있어 직접 포트로는 접속할 수 없음.
 - **사용법 팝업** — 프록시하는 도구 첫 화면에 `guides/<도구폴더>.md` 를 오른쪽 위 **?** 팝업으로 붙임(포털 자체는 `guides/portal.md`).
-- **로그인** — 계정은 `portal.db` 의 `users`(아이디·이름·부서·PIN 의 pbkdf2-sha256 해시 + 사용자별 salt, 60만 회 — 예전 20만 회 계정은 다음 로그인 때 자동으로 다시 해시). 세션은 무작위 32바이트 토큰(DB 에는 sha256 만), 쿠키 `agsid`(HttpOnly·SameSite=Lax, 30일, 쓰면 연장 — 로그인 화면의 '이 PC에서 로그인 유지'를 끄면 Max-Age 없는 쿠키 + 서버 만료 12시간·연장 없음, `sess_short` 표). 로그인 실패는 아이디당 10분에 5번까지. 로그인 안 한 화면 요청은 `/login?next=…` 로, API 는 401. 접속 IP 는 NAT 뒤라 모두 서버 주소로 보이므로 사람 구분에 쓰지 않습니다 — 단, 이 서버 안(127.0.0.1)에서 쿠키 없이 + 비밀 헤더 `X-Local-Owner`(값 = `_data/.local_owner_token`)를 붙인 요청(스크립트·내부 호출)만 서버 주인으로 봅니다 — 헤더 없는 브라우저(SSH 포트포워딩 포함)는 늘 로그인 필요(무효 쿠키가 있으면 다시 로그인). 아래 'FastAPI 포털' 의 `PORTAL_LOCAL_OWNER`. 계정 만들기·PIN 초기화: `python3 portal.py --add-user <id> --name <이름> [--dept 부서] [--pin 숫자]`(PIN 을 안 주면 무작위 6자리를 화면에만 출력).
+- **로그인** — 계정은 `portal.db` 의 `users`(아이디·이름·부서·PIN 의 pbkdf2-sha256 해시 + 사용자별 salt, 60만 회 — 예전 20만 회 계정은 다음 로그인 때 자동으로 다시 해시). 세션은 무작위 32바이트 토큰(DB 에는 sha256 만), 쿠키 `agsid`(HttpOnly·SameSite=Lax, 30일, 쓰면 연장 — 로그인 화면의 '이 PC에서 로그인 유지'를 끄면 Max-Age 없는 쿠키 + 서버 만료 12시간·연장 없음, `sess_short` 표). 로그인 실패는 아이디당 10분에 5번까지. 로그인 안 한 화면 요청은 `/login?next=…` 로, API 는 401. 접속 IP 는 NAT 뒤라 모두 서버 주소로 보이므로 사람 구분에 쓰지 않습니다 — 단, 이 서버 안(127.0.0.1)에서 쿠키 없이 + 비밀 헤더 `X-Local-Owner`(값 = `_data/.local_owner_token`)를 붙인 요청(스크립트·내부 호출)만 서버 주인으로 봅니다 — 헤더 없는 브라우저(SSH 포트포워딩 포함)는 늘 로그인 필요(무효 쿠키가 있으면 다시 로그인). 아래 'FastAPI 포털' 의 `PORTAL_LOCAL_OWNER`. 계정 만들기·PIN 초기화: `agent-page-portal` 폴더에서 `~/.local/fastportal-venv/bin/python -m fastportal add-user <id> --name <이름> [--dept 부서] [--pin 숫자]`(PIN 을 안 주면 무작위 6자리를 화면에만 출력, 있던 계정이면 PIN 만 바꾸고 세션을 끊음).
 - **통계·피드** — `AGENT_DATA/portal.db` sqlite 하나(WAL)에 열기·좋아요·피드 글·사용자 랭킹(계정 id 기준, 랭킹은 이름으로 표시). 즐겨찾기·최근 사용은 계정에 저장(`portal.db` — `GET·POST /api/lists`, 다른 PC·브라우저에서도 같음). 펫 상태·사용법 팝업 '다시 띄우지 않기'는 브라우저 localStorage(계정별 키).
 - **계정·부서·권한** — 역할은 관리자(`AGENT_OWNERS` 계정) · 부서장(부서마다, 여럿 가능) · 일반. 오른쪽 위 **계정 설정**(`/account`)에서 이름 바꾸기, 부서 소속 요청, 부서장 권한 요청, PIN 바꾸기, 내 요청 보기·취소.
   - 부서는 관리자가 만든 목록에서만 고름(`depts` — 처음엔 기존 계정·`tools.json` 의 부서로 채움). 목록에 없으면 관리자에게 요청.
@@ -92,7 +92,7 @@ ORDER BY "예산합계" DESC LIMIT 500
 ## 도구가 연결되는 방식
 
 ```
-브라우저 ──▶ portal.py :8700 ──/t/<dir>/──▶ 127.0.0.1:<port> (각 도구 app.py)
+브라우저 ──▶ fastportal :8700 ──/t/<dir>/──▶ 127.0.0.1:<port> (각 도구 app.py)
                 │  시작할 때 넘기는 환경변수: PORT, WORKSPACE=$AGENT_DATA/<dir>, 그리고 포털이 받은 환경 전부
                 └─ 첫 화면 HTML 에 guides/<dir>.md 사용법 팝업(?) 삽입
 도구들 ──▶ LLM_BASE_URL (로컬 vLLM, OpenAI 호환, 기본 gemma4:31b)   notebook 임베딩 ──▶ EMBED_BASE_URL (로컬 Ollama, bge-m3)
@@ -129,20 +129,16 @@ bash agent-page-portal/scripts/clone-all.sh     # tools.json 의 도구 전부 c
 
 ```bash
 bash agent-page-portal/scripts/start-portal.sh        # 운영 포털 :8700 (모든 주소에서 열림) — vLLM 확인(경고만)·Ollama 확인 → scripts/portal-env.sh(LLM·도구 연결 환경변수) → FastAPI 포털(fastportal, uvicorn 1워커, 백업 루프 켬) · 로그 portal.log
-PORTAL_IMPL=classic bash agent-page-portal/scripts/start-portal.sh   # 되돌리기: 예전 portal.py 로 :8700 (먼저 떠 있는 포털을 그 PID 로 kill)
-bash agent-page-portal/scripts/start-test-portal.sh   # 본인 테스트 포털 :8701, HOST=127.0.0.1, SHOW_HIDDEN=1 (숨긴 도구도 보임, SSH 터널로 접속)
+bash agent-page-portal/scripts/start-test-portal.sh   # 본인 테스트 포털 :8701(fastportal, 운영과 같은 DB·로그인 규칙), HOST=127.0.0.1, SHOW_HIDDEN=1 (숨긴 도구도 보임, SSH 터널로 접속)
 bash agent-page-portal/scripts/autostart.sh           # 재부팅 후 한 번: 포털 + tools.json 의 모든 도구 기동 + 백업 (~/.zshrc 에서 백그라운드 호출용)
 bash agent-page-portal/scripts/backup.sh              # 지금 백업 한 번 (_data → ~/agent-page-backup, 7일치)
-python3 portal.py                 # 예전 구현(표준 라이브러리) 직접 — http://localhost:8700 (환경변수는 start-portal.sh 가 넣어 줌)
-python3 portal.py start-all       # tools.json 의 설치된 도구 전부 기동 (각 폴더 setup.sh, PORT 전달)
-python3 portal.py stop-all
+~/.local/fastportal-venv/bin/python -m fastportal add-user <id> --name <이름> [--dept 부서] [--pin 숫자]   # 계정 만들기·PIN 초기화(관리자 복구)
 bash audit.sh                     # 전체 점검: CDN 유출·포트 중복·LICENSE/NOTICE·selftest
 ```
 
 | 환경변수 | 기본 | 설명 |
 |---|---|---|
 | `PORT` | 8700 | 포털 포트 (테스트 포털 8701) |
-| `PORTAL_IMPL` | fast | `start-portal.sh` 가 띄울 구현 — `fast` = FastAPI(fastportal), `classic` = 예전 portal.py(되돌리기용; 로컬 주인 토큰이 없어 포트포워딩 로그아웃 문제가 다시 생김) |
 | `HOST` | (모든 주소) | `127.0.0.1` 이면 서버 안에서만 열림 |
 | `SHOW_HIDDEN` | 없음 | `1` 이면 `hidden: true` 도구도 목록에 |
 | `AGENT_DATA` | `../_data` | 포털 DB + 모든 도구 작업 폴더 루트 |
@@ -173,7 +169,7 @@ openssl x509 -req -in portal.csr -CA ca.crt -CAkey ca.key -CAcreateserial -days 
 - 켜면 `http://` 주소는 더 이상 안 열립니다(같은 포트). 키 파일은 git 에 넣지 말 것(`_data/` 는 저장소 밖).
 
 ### FastAPI 포털 (운영 :8700, 2026-10-13~)
-`fastportal/` 은 같은 포털을 **FastAPI + uvicorn(비동기)** 로 옮긴 판이고, 2026-10-13 부터 운영 :8700 은 이것으로 돕니다(`start-portal.sh`). 되돌리기: 떠 있는 포털을 그 PID 로 끄고 `PORTAL_IMPL=classic ./start-portal.sh`(같은 DB·쿠키라 로그인 세션 유지). 같은 HTML·`theme/`·`guide/`·`tools.json`·`_data/portal.db` 를 그대로 쓰고(운영 포털과 동시에 같은 DB 를 써도 됨), 주소·응답은 `portal.py` 와 같게 맞췄습니다.
+`fastportal/` 은 같은 포털을 **FastAPI + uvicorn(비동기)** 로 옮긴 판이고, 2026-10-13 부터 운영 :8700 은 이것으로 돕니다(`start-portal.sh`). 예전 `portal.py` 는 2026-10-20 에 지웠습니다(마지막 판: 태그 `v2026.10.19`, 계약 시험이 그 판을 꺼내 비교). 같은 HTML·`theme/`·`guide/`·`tools.json`·`_data/portal.db` 를 그대로 쓰고(운영 포털과 동시에 같은 DB 를 써도 됨), 주소·응답은 `portal.py` 와 같게 맞췄습니다.
 바뀌는 점은 **스트리밍(SSE) 연결 수백 개를 스레드 없이 중계**하는 것 — `portal.py` 는 연결마다 스레드 하나, 새 포털은 이벤트 루프 하나가 중계하고 브라우저가 끊으면 도구 쪽 연결도 바로 닫습니다.
 
 구조(`fastportal/`, 기능별 모듈 — 순환 import 없음, 바꿔 끼울 경계인 계정 저장소만 클래스):

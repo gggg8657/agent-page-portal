@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""계약 시험(가짜 도구): 임시 폴더에 portal.py 사본과 fastportal 을 같은 임시 DB·가짜 tools.json 으로 띄우고, 이 시험이 띄운
+"""계약 시험(가짜 도구): 임시 폴더에 예전 portal.py(태그 v2026.10.19)와 fastportal 을 같은 임시 DB·가짜 tools.json 으로 띄우고, 이 시험이 띄운
 가짜 도구(받은 헤더·본문을 그대로 돌려줌, SSE)를 거쳐 프록시 규칙·스트리밍·끊김·잠금·동시 스트림을 확인한다. 실제 데이터·도구·LLM 은 안 씀.
 계정 저장소(AUTH_BACKEND)는 가짜 외부 저장소(임시 모듈 fake_ext_auth:FakeExternal)·설정 없는 external 포털을 따로 띄워 확인.
   python3 fastportal/tests/contract_fake.py [--streams 50] [--slow]      # --slow: 1분 넘는 POST → /api/events 기록까지(1분 더 걸림)
@@ -121,8 +121,10 @@ BAD_HOSTS = ["127.0.0.1/evil", "http://127.0.0.1", "x@127.0.0.1", "127.0.0.1:80"
 T = tempfile.mkdtemp(prefix="fastportal-test-")
 ROOT = os.path.join(T, "agent-page-portal")
 os.makedirs(os.path.join(ROOT, "docs", "img"))
-for f in ("portal.py", "portal.html", "help.html", "login.html", "account.html"):
+for f in ("portal.html", "help.html", "login.html", "account.html"):
     shutil.copy(os.path.join(REPO, f), ROOT)
+# 예전 portal.py 는 저장소에서 지웠으므로 마지막 판(서명 태그)을 꺼내 비교 상대로 띄움
+open(os.path.join(ROOT, "portal.py"), "wb").write(subprocess.run(["git", "-C", REPO, "show", "v2026.10.19:portal.py"], check=True, capture_output=True).stdout)
 for d in ("theme", "v2", "guides"):
     shutil.copytree(os.path.join(REPO, d), os.path.join(ROOT, d))
 os.makedirs(os.path.join(ROOT, "guide"))
