@@ -1,6 +1,9 @@
 """계정별 즐겨찾기·최근 사용 — 예전엔 브라우저 localStorage 에만 있어서 캐시를 지우거나 주소·PC 가 바뀌면 사라졌다.
 GET /api/lists → {"fav": [...], "recent": [...], "home": "clean"|"plaza"} · POST /api/lists {"kind": "fav"|"recent", "items": [도구 dir, ...]} (목록 통째로 바꿈)
-홈 화면 고르기(2026-10-20): POST /api/lists {"kind": "home", "items": ["clean"|"plaza"]} — 깔끔한 홈(기본) 또는 광장. 같은 표에 한 줄로 둔다."""
+홈 화면 고르기(2026-10-20): POST /api/lists {"kind": "home", "items": ["clean"|"plaza"]} — 깔끔한 홈(기본) 또는 광장. 같은 표에 한 줄로 둔다.
+홈 방문(인사 문구용): GET 의 "seen" = 지난번 홈을 연 시각(UTC ISO) | ""(처음 — 새 계정) | "?"(이 기능 전부터 쓰던 계정, 모름).
+  POST {"kind": "seen"} → 지금 시각을 적고 {"seen": 지난번 값} 을 돌려줌(홈을 열 때 한 번)."""
+import datetime
 import json
 
 from . import tools
@@ -15,8 +18,11 @@ def init(c):
 
 
 def get(c, uid):
-    out = {k: [] for k in KINDS} | {k: v[0] for k, v in PREFS.items()}
+    out = {k: [] for k in KINDS} | {k: v[0] for k, v in PREFS.items()} | {"seen": _seen_default(c, uid)}
     for kind, items in c.execute("SELECT kind, items FROM user_lists WHERE uid=?", (uid,)):
+        if kind == "seen":
+            out["seen"] = json.loads(items)
+            continue
         if kind in KINDS:
             out[kind] = json.loads(items)
         elif kind in PREFS and (v := json.loads(items)) and v[0] in PREFS[kind]:
@@ -24,8 +30,28 @@ def get(c, uid):
     return out
 
 
+def _seen_default(c, uid):
+    """홈 방문 기록이 없을 때 — 하루 안에 만든 계정이면 처음(""), 그 전부터 쓰던 계정·로컬 접속은 모름("?")"""
+    try:
+        r = c.execute("SELECT ts FROM users WHERE id=?", (uid,)).fetchone()
+    except Exception:   # 표 없음(시험)
+        r = None
+    if not r or not r[0]:
+        return "?"
+    try:
+        made = datetime.datetime.fromisoformat(str(r[0])[:19])
+    except ValueError:
+        return "?"
+    return "" if datetime.datetime.now() - made < datetime.timedelta(days=1) else "?"
+
+
 def put(c, uid, req):
     kind, items = req.get("kind"), req.get("items")
+    if kind == "seen":   # 홈을 염 — 지난번 값을 돌려주고 지금으로
+        prev = get(c, uid)["seen"]
+        c.execute("INSERT INTO user_lists(uid, kind, items, ts) VALUES(?,?,?,?) ON CONFLICT(uid, kind) DO UPDATE SET items=excluded.items, ts=excluded.ts",
+                  (uid, "seen", json.dumps(datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")), now()))
+        return {"seen": prev}
     if kind in PREFS:
         if not isinstance(items, list) or len(items) != 1 or items[0] not in PREFS[kind]:
             raise ValueError(f"{kind} 는 " + " 또는 ".join(PREFS[kind]) + " 하나")
@@ -33,7 +59,7 @@ def put(c, uid, req):
                   (uid, kind, json.dumps(items), now()))
         return {kind: items[0]}
     if kind not in KINDS:
-        raise ValueError("kind 는 fav·recent·home 중 하나")
+        raise ValueError("kind 는 fav·recent·home·seen 중 하나")
     if not isinstance(items, list) or not all(isinstance(d, str) for d in items):
         raise ValueError("items 는 도구 dir 문자열 목록")
     clean = []

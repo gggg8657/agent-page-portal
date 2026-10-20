@@ -16,7 +16,7 @@ class ListsTest(unittest.TestCase):
         self.p.stop()
 
     def test_per_account(self):
-        self.assertEqual(lists.get(self.c, "a"), {"fav": [], "recent": [], "home": "clean"})
+        self.assertEqual(lists.get(self.c, "a"), {"fav": [], "recent": [], "home": "clean", "seen": "?"})
         lists.put(self.c, "a", {"kind": "fav", "items": ["sql-local", "chart-local"]})
         self.assertEqual(lists.get(self.c, "a")["fav"], ["sql-local", "chart-local"])
         self.assertEqual(lists.get(self.c, "b")["fav"], [], "다른 계정에 보이면 안 됨")
@@ -38,6 +38,17 @@ class ListsTest(unittest.TestCase):
         for items in (["x"], [], ["clean", "plaza"], "plaza"):
             with self.assertRaises(ValueError):
                 lists.put(self.c, "a", {"kind": "home", "items": items})
+
+    def test_seen(self):
+        self.c.execute("CREATE TABLE users(id TEXT PRIMARY KEY, ts TEXT)")
+        self.c.execute("INSERT INTO users VALUES('new', datetime('now'))")
+        self.c.execute("INSERT INTO users VALUES('old', '2025-01-01T00:00:00')")
+        self.assertEqual(lists.get(self.c, "new")["seen"], "", "하루 안에 만든 계정 = 처음")
+        self.assertEqual(lists.get(self.c, "old")["seen"], "?", "예전 계정 = 모름")
+        self.assertEqual(lists.put(self.c, "new", {"kind": "seen"}), {"seen": ""})
+        last = lists.get(self.c, "new")["seen"]
+        self.assertRegex(last, r"^\d{4}-\d\d-\d\dT.*\+00:00$")
+        self.assertEqual(lists.put(self.c, "new", {"kind": "seen"}), {"seen": last})
 
     def test_bad_input(self):
         for req in ({"kind": "x", "items": []}, {"kind": "fav", "items": "sql-local"}, {"kind": "fav", "items": [1]}):
