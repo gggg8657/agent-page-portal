@@ -29,7 +29,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from starlette.concurrency import run_in_threadpool
 
-from . import accounts, auth, community, config, db, devsubmit, dwell, flows, idea, jobs, lists, pages, pkgindex, probe, proxy, sessions, tools, workspace
+from . import accounts, auth, community, config, db, relay, devsubmit, dwell, flows, idea, jobs, lists, pages, pkgindex, probe, proxy, sessions, tools, workspace
 from .config import OWNERS, TLS
 from .ctx import Ctx, TooBig, drain, length, not_implemented, parse_json, read_body, too_big
 
@@ -592,8 +592,20 @@ def _blocked_response(ctx, left):
     return r
 
 
+def _relay_audit(bad, ctx):
+    uid, name = bad
+    print(f"relay: 다른 계정(uid {uid} {name})의 중계 요청 거절 — {ctx.method} {ctx.p}", flush=True)
+    with db.db() as c:
+        accounts.audit(c, "system", "relay_block", f"uid {uid} ({name})", f"{ctx.method} {ctx.p}"[:200])
+
+
 async def handle(request: Request):
     ctx = Ctx(request)
+    bad = relay.check(request)   # 이 서버의 다른 OS 계정 프로그램이 대신 부르는 중계 → 거절(relay.py)
+    if bad:
+        if relay.should_log(bad[0]):
+            await run_in_threadpool(_relay_audit, bad, ctx)
+        return ctx.send({"error": "이 서버의 다른 프로그램을 거친 요청(중계)은 받지 않습니다 — 포털 주소로 직접 접속하세요", "code": "relay_blocked"}, code=403)
     exempt = not probe.ENABLED or _probe_exempt(ctx)
     r = None
     if not exempt and probe.ip_has_block(ctx.client or ""):   # 이 IP 에 차단이 있을 때만 계정을 봄(평소엔 딕셔너리 한 번)

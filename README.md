@@ -263,6 +263,7 @@ React 랜딩이 읽는 `GET /web/landing.json`·`/app/web/landing.json`(분류·
 - 판단은 React 빌드의 `.vite/manifest.json`(agent-page-web `build.manifest`)으로 매 배포 자동(`fastportal/webguard.py`, 화면 파일 이름은 `ROLE_SRC`). manifest 에 없는 파일(배포 때 옮겨 온 옛 번들)은 로그인한 계정에 엶 — '확실히 관리·개발자 것'만 닫음. 옛 빌드의 manifest 도 `deploy.sh` 가 `.vite/manifest.<시각>.json` 으로 옮겨 두어 계속 가림. 로그인·권한 번들은 `Cache-Control: private`(공유 캐시 안 됨)·`Vary: Cookie`.
 - **포털에 없는 주소**(`/.env`·`/.git/HEAD`·`/config.py`·`/_data/`·`/fastportal/`·`/package.json`·`/src/` 등)는 로그인 여부와 상관없이 404(예전엔 로그인 전이면 로그인 화면으로 보냄). 디렉터리 목록·백업 파일·소스맵은 내보내지 않음.
 - **기존 도구 화면**(`/t/<도구>/` 첫 HTML): 새 화면(React)이 모두 '검증 중(beta)'이고 CAD·파동이는 기존 화면을 iframe 으로만 쓰므로 막지 않고, **일반 계정에는 주석을 걷은 HTML** 을 보냄(관리자는 원본) — `fastportal/strip.py`: HTML 주석, `<script>` 안 줄 맨 앞 `//`·`/* */`, `<style>` 안 줄 맨 앞 `/* */` 만(문자열·템플릿·정규식은 토크나이저로 건너뜀, 저작권·라이선스 주석은 남김, 확신이 없으면 원본). 도구 화면 26개(숨긴 것 포함) 전부 원본과 AST(TypeScript 파서)가 같고 브라우저 오류가 늘지 않음을 확인(`fastportal/tests/test_guard.py`). 끄기: `PORTAL_LEGACY_STRIP=0`. 도구의 별도 JS 파일(`/t/<도구>/static/*.js`)은 그대로.
+- **중계 막기**(`fastportal/relay.py`): 같은 서버 안에서 온 접속(출발지 127.0.0.1·서버 자기 주소)은 IP 로 누구 것인지 모르므로, `/proc/net/tcp·tcp6` 에서 접속한 소켓(peer ip:port, ESTABLISHED)의 **주인 uid** 를 찾아 포털을 띄운 계정(또는 `PORTAL_RELAY_ALLOW_UIDS`)이 아니면 **403 `code: relay_blocked`** — 다른 OS 계정이 띄운 서버가 포털 API·도구를 대신 불러 주는 중계를 막음(그렇게 오면 모든 사용자가 127.0.0.1 한 사람으로 보여 로그인 잠금·엿보기 차단·감사 기록이 망가지고, 로그인 PIN 이 남의 서버를 지남). 다른 PC·컨테이너에서 온 접속(표에 없음)과 포털 계정의 도구·스크립트·본인 SSH 터널은 그대로. 거절은 계정마다 한 시간에 한 번 감사 기록(`relay_block`)과 로그.
 - **엿보기 탐지·잠시 차단**(`fastportal/probe.py`): 접속지(IP)+계정별로 최근 60초의 거절 응답(401·403·404·405·CSRF 거절)을 세어 **서로 다른 주소 30개** 또는 **거절 150번**이 넘으면 모든 요청에 **429 `code: "probe_blocked"` + `Retry-After`** — 처음 60초, 24시간 안에 다시 걸리면 2배씩(최대 1시간). 차단마다 감사 기록(`probe_block`, 누가·IP·건수·주소 예시 — 관리 화면 '감사 기록')과 관리자 알림함('포털 보안 · 의심 요청 차단', 링크 관리 화면). 같은 주소를 되풀이하는 폴링 404 는 '다른 주소' 수를 늘리지 않고, 도구 화면의 없는 그림·글꼴(`/t/…/*.png` 등) 404 는 세지 않음. 빼는 것: 이 서버 안 + `X-Local-Owner` 토큰 요청, `/api/version`·`/healthz`·`/t/<도구>/healthz`, `/favicon.ico`·`/robots.txt`·`/apple-touch-icon*`·`/.well-known/*`. 셈·차단은 메모리에만 — **포털을 다시 켜면 풀림**(감사 기록은 남음).
 - 모든 응답 `X-Robots-Tag: noindex, nofollow`, `Server` 헤더 없음(도구가 준 `Server`·`X-Powered-By` 도 뺌). React 번들 맨 앞에 저작권 주석(`/*! © 2026 DongJu Kim (gggg8657) · All rights reserved · … */`, 압축 뒤에 붙여 지워지지 않음), 소스맵 없음.
 - **하지 않은 것**: F12·오른쪽 클릭 막기 스크립트 — 주소창·다른 브라우저·curl 로 바로 우회되고, 접근성(키보드·화면 낭독기)·복사 같은 정상 사용만 망가뜨림. JS 난독화 — 폐쇄망에 이미 있는 node_modules 에 난독화 도구가 없고 새 의존성을 들이지 않음(넣는다면 번들 크기·속도·오류 추적 비용 대비 효과는 '읽기 귀찮게' 정도).
@@ -270,6 +271,8 @@ React 랜딩이 읽는 `GET /web/landing.json`·`/app/web/landing.json`(분류·
 
 | 환경변수 | 기본 | 설명 |
 |---|---|---|
+| `PORTAL_RELAY_GUARD` | 1 | 중계 막기(0 이면 끔) |
+| `PORTAL_RELAY_ALLOW_UIDS` | (없음) | 중계를 허용할 OS 계정(이름·uid 쉼표) — 포털을 띄운 계정은 늘 허용 |
 | `PORTAL_PROBE` | 1 | 엿보기 탐지·차단(0 이면 끔) |
 | `PORTAL_PROBE_MAX` | 30 | 창 안 '서로 다른 거절 주소' 문턱(거절 총수 문턱은 ×5) |
 | `PORTAL_PROBE_WINDOW` | 60 | 세는 창(초) |

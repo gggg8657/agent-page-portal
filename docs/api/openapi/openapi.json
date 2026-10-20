@@ -21592,6 +21592,7 @@
        "busy",
        "rate_limited",
        "probe_blocked",
+       "relay_blocked",
        "unsupported",
        "unavailable",
        "csrf",
