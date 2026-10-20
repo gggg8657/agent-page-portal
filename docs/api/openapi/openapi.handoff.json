@@ -43940,6 +43940,13 @@
        "$ref": "#/components/schemas/MatchTool"
       }
      },
+     "agents": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+       "$ref": "#/components/schemas/MatchAgent"
+      }
+     },
      "flow": {
       "oneOf": [
        {
@@ -44033,6 +44040,12 @@
        "$ref": "#/components/schemas/AskCard"
       }
      },
+     "agents": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/MatchAgent"
+      }
+     },
      "flow": {
       "oneOf": [
        {
@@ -44072,6 +44085,39 @@
      },
      "partial": {
       "type": "boolean"
+     }
+    }
+   },
+   "MatchAgent": {
+    "type": "object",
+    "description": "그 사람이 열 수 있는 공유 빌더 에이전트(빌더가 부서 공개 범위·관리자가 끈 공유를 거름)",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "desc": {
+      "type": "string"
+     },
+     "cat": {
+      "type": "string"
+     },
+     "icon": {
+      "type": "string"
+     },
+     "score": {
+      "type": "number"
+     },
+     "reason": {
+      "type": "string"
+     },
+     "link": {
+      "type": "string",
+      "examples": [
+       "/tool/agent-builder-local/chat/2d1b74fee0"
+      ]
      }
     }
    }

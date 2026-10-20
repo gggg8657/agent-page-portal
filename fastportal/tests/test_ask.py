@@ -8,9 +8,13 @@ from fastportal import ask, config, match
 from fastportal.db import db
 
 
+AGENTS = {"alice": [{"id": "abc123", "name": "성과지표(KPI) 설계", "desc": "목표에 맞는 KPI·목표값을 설계", "cat": "기획/전략", "icon": ""}]}   # bob 은 볼 수 있는 공유 에이전트 없음
+
+
 class Ctx:
     def __init__(self, uid="alice", owner=False, p=""):
         self.uid, self.is_owner, self.p, self.setcookie = uid, owner, p, None
+        self.agent_user = "owner" if owner else uid
 
     def send(self, body, ctype="application/json", code=200, headers=None):
         return code, body, headers
@@ -56,7 +60,8 @@ class AskTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.p = [patch.object(config, "DB_FILE", os.path.join(self.tmp.name, "portal.db")),
-                  patch.object(match, "CACHE_DIR", self.tmp.name), patch.dict(os.environ, {"EMBED_BASE_URL": ""})]
+                  patch.object(match, "CACHE_DIR", self.tmp.name), patch.dict(os.environ, {"EMBED_BASE_URL": ""}),
+                  patch.object(match, "agents_for", side_effect=lambda u: AGENTS.get(u, []))]
         for x in self.p:
             x.start()
         with db() as c:
@@ -165,6 +170,13 @@ class AskTest(unittest.TestCase):
         with patch.object(match, "TASK_SURE", 9.0), patch.object(match, "TASK_MAYBE", 0.0):
             evs = self.run_send({"text": "회의록"}, route=router2)
         self.assertEqual([c["dir"] for c in evs[0]["meta"]["cards"]], ["kordoc-local"])
+
+    def test_shared_agents_only_visible(self):
+        evs = self.run_send({"text": "KPI 성과지표 설계"}, chunks=("x",))
+        self.assertEqual([a["id"] for a in evs[0]["meta"].get("agents", [])], ["abc123"])
+        self.assertTrue(evs[0]["meta"]["agents"][0]["link"].endswith("/chat/abc123"))
+        evs = self.run_send({"text": "KPI 성과지표 설계"}, uid="bob", chunks=("x",))
+        self.assertNotIn("agents", evs[0]["meta"], "그 사람이 볼 수 없는 공유 에이전트는 안 나옴")
 
     def test_file_meta_only(self):
         rec = []

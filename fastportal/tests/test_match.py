@@ -186,6 +186,26 @@ class MatchTest(unittest.TestCase):
         self.assertIsNone(match.chain("회의록"))
         self.assertIsNone(match.chain("메일"))
 
+    def test_shared_agents(self):
+        ags = [{"id": "aa1111", "name": "코드 리뷰 도우미", "desc": "diff 를 붙이면 버그·개선점을 짚어 줌", "cat": "개발/코딩", "icon": ""},
+               {"id": "bb2222", "name": "성과지표(KPI) 설계", "desc": "목표에 맞는 성과지표·목표값", "cat": "기획/전략", "icon": ""}]
+        with patch.object(match, "agents_for", side_effect=lambda u: ags if u == "alice" else []):
+            r = match.search("코드 리뷰", False, agent_user="alice")
+            self.assertEqual(r["agents"][0]["id"], "aa1111")
+            self.assertEqual(match.search("KPI 목표값", False, agent_user="alice")["agents"][0]["id"], "bb2222")
+            self.assertEqual(match.search("코드 리뷰", False, agent_user="bob")["agents"], [])
+            self.assertEqual(match.search("코드 리뷰", False)["agents"], [])
+
+    def test_agents_for_filters(self):
+        from fastportal import community
+        b = {"agents": [{"id": "aa1111", "name": "가", "status": "published"}, {"id": "bb2222", "name": "나", "blocked": "관리자가 끔"},
+                        {"id": "cc3333", "name": "다", "status": "draft"}, {"id": "../x", "name": "라"}]}
+        match._AG.clear()
+        with patch.object(community, "_builder", return_value=(200, b)) as m:
+            self.assertEqual([a["id"] for a in match.agents_for("zed")], ["aa1111"])
+            self.assertEqual(m.call_args[0][0], "zed", "그 사람 이름으로 빌더에 물음(공개 범위는 빌더가)")
+        match._AG.clear()
+
     def test_rate_limit(self):
         with patch.object(match, "RATE_N", 3):
             self.assertTrue(all(match.allow("u1") for _ in range(3)))
@@ -194,7 +214,7 @@ class MatchTest(unittest.TestCase):
 
     def test_handle(self):
         class C:
-            uid, is_owner = "alice", False
+            uid, is_owner, agent_user = "alice", False, None
 
             def __init__(self, raw):
                 self.raw = raw

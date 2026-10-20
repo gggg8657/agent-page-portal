@@ -58,6 +58,17 @@ def main():
     allq = json.load(open(os.path.join(ROOT, "fastportal", "tests", "match_eval.json"), encoding="utf-8"))
     ev = allq["hard"] if "--hard" in sys.argv else allq["queries"]
     show = "--show" in sys.argv
+    if "--agents" in sys.argv:   # 공유 빌더 에이전트 — 운영 빌더에 주인(owner)으로 물음(포털 서명 비밀값이 있는 서버에서만). 맨 위 1개가 맞는지·위 3개 안에 드는지
+        ags = allq["agents"]
+        top1 = top3 = 0
+        for x in ags:
+            got = [a["name"] for a in match.rank_agents(x["q"], "owner", match.query_vector(x["q"]), limit=3)]
+            top1 += bool(got) and got[0] == x["expect"]
+            top3 += x["expect"] in got
+            if show:
+                print(f"{x['q']:22s} 기대 {x['expect']:16s} 새 {', '.join(got) or '-'}")
+        print(f"공유 에이전트 {len(ags)}개 검색어 · 1위 {top1 / len(ags):.3f} · 위 3개 {top3 / len(ags):.3f}")
+        return
     sem_ok = match.cap_vectors() is not None
     if not sem_ok and os.environ.get("EMBED_BASE_URL"):
         import time

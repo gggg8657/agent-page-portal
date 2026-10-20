@@ -262,20 +262,22 @@ SYSTEM = ("너는 한국원자력연구원(KAERI) 사내 'AI 에이전트 포털
           "- 링크·HTML·이미지 태그를 쓰지 않는다. 도구는 이름으로만 말한다.\n" + GUARD)
 
 
-def _cards_brief(cards, flow):
-    if not cards and not flow:
+def _cards_brief(cards, flow, agents=()):
+    if not cards and not flow and not agents:
         return "(이번 질문에는 도구 카드가 없다 — 도구 이야기는 꺼내지 말고 질문에 답한다)"
     lines = ["[화면에 함께 보이는 도구 카드 — 데이터]"]
     for c in cards:
         lines.append(f"- {c['name']}: " + " / ".join(x["task"] for x in c["caps"][:3]))
+    for a in agents:
+        lines.append(f"- 공유 에이전트 {a['name']}: {a['desc'][:80]}")
     if flow:
         lines.append(f"- 연결 흐름 제안: {flow['name']}")
     lines.append("답 끝에 한두 문장으로 '아래 카드의 버튼으로 열면 된다'고 안내하고, 그 도구로 하는 순서를 짧게 알려 준다.")
     return "\n".join(lines)
 
 
-def messages(text, hist, cards, flow, fm):
-    msgs = [{"role": "system", "content": SYSTEM + "\n\n" + _cards_brief(cards, flow)}]
+def messages(text, hist, cards, flow, fm, agents=()):
+    msgs = [{"role": "system", "content": SYSTEM + "\n\n" + _cards_brief(cards, flow, agents)}]
     for h in hist:
         t = h["text"][:HIST_CHARS]
         msgs.append({"role": "user", "content": wrap(t)} if h["role"] == "user" else {"role": "assistant", "content": t})
@@ -360,10 +362,20 @@ def _card(r):
     return {"dir": r["dir"], "name": r["name"], "title": r["title"], "link": r["link"], "reason": r["reason"], "score": r["score"], "caps": r["caps"][:3]}
 
 
-async def pick_cards(text, snip, fm, is_owner):
-    """→ (cards, flow, how) how: sure|llm|fallback|file|none"""
+async def pick_cards(text, snip, fm, is_owner, agent_user=None):
+    """→ (cards, flow, how, agents) how: sure|llm|fallback|file|none. agents: 그 사람이 열 수 있는 공유 빌더 에이전트 —
+    도구 카드가 붙는 말이거나, 도구보다 에이전트가 더 맞고 TASK_MAYBE 이상일 때만(LLM 길잡이가 할 일이 아니라고 하면 안 붙임)"""
     q = (text + (" " + snip[:300] if snip else "")).strip()
-    res = await run_in_threadpool(match.search, q[:match.Q_MAX], is_owner, fm["ext"] if fm else None, 5)
+    res = await run_in_threadpool(match.search, q[:match.Q_MAX], is_owner, fm["ext"] if fm else None, 5, agent_user)
+    cards, flow, how = await _pick_tools(res, text, fm)
+    ags = res.get("agents") or []
+    top_tool = res["tools"][0]["score"] if res["tools"] else 0.0
+    if not ags or (how == "llm" and not cards) or (not cards and ags[0]["score"] < max(top_tool, match.TASK_MAYBE)):
+        ags = []
+    return cards, flow, how, [{k: a[k] for k in ("id", "name", "desc", "cat", "icon", "link", "reason")} for a in ags[:2]]
+
+
+async def _pick_tools(res, text, fm):
     tl, flow = res["tools"], res["flow"]
     if fm:   # 파일을 놓았으면 그 파일을 받는 도구 먼저(확장자 점수가 있는 것)
         withf = [r for r in tl if r["signals"]["file"] > 0]
@@ -445,14 +457,16 @@ class AskStream(Response):
             await send({"type": "http.response.body", "body": sse({"error": str(e) if isinstance(e, ValueError) else "요청 값 형식이 틀립니다", "code": "bad_request"}), "more_body": False})
             return
         state["conv"] = conv
-        cards, flow, how = await pick_cards(text, snip, fm, ctx.is_owner)
+        cards, flow, how, ags = await pick_cards(text, snip, fm, ctx.is_owner, ctx.agent_user)
         extra = {"cards": cards, "flow": flow, "route": how}
+        if ags:
+            extra["agents"] = ags
         if fm:
             extra["file"] = fm
         state["extra"] = extra
         await send({"type": "http.response.body", "body": b"retry: 0\n\n" + sse({"meta": {"conv": conv, **extra}}), "more_body": True})
         try:
-            async for tok in stream_llm(messages(text, hist, cards, flow, fm)):
+            async for tok in stream_llm(messages(text, hist, cards, flow, fm, ags)):
                 state["answer"].append(tok)
                 await send({"type": "http.response.body", "body": sse({"delta": tok}), "more_body": True})
         except RuntimeError as e:

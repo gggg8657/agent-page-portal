@@ -479,13 +479,107 @@ def allow(uid):
         return True
 
 
-def search(q, is_owner, ext=None, limit=LIMIT):
-    """검색 하나(동기 — 스레드에서): 검색어 벡터(기억·짧은 시간 제한) + 순위 + 흐름 제안"""
+# ── 공유 빌더 에이전트(그 사람이 볼 수 있는 것만) ───────────────────────────
+#   빌더 API(GET /api/agents?tab=dept — 포털 서명 + 그 사람 X-Agent-User)가 부서 공개 범위·관리자가 끈 공유를 이미 거름. 여기서는 published·막히지 않은 것만 한 번 더.
+#   이름·설명·분야(cat)로 낱말·같은 뜻 표현·임베딩(에이전트 글 해시로 메모리 캐시) 점수. 사람마다 목록을 AGENTS_TTL 초 기억
+AGENTS_TTL = float(os.environ.get("MATCH_AGENTS_TTL", "60"))
+AGENTS_MAX = 3
+_AG = {}     # 사용자 → (시각, 목록)
+_AV = {}     # 에이전트 글 → 벡터
+_AGENT_ID = re.compile(r"[0-9a-f]{6,16}")
+
+
+def agents_for(user):
+    if not user:
+        return []
+    hit = _AG.get(user)
+    if hit and time.time() - hit[0] < AGENTS_TTL:
+        return hit[1]
+    from . import community
+    t = tools.tool(community.BUILDER)
+    if not t or user_hidden(t):   # 빌더를 관리자가 끄면 공유 에이전트도 안 보임
+        out = []
+    else:
+        st, b = community._builder(user, "/api/agents?tab=dept")
+        out = []
+        for a in (b or {}).get("agents") or [] if st == 200 and isinstance(b, dict) else []:
+            if not isinstance(a, dict) or not _AGENT_ID.fullmatch(str(a.get("id") or "")) or a.get("blocked") or a.get("status", "published") != "published":
+                continue
+            out.append({"id": a["id"], "name": str(a.get("name") or "")[:60], "desc": str(a.get("desc") or "")[:200], "cat": str(a.get("cat") or "")[:20],
+                        "icon": str(a.get("icon") or "")[:4]})
+    if len(_AG) > 2000:
+        _AG.clear()
+    _AG[user] = (time.time(), out)
+    return out
+
+
+def _agent_vecs(texts):
+    need = [x for x in texts if x not in _AV]
+    if need:
+        try:
+            for x, v in zip(need, embed_sync(need, 3)):
+                _AV[x] = v
+        except Exception:
+            return None
+        if len(_AV) > 5000:
+            _AV.clear()
+    return [_AV.get(x) for x in texts]
+
+
+def rank_agents(q, user, qvec=None, limit=AGENTS_MAX):
+    """검색어 → 그 사람이 열 수 있는 공유 에이전트 [{id, name, desc, cat, score, reason, link}]"""
+    ags = agents_for(user)
+    if not ags or not q.strip():
+        return []
+    cat = catalog()
+    ws = words(q)
+    wj = [(w, jamo(w), cat.idf(jamo(w))) for w in ws if len(w) >= 2]
+    tot = sum(i for _, _, i in wj) or 1.0
+    texts = [f"{a['name']}. {a['desc']}. {a['cat']}" for a in ags]
+    vecs = _agent_vecs(texts) if qvec is not None else None
+    out = []
+    for i, a in enumerate(ags):
+        nj, dj = jamo(a["name"]), jamo(f"{a['desc']} {a['cat']}")
+        lex = syn = 0.0
+        hits = []
+        for w, j, idf in wj:
+            x = 1.0 if j in nj else 0.6 if j in dj else 0.0
+            if not x:
+                for alt in cat.thes.get(compact(w), ()):
+                    aj = jamo(alt)
+                    if aj in nj or aj in dj:
+                        syn += 0.75 * idf
+                        hits.append(w)
+                        break
+            lex += x * idf
+            if x:
+                hits.append(w)
+        lex, syn = lex / tot, syn / tot
+        sem = 0.0
+        if vecs is not None and vecs[i] is not None:
+            sem = min(1.0, max(0.0, (_dot(qvec, vecs[i]) - SEM_LO) / (SEM_HI - SEM_LO)))
+        score = W_LEX * lex + W_SYN * syn + W_SEM * sem
+        if score < (MIN_SCORE if vecs is not None else MIN_SCORE_LEX):
+            continue
+        reason = (f"‘{hits[0]}’{' 외' if len(hits) > 1 else ''} 낱말이 맞는 공유 에이전트" if hits else "뜻이 비슷한 공유 에이전트")
+        out.append({"id": a["id"], "name": a["name"], "desc": a["desc"], "cat": a["cat"], "icon": a["icon"], "score": round(score, 3), "reason": reason,
+                    "link": f"/tool/agent-builder-local/chat/{a['id']}"})
+    out.sort(key=lambda r: -r["score"])
+    return out[:limit]
+
+
+def search(q, is_owner, ext=None, limit=LIMIT, agent_user=None):
+    """검색 하나(동기 — 스레드에서): 검색어 벡터(기억·짧은 시간 제한) + 순위 + 흐름 제안 + (agent_user 가 있으면) 그 사람이 열 수 있는 공유 에이전트"""
     t0 = time.time()
     qv = query_vector(q) if q.strip() else None
     vecs = cap_vectors()
     res = rank(q, is_owner, ext, qv if vecs is not None else None, limit)
-    return {"q": q, "ext": ext or None, "tools": res, "flow": chain(q) if q else None,
+    try:
+        ags = rank_agents(q, agent_user, qv) if (agent_user and q.strip() and not ext) else []
+    except Exception as e:   # 빌더 장애가 검색을 막지 않게
+        print("match: 공유 에이전트 검색 실패", type(e).__name__, e, flush=True)
+        ags = []
+    return {"q": q, "ext": ext or None, "tools": res, "agents": ags, "flow": chain(q) if q else None,
             "semantic": qv is not None and vecs is not None, "ms": int((time.time() - t0) * 1000)}
 
 
@@ -506,7 +600,7 @@ def handle(ctx):
         return ctx.send({"q": "", "ext": None, "tools": [], "flow": None, "semantic": False, "ms": 0})
     if not allow(ctx.uid):
         return ctx.send({"error": "검색이 너무 잦습니다 — 잠시 뒤 다시 해 주세요", "code": "rate_limited"}, code=429, headers=[("Retry-After", "10")])
-    return ctx.send(search(q, ctx.is_owner, ext, lim))
+    return ctx.send(search(q, ctx.is_owner, ext, lim, ctx.agent_user))
 
 
 def status():
