@@ -6,7 +6,7 @@ GET /api/lists → {"fav": [...], "recent": [...], "home": "clean"|"plaza"} · P
 import datetime
 import json
 
-from . import tools
+from . import tools, toolstate
 from .db import now
 
 KINDS = {"fav": 100, "recent": 10}   # 종류 → 최대 개수
@@ -23,8 +23,9 @@ def get(c, uid):
         if kind == "seen":
             out["seen"] = json.loads(items)
             continue
-        if kind in KINDS:
-            out[kind] = json.loads(items)
+        if kind in KINDS:   # 관리자가 끈 도구는 빼고 보냄(저장된 항목은 그대로 — 다시 켜면 돌아옴, put 이 지키며 다시 씀)
+            off = toolstate.off()
+            out[kind] = [d for d in json.loads(items) if d not in off]
         elif kind in PREFS and (v := json.loads(items)) and v[0] in PREFS[kind]:
             out[kind] = v[0]
     return out
@@ -67,6 +68,14 @@ def put(c, uid, req):
         if d not in clean and tools.tool(d):
             clean.append(d)
     clean = clean[:KINDS[kind]]
+    off = toolstate.off()
+    if off:   # 화면은 꺼진 도구를 모름(get 이 뺌) — 저장돼 있던 꺼진 도구 항목은 그 자리에 그대로 둠
+        r = c.execute("SELECT items FROM user_lists WHERE uid=? AND kind=?", (uid, kind)).fetchone()
+        old = json.loads(r[0]) if r else []
+        for i, d in enumerate(old):
+            if d in off and d not in clean:
+                clean.insert(min(i, len(clean)), d)
+        clean = clean[:KINDS[kind] + len(off)]
     c.execute("INSERT INTO user_lists(uid, kind, items, ts) VALUES(?,?,?,?) ON CONFLICT(uid, kind) DO UPDATE SET items=excluded.items, ts=excluded.ts",
               (uid, kind, json.dumps(clean, ensure_ascii=False), now()))
-    return {kind: clean}
+    return {kind: [d for d in clean if d not in off]}

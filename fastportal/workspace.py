@@ -3,7 +3,7 @@
 """
 import concurrent.futures, hashlib, json, re, secrets, time, urllib.error, urllib.parse, urllib.request
 
-from . import config, jobs, tools
+from . import config, jobs, tools, toolstate
 from .db import db, now
 
 MAX_PAYLOAD = 2 * 1024 * 1024
@@ -45,6 +45,8 @@ def _tool(d):
     t = tools.tool(d)
     if not t or (t.get("hidden") and not config.SHOW_HIDDEN):
         raise ValueError("목록에 없는 도구입니다")
+    if toolstate.is_off(t["dir"]):
+        raise ValueError(toolstate.MSG)
     return t
 
 
@@ -109,6 +111,9 @@ def listing(uid, query):
     where, args = ["uid=?", "archived IS " + ("NOT NULL" if view == "trash" else "NULL")], [uid]
     if tool:
         where.append("tool=?"); args.append(tool)
+    off = sorted(toolstate.off())
+    if off:   # 관리자가 끈 도구의 작업은 목록에서 뺌(지우지 않음 — 다시 켜면 보임)
+        where.append("tool NOT IN (" + ",".join("?" * len(off)) + ")"); args.extend(off)
     if view == "starred":
         where.append("starred=1")
     if q:
@@ -195,7 +200,7 @@ def modify(uid, req):
 
 
 def sync(uid, user, tool=None):
-    chosen = [_tool(tool)] if tool else [t for t in tools.tools() if t["dir"] in SOURCES and not t.get("hidden")]
+    chosen = [_tool(tool)] if tool else [t for t in tools.tools() if t["dir"] in SOURCES and not t.get("hidden") and not toolstate.is_off(t["dir"])]
     report = []
     def fetch(t):
         try:

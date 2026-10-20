@@ -10,7 +10,7 @@ import httpx
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import Response
 
-from . import config, jobs, pages, strip, tools
+from . import config, jobs, pages, strip, tools, toolstate
 from .config import HOP
 from .ctx import Raw, TooBig, drain, length, too_big
 
@@ -217,6 +217,18 @@ async def proxy(ctx):
     t = tools.tool(parts[2]) if len(parts) > 2 else None
     if not t or (t.get("hidden") and not config.SHOW_HIDDEN and not ctx.is_owner):   # 숨긴 도구는 관리자만(목록에 없는 도구를 주소로 쓰지 못하게)
         return ctx.send({"error": "unknown tool"}, code=404)
+    if not ctx.is_owner and toolstate.is_off(t["dir"]):   # 관리자가 끈 도구 — 일반 계정은 403(관리자는 열어서 시험)
+        r = ctx.send({"error": toolstate.MSG, "code": toolstate.CODE}, code=403)
+        if ctx.method not in ("GET", "HEAD"):   # 본문은 작으면 읽어 버리고, 크거나 모르면 연결을 닫음(app._unauth 와 같음)
+            try:
+                n = length(ctx)
+            except ValueError:
+                n = None
+            if n is not None and n <= 64 * 1024:
+                await drain(ctx.request, n)
+            else:
+                r.raw_headers.append((b"connection", b"close"))
+        return r
     if len(parts) < 4:
         return ctx.bare(302, [("Location", f"/t/{t['dir']}/")])
     auto = _auto_job(ctx, t)

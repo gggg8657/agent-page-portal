@@ -11,7 +11,8 @@ OpenAPI 3.1: [`openapi/agent-builder-local.json`](openapi/agent-builder-local.js
 | GET | `api/health` | 살아 있는지, 문서 엔진·포털 DB 읽기 가능 여부 | 아니오 | 누구나 |
 | GET | `api/me` | 나(이름·부서·역할)·승인 대기 수·안 읽은 피드백 수 | 아니오 | 본인 |
 | GET | `api/templates` | 템플릿 5종 | 아니오 | 누구나 |
-| GET | `api/agents?tab=mine\|dept\|fav` | 목록(내가 만든 것·부서 공유·즐겨찾기) | 아니오 | 볼 수 있는 것만 |
+| GET | `api/agents?tab=mine\|dept\|fav\|admin` | 목록(내가 만든 것·부서 공유·즐겨찾기 · admin = 관리자만: 부서 공개·대기 + 공유를 끈 것) | 아니오 | 볼 수 있는 것만 |
+| POST | `api/agents/<id>/block` `{off, reason?}` | 관리자 공유 끄기·켜기(포털 '에이전트 관리') | 아니오 | 관리자 |
 | POST | `api/agents` | 새 에이전트(초안) | 아니오 | 누구나(만든 계정 기록) |
 | GET | `api/agents/{id}` | 상세 | 아니오 | 볼 수 있는 사람(아니면 404) |
 | POST | `api/agents/{id}` | 설정 고치기(자동 저장) | 아니오 | 만든 사람·관리자(403) |
@@ -108,5 +109,6 @@ OpenAPI 3.1: [`openapi/agent-builder-local.json`](openapi/agent-builder-local.js
 - `POST api/agents/<id>/duplicate` — 내 에이전트뿐 아니라 **내가 볼 수 있는 부서 공개 에이전트**도 내 초안(나만)으로 복제(자료 포함). 볼 수 없으면 404, 공개 안 된 남의 것은 403.
 - 카드(`api/agents`)에 `created`, `dept`(부서 공개 승인이면 그 부서) 추가.
 - 복제 허용(`allow_fork`, 기본 참): 만든 사람이 편집기 공개 범위 옆 체크로 끔 → 남의 `duplicate` 는 403 "만든 사람이 복제를 허용하지 않았습니다"(내 것·관리자는 됨). 카드·상세에 `allow_fork`, 지시문 본문은 여전히 남에게 안 보임.
+- 관리자 공유 끄기(`blocked`, 2026-10-20): `block {off: true}` 면 부서원 목록·보기(404)·복제·참여 현황·순위에서 빠지고 만든 사람·관리자만 봄. 카드·상세의 `blocked` `{ts, by_name, reason}` 는 만든 사람·관리자에게만(그 밖엔 null). 자료·대화·설정은 그대로, `off: false` 면 돌아옴. 복제본에는 안 옮겨짐.
 - 복제 기록: 복제본 `agent.json` 의 `forked_from {id, name, owner, at, docs_copied}`. 남의 부서 공개 에이전트를 복제하면 **지시문·설정만** 복사하고 자료 파일은 복사하지 않음(내 것·관리자는 자료까지). 카드·상세에 `forks`(수), `forked_from`(원본 — 볼 수 있을 때만 id), 상세에 `forks_list`(내가 볼 수 있는 복제본만).
 - `api/stats` 를 관리자(포털 서버, X-Agent-User=owner)가 부르면 `creators_detail[{uid, name, dept, agents, uses_30d, forks_30d}]` 이 더 붙음 — 포털 `/api/community/ranking` 이 리뷰·요청과 합쳐 점수를 냄(화면에는 계정 id 안 나감).

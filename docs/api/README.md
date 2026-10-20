@@ -152,6 +152,9 @@ const g  = await (await fetch('/t/saju-local/api/graph?dept=' + encodeURICompone
 | `GET /api/lists` | 내 즐겨찾기·최근 사용 `{"fav": [dir…], "recent": [dir…]}` — 계정에 저장(브라우저 캐시와 무관) | 로그인 |
 | `POST /api/lists` `{"kind": "fav"\|"recent", "items": [dir…]}` | 그 목록을 통째로 바꿈. 등록된 도구만·중복 제거·최대 fav 100·recent 10. 응답은 정리된 목록 | 로그인 |
 | `GET /api/admin/dwell?days=30&uid=&screen=&tool=` | 관리자 화면 체류 집계(7·30·90일). 계정·화면·도구별 체류/방문과 도구 열기 버튼 수·끝난 작업 실행 시간을 별도 제공 | 관리자 |
+| `GET /api/admin/tools` | **에이전트 관리** — tools.json 도구 전부(숨김 포함) `{dir,name,group,port,remote,hidden,installed,up,enabled,by,ts,reason,usage_30d,users_30d,active_jobs}` | 관리자 |
+| `POST /api/admin/tool` `{dir, enabled, reason?, stop?, confirm?}` | 도구 켜기·끄기(포털 DB `tool_state`, tools.json 은 안 고침, 기본 켜짐). 끈 도구는 **누구에게나** `/api/tools`·랜딩 분류·`/api/lists`(저장된 즐겨찾기·최근 항목은 그대로 두고 응답에서만 뺌 — 다시 켜면 돌아옴)·`/api/workspace` 목록·흐름 어댑터·아이디어 후보·리뷰/요청 대상·파동이 펫 추천(데이터 폴더 `tools-disabled.json`)에서 빠지고, 일반 계정의 `/t/<dir>/…`·`/api/open`·`/api/like`·`/api/start` 는 403 `tool_disabled` "관리자가 이 에이전트를 잠시 껐습니다"(관리자는 그대로 열어 시험). 저장된 흐름은 실행 때 그 단계에서 같은 문구로 멈춤. `stop: true`(끌 때만) = 프로세스도 멈춤 — 진행 중 작업이 있으면 `confirm: true` 없이는 409 `jobs_running`. 사용자 데이터는 지우지 않음. 감사 `tool_disable`·`tool_enable`(내용 = 이유)·`tool_stop` | 관리자 |
+| `GET /api/admin/agents` · `POST /api/admin/agent` `{id, enabled, reason?}` | 공유 빌더 에이전트(부서 공개·대기 + 끈 것) 목록과 공유 끄기·켜기 — 빌더 `GET /api/agents?tab=admin`·`POST /api/agents/<id>/block` 을 관리자 서명으로. 끄면 부서원 목록·보기·복제·참여 현황·순위·아이디어 추천에서 빠지고 만든 사람·관리자에게만 `blocked` 와 함께 보임. 빌더가 꺼져 있으면 목록은 `builder: false`, 바꾸기는 503. 감사 `agent_disable`·`agent_enable` | 관리자 |
 | `POST /api/post` · `/api/post_like` | 노하우 게시판 글쓰기·좋아요 | 로그인 |
 | `POST /api/account/theme` `{"theme"}` | 화면 테마 저장(`classic`·`trendy`·`v2` × `light`·`dark`·`auto`) | 로그인 |
 | `POST /api/pin` `{"pin", "new"}` | PIN 바꾸기(다른 기기 세션은 끊김, 지금 세션의 '로그인 유지'는 그대로). 외부 계정 저장소면 403 + 안내 | 로그인 |
@@ -319,7 +322,7 @@ npx @redocly/cli lint docs/api/openapi/openapi.json                             
 | 관리자 | 계정 `AGENT_OWNERS`, 또는 서버 안(127.0.0.1)에서 비밀 헤더 `X-Local-Owner`(토큰 파일, 600). 관리 API 는 서버에서 권한 확인. 숨긴 도구는 관리자만 쓰고 켬 |
 | 비밀 파일 | `.local_owner_token`·`.portal_jobs_secret`(권한 600) — 기본 `_data/`, 도구가 같은 데이터 폴더를 붙이는 컨테이너 구성에서는 `PORTAL_SECRETS_DIR`(포털만 붙는 볼륨, 700). 값은 로그·응답에 찍지 않음. 백업은 `umask 077` |
 | 오류 응답 | 내부 경로·주소·스택은 응답에 넣지 않음(포털: 로그에만, 도구: `portal_auth.scrub`) |
-| 감사 기록 | `audit` 표: 로그인·로그인 실패·가입·도구 시작/중지/등록·관리 작업(부서·부서장·PIN 초기화·정지·비활성화·익명화)·승인 |
+| 감사 기록 | `audit` 표: 로그인·로그인 실패·가입·도구 시작/중지/등록·도구 켜기/끄기(`tool_enable`·`tool_disable`)·공유 에이전트 끄기/켜기·관리 작업(부서·부서장·PIN 초기화·정지·비활성화·익명화)·승인 |
 
 **알려진 한계(설계상, 다음 단계)**
 - 모든 도구가 포털과 같은 출처(`/t/<도구>/`)라, 도구 첫 화면의 XSS 는 포털 API 를 부를 수 있습니다(도구 화면이 인라인 스크립트를 써서 `script-src` 를 조이지 못함). 근본 대책은 도구별 출처 분리(서브도메인) — 지금은 sandbox·nosniff·도구 쪽 입력 정리로 줄임.

@@ -11,7 +11,7 @@ API: GET /api/community/summary?t=agent:<id>,tool:<dir>,… · /api/community/re
           /api/community/request {kind,id,type,title,body} · /request/status {id,status,note} · /request/vote {id,on} · /request/delete {id} · /request/hide {id,hidden}(관리자)"""
 import json, os, re, secrets, threading, time, urllib.error, urllib.request, urllib.parse
 
-from . import accounts, config, jobs, tools
+from . import accounts, config, jobs, tools, toolstate
 from .db import db, now
 
 KINDS = ("agent", "flow", "tool")
@@ -119,6 +119,8 @@ def target(ctx, kind, tid):
         t = tools.tool(tid) if TOOL_RE.fullmatch(tid) else None
         if not t or t.get("hidden"):   # 숨긴 도구는 관리자도 리뷰·요청 대상이 아님
             raise PermissionError("볼 수 없는 도구입니다")
+        if toolstate.is_off(tid) and not ctx.is_owner:   # 관리자가 끈 도구 — 일반 계정에는 없는 것처럼
+            raise PermissionError("볼 수 없는 도구입니다")
         author = str(t.get("author") or "")
         with db() as c:
             owner = author if author and c.execute("SELECT 1 FROM users WHERE id=?", (author,)).fetchone() else None
@@ -211,7 +213,10 @@ def requests_box(ctx, box):
         else:
             raise ValueError("box 는 received|sent")
         out = []
+        off = set() if ctx.is_owner else toolstate.off()
         for r in rows:
+            if r["kind"] == "tool" and r["target"] in off:   # 관리자가 끈 도구에 쓴 요청은 일반 계정 목록에서 뺌(지우지 않음)
+                continue
             d = _req_pub(c, r, names, ctx.uid, ctx.is_owner)
             d["target_name"] = _target_name(c, r["kind"], r["target"])
             out.append(d)

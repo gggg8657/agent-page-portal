@@ -29,7 +29,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from starlette.concurrency import run_in_threadpool
 
-from . import accounts, auth, community, config, db, relay, devsubmit, dwell, flows, idea, jobs, lists, pages, pkgindex, probe, proxy, sessions, tools, workspace
+from . import accounts, admintools, auth, community, config, db, relay, devsubmit, dwell, flows, idea, jobs, lists, pages, pkgindex, probe, proxy, sessions, tools, toolstate, workspace
 from .config import OWNERS, TLS
 from .ctx import Ctx, TooBig, drain, length, not_implemented, parse_json, read_body, too_big
 
@@ -43,6 +43,8 @@ with db.db() as _c:
     community.init(_c)   # 모두의 에이전트 — 리뷰·개선 요청·투표
     pkgindex.init(_c)   # 폐쇄망 pip 패키지 목록(비어 있으면 _data/pkg-index/*.txt 에서)
     idea.init(_c)   # 모두의 에이전트 — 아이디어로 만들기(최근 아이디어)
+    toolstate.init(_c)   # 관리자 도구 켜기·끄기(tool_state — 없으면 켜짐)
+toolstate.write_file()   # 파동이 펫 등이 읽는 꺼진 도구 목록(DATA/tools-disabled.json)
 flows.recover(); devsubmit.recover()
 jobs.load_self_report()
 _AB = auth.backend()   # 계정 저장소(AUTH_BACKEND) — 설정이 틀리면 여기서 멈춤
@@ -134,6 +136,10 @@ def get_sync(ctx):
             return ctx.send(lists.get(c, ctx.uid))
     if p == "/api/admin/dwell":
         return dwell.report(ctx)
+    if p == "/api/admin/tools":   # 에이전트 관리 — 켜짐 확인(비동기) 뒤 표
+        return "admin_tools"
+    if p == "/api/admin/agents":
+        return admintools.agents_get(ctx)
     if p == "/api/flows/adapters":
         return "flow_adapters"
     if p == "/api/flows" or p.startswith("/api/flows/"):   # 모두의 에이전트 — 에이전트 연결(내 흐름만)
@@ -173,10 +179,11 @@ def get_sync(ctx):
         return "tools"
     if p.startswith("/api/guide/"):
         d = p.split("/")[-1]
-        return ctx.send(tools.guide(d).encode() if (tools.tool(d) or d == "portal") else b"", "text/plain; charset=utf-8")
+        ok_ = (tools.tool(d) and (ctx.is_owner or not toolstate.is_off(d))) or d == "portal"   # 관리자가 끈 도구는 일반 계정에 빈 글
+        return ctx.send(tools.guide(d).encode() if ok_ else b"", "text/plain; charset=utf-8")
     if p.startswith("/api/readme/"):
         d = p.split("/")[-1]
-        f = os.path.join(config.BASE, d, "README.md") if tools.tool(d) else ""
+        f = os.path.join(config.BASE, d, "README.md") if tools.tool(d) and (ctx.is_owner or not toolstate.is_off(d)) else ""
         return ctx.send((open(f, encoding="utf-8").read() if f and os.path.exists(f) else "README 없음").encode(), "text/plain; charset=utf-8")
     if p == "/guide" or p.startswith("/guide/"):
         return pages.guide_file(ctx, p)
@@ -318,6 +325,8 @@ def tool_action(ctx, c, path, req):
     t = tools.tool(req.get("dir"))
     if not t:
         return ctx.send({"error": "unknown tool"}, code=404)
+    if toolstate.is_off(t["dir"]) and not ctx.is_owner and path in ("/api/open", "/api/like", "/api/start"):   # 관리자가 끈 도구
+        return ctx.send({"error": toolstate.MSG, "code": toolstate.CODE}, code=403)
     if path == "/api/like" and c.execute("SELECT 1 FROM events WHERE kind='like' AND dir=? AND user=?", (t["dir"], ctx.uid)).fetchone():
         return ctx.send({"ok": True, "liked": True, "already": True})   # 좋아요는 1인 1회(예전엔 누를 때마다 쌓였음)
     if path in ("/api/open", "/api/like"):
@@ -353,6 +362,10 @@ def post_sync(ctx, body):
     path = ctx.raw   # portal.py 처럼 쿼리까지 포함한 경로로 판정
     if ctx.p.startswith("/api/workspace/"):
         return workspace.handle_post(ctx, req)
+    if ctx.p == "/api/admin/tool":   # 에이전트 관리 — 도구 켜기·끄기(자기 DB 연결로 커밋한 뒤 캐시 비움)
+        return admintools.tool_post(ctx, req)
+    if ctx.p == "/api/admin/agent":   # 에이전트 관리 — 공유 빌더 에이전트 끄기·켜기(빌더 호출 — DB 연결을 잡지 않음)
+        return admintools.agent_post(ctx, req)
     if ctx.p.startswith("/api/idea/"):   # 아이디어로 만들기(LLM 이 수십 초 — DB 연결을 잡지 않고 idea 가 필요할 때만 엶)
         return idea.handle_post(ctx, req)
     try:
@@ -485,6 +498,9 @@ async def route(ctx, request):
         if r == "tools":
             up = await tools.alive_map([tools.tool_addr(t) for t in tools.tools()])
             return await run_in_threadpool(tools_sync, ctx, up)
+        if r == "admin_tools":
+            up = await tools.alive_map([tools.tool_addr(t) for t in tools.tools()])
+            return await run_in_threadpool(admintools.tools_get, ctx, up)
         if r == "flow_adapters":
             up = await tools.alive_map([tools.tool_addr(t) for t in tools.tools()])
             return await run_in_threadpool(flows.handle_get, ctx, up)

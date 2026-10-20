@@ -288,10 +288,12 @@
        "enum": [
         "mine",
         "dept",
-        "fav"
+        "fav",
+        "admin"
        ],
        "default": "mine"
-      }
+      },
+      "description": "admin = 관리자만(부서 공개·대기 + 공유를 끈 것, 아니면 403)"
      }
     ],
     "responses": {
@@ -2025,6 +2027,70 @@
      }
     }
    }
+  },
+  "/t/agent-builder-local/api/agents/{id}/block": {
+   "post": {
+    "operationId": "abAgentBlock",
+    "summary": "공유 끄기·켜기(관리자)",
+    "tags": [
+     "agent-builder-local"
+    ],
+    "x-permission": "admin",
+    "description": "포털 관리 화면 '에이전트 관리'(POST /api/admin/agent)가 부름. off=true 면 부서원 목록·보기·복제·참여 현황·순위에서 빠지고 만든 사람·관리자만 봄. 자료·대화·설정은 그대로.",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "off"
+        ],
+        "properties": {
+         "off": {
+          "type": "boolean"
+         },
+         "reason": {
+          "type": "string",
+          "maxLength": 200
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "에이전트 상세(AbAgent)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AbAgent"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "off 형식"
+     },
+     "403": {
+      "description": "관리자 아님"
+     },
+     "404": {
+      "description": "없음·볼 수 없음"
+     }
+    }
+   }
   }
  },
  "components": {
@@ -2223,6 +2289,9 @@
      "allow_fork": {
       "type": "boolean",
       "description": "만든 사람이 복제를 허용했는지(기본 참). 지시문 본문은 여전히 만든 사람·관리자·승인자만 봄"
+     },
+     "blocked": {
+      "$ref": "#/components/schemas/AbBlocked"
      }
     }
    },
@@ -2371,6 +2440,9 @@
      "allow_fork": {
       "type": "boolean",
       "description": "만든 사람이 복제를 허용했는지(기본 참). 지시문 본문은 여전히 만든 사람·관리자·승인자만 봄"
+     },
+     "blocked": {
+      "$ref": "#/components/schemas/AbBlocked"
      }
     }
    },
@@ -2543,6 +2615,24 @@
         }
        }
       }
+     }
+    }
+   },
+   "AbBlocked": {
+    "type": [
+     "object",
+     "null"
+    ],
+    "description": "관리자가 공유를 끔 — 만든 사람·관리자에게만 옴(그 밖엔 null). 끄면 부서원에게 안 보임",
+    "properties": {
+     "ts": {
+      "type": "string"
+     },
+     "by_name": {
+      "type": "string"
+     },
+     "reason": {
+      "type": "string"
      }
     }
    }

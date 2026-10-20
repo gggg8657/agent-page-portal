@@ -9,7 +9,7 @@ API: GET /api/flows · /api/flows/adapters · /api/flows/<id> · /api/flows/runs
      POST /api/flows/save · /api/flows/delete · /api/flows/run (run 만 본문 상한 RUN_MAX — 파일 입력)"""
 import base64, csv, io, json, os, re, secrets, threading, time, urllib.error, urllib.request
 
-from . import accounts, config, jobs, tools
+from . import accounts, config, jobs, tools, toolstate
 from .db import db, now
 
 MIN_STEPS, MAX_STEPS = 2, 6
@@ -51,6 +51,8 @@ def _tool_url(d, path):
     t = tools.tool(d)
     if not t or (t.get("hidden") and not config.SHOW_HIDDEN):
         raise StepError(f"{d} 는 등록된 도구가 아닙니다")
+    if toolstate.is_off(d):   # 관리자가 끈 도구 — 이미 저장한 흐름도 이 단계에서 멈춤
+        raise StepError(f"{t.get('name') or d}: {toolstate.MSG}")
     host = tools.tool_host(t)
     if not host:
         raise StepError(f"{d} 주소 설정이 틀립니다 — 관리자에게 알려 주세요")
@@ -299,7 +301,7 @@ def adapter_list(up=None):
     out = []
     for aid, a in ADAPTERS.items():
         t = tools.tool(a["tool"])
-        if not t or t.get("hidden"):
+        if not t or t.get("hidden") or toolstate.is_off(a["tool"]):   # 관리자가 끈 도구의 어댑터는 목록에서 뺌
             continue
         out.append({"id": aid, "tool": a["tool"], "tool_name": t.get("name") or a["tool"], "title": a["title"], "desc": a["desc"],
                     "inputs": a["inputs"], "heavy": bool(a.get("heavy")), "timeout": a["timeout"],
@@ -317,7 +319,7 @@ def _clean_steps(steps):
             raise ValueError(f"{i + 1}단계: 연결할 수 없는 작업입니다")
         a = ADAPTERS[s["adapter"]]
         t = tools.tool(a["tool"])
-        if not t or t.get("hidden"):
+        if not t or t.get("hidden") or toolstate.is_off(a["tool"]):
             raise ValueError(f"{i + 1}단계: 목록에 없는 도구입니다")
         m = s.get("inputs") or {}
         if not isinstance(m, dict):

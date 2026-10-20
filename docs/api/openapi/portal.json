@@ -573,7 +573,7 @@
    "get": {
     "operationId": "portalTools",
     "summary": "도구 목록·사용자 랭킹·노하우 글·나",
-    "description": "숨김 도구(hidden)는 빠짐. up = 도구 포트가 응답함.",
+    "description": "숨김 도구(hidden)는 빠짐. up = 도구 포트가 응답함. 관리자가 끈 도구(/api/admin/tool)는 누구에게나 빠짐 — 관리자는 /api/admin/tools 에서 봄.",
     "responses": {
      "200": {
       "description": "목록",
@@ -4937,6 +4937,271 @@
      }
     }
    }
+  },
+  "/api/admin/tools": {
+   "get": {
+    "operationId": "portalAdminTools",
+    "summary": "에이전트 관리 — 도구 전체(켜짐·실행·사용)",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "admin",
+    "description": "tools.json 의 도구 전부(숨김 포함)와 관리자 켜기·끄기 상태(tool_state 표). /api/tools 는 꺼진 도구를 누구에게나 빼므로 관리자는 이 목록으로 봄.",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "tools"
+         ],
+         "properties": {
+          "tools": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/AdminTool"
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "description": "관리자 아님 {error, code: forbidden}"
+     }
+    }
+   }
+  },
+  "/api/admin/tool": {
+   "post": {
+    "operationId": "portalAdminToolToggle",
+    "summary": "도구 켜기·끄기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "admin",
+    "description": "끄면: /api/tools·랜딩 분류·즐겨찾기·최근(/api/lists — 저장된 항목은 그대로)·내 작업 목록·흐름 어댑터·아이디어 후보·리뷰/요청 대상·파동이 펫 추천(데이터 폴더 tools-disabled.json)에서 빠지고, /t/<dir>/… 는 일반 계정 403 code=tool_disabled('관리자가 이 에이전트를 잠시 껐습니다' — 관리자는 그대로 열림), /api/open·/api/like·/api/start 도 일반 계정 403 tool_disabled. 저장한 흐름은 실행 때 그 단계에서 같은 문구로 멈춤. 사용자 데이터는 지우지 않음. stop=true(끌 때만) 면 프로세스도 멈춤 — 진행 중 작업이 있으면 confirm=true 없이는 409 code=jobs_running(active_jobs). 원격 도구(host)는 멈추지 않음. 감사: tool_disable·tool_enable(내용 = 이유), 멈추면 tool_stop.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "dir",
+         "enabled"
+        ],
+        "properties": {
+         "dir": {
+          "type": "string"
+         },
+         "enabled": {
+          "type": "boolean"
+         },
+         "reason": {
+          "type": "string",
+          "maxLength": 200
+         },
+         "stop": {
+          "type": "boolean",
+          "default": false
+         },
+         "confirm": {
+          "type": "boolean",
+          "description": "진행 중 작업이 있어도 멈춤"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "ok",
+          "dir",
+          "enabled",
+          "changed",
+          "stopped"
+         ],
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "dir": {
+           "type": "string"
+          },
+          "enabled": {
+           "type": "boolean"
+          },
+          "changed": {
+           "type": "boolean",
+           "description": "거짓 = 이미 그 상태(감사 안 남김)"
+          },
+          "stopped": {
+           "type": "boolean"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류 {error, code: bad_request}"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "description": "관리자 아님 {error, code: forbidden}"
+     },
+     "404": {
+      "description": "없는 도구 {error, code: not_found}"
+     },
+     "409": {
+      "description": "진행 중 작업 {error, code: jobs_running, active_jobs}"
+     }
+    }
+   }
+  },
+  "/api/admin/agents": {
+   "get": {
+    "operationId": "portalAdminAgents",
+    "summary": "에이전트 관리 — 공유 빌더 에이전트",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "admin",
+    "description": "빌더 GET /api/agents?tab=admin(부서 공개·승인 대기 + 공유를 끈 것)을 관리자 서명으로. 빌더가 꺼져 있으면 builder=false·빈 목록(200).",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "agents",
+          "builder"
+         ],
+         "properties": {
+          "builder": {
+           "type": "boolean"
+          },
+          "error": {
+           "type": "string"
+          },
+          "agents": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "빌더 카드(AbCard)의 id·name·desc·icon·status·scope·scope_label·review·docs·uses_7d·owner_name·updated·created·forks·blocked"
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "description": "관리자 아님 {error, code: forbidden}"
+     }
+    }
+   }
+  },
+  "/api/admin/agent": {
+   "post": {
+    "operationId": "portalAdminAgentToggle",
+    "summary": "공유 빌더 에이전트 끄기·켜기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "admin",
+    "description": "빌더 POST /api/agents/<id>/block {off, reason}. 끄면 부서원 목록·보기·복제·참여 현황·순위·아이디어 추천에서 빠지고 만든 사람·관리자에게만 보임(blocked). 자료·대화는 그대로. 감사: agent_disable·agent_enable.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id",
+         "enabled"
+        ],
+        "properties": {
+         "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{6,16}$"
+         },
+         "enabled": {
+          "type": "boolean"
+         },
+         "reason": {
+          "type": "string",
+          "maxLength": 200
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "id": {
+           "type": "string"
+          },
+          "enabled": {
+           "type": "boolean"
+          },
+          "blocked": {
+           "$ref": "#/components/schemas/AbBlocked"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류 {error, code: bad_request}"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "description": "관리자 아님 {error, code: forbidden}"
+     },
+     "404": {
+      "description": "없는 에이전트 {error, code: not_found}"
+     },
+     "503": {
+      "description": "빌더 꺼짐 {error, code: unavailable}"
+     }
+    }
+   }
   }
  },
  "components": {
@@ -4979,7 +5244,9 @@
        "server_error",
        "unauthenticated",
        "forbidden",
-       "not_found"
+       "not_found",
+       "tool_disabled",
+       "jobs_running"
       ]
      }
     }
@@ -6946,6 +7213,106 @@
        "type": "string"
       },
       "description": "도구 dir 목록 — 목록 전체를 이 값으로 바꿈"
+     }
+    }
+   },
+   "AdminTool": {
+    "type": "object",
+    "required": [
+     "dir",
+     "name",
+     "group",
+     "port",
+     "remote",
+     "hidden",
+     "installed",
+     "up",
+     "enabled",
+     "reason",
+     "usage_30d",
+     "users_30d",
+     "active_jobs"
+    ],
+    "properties": {
+     "dir": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "group": {
+      "type": "string"
+     },
+     "port": {
+      "type": "integer"
+     },
+     "remote": {
+      "type": "boolean",
+      "description": "tools.json host — 다른 컨테이너(시작·중지 안 함)"
+     },
+     "hidden": {
+      "type": "boolean",
+      "description": "tools.json hidden(숨김 도구)"
+     },
+     "installed": {
+      "type": "boolean"
+     },
+     "up": {
+      "type": "boolean"
+     },
+     "enabled": {
+      "type": "boolean",
+      "description": "관리자가 켜 둠(기본 참). 거짓이면 사용자 쪽 어디에도 안 보임"
+     },
+     "by": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "마지막으로 바꾼 관리자"
+     },
+     "ts": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "reason": {
+      "type": "string",
+      "description": "끈 이유(감사 기록에도)"
+     },
+     "usage_30d": {
+      "type": "integer",
+      "description": "최근 30일 열기 수"
+     },
+     "users_30d": {
+      "type": "integer",
+      "description": "최근 30일 연 사람 수"
+     },
+     "active_jobs": {
+      "type": "integer",
+      "description": "진행 중 작업(작업 알림 queued·running 6시간 안 + 그 도구 어댑터를 쓰는 실행 중 흐름)"
+     }
+    }
+   },
+   "AbBlocked": {
+    "type": [
+     "object",
+     "null"
+    ],
+    "description": "관리자가 공유를 끔 — 만든 사람·관리자에게만 옴(그 밖엔 null). 끄면 부서원에게 안 보임",
+    "properties": {
+     "ts": {
+      "type": "string"
+     },
+     "by_name": {
+      "type": "string"
+     },
+     "reason": {
+      "type": "string"
      }
     }
    }

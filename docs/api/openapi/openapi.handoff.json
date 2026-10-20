@@ -24754,7 +24754,8 @@
        "server_error",
        "unauthenticated",
        "forbidden",
-       "not_found"
+       "not_found",
+       "tool_disabled"
       ]
      }
     }
@@ -39542,6 +39543,9 @@
      },
      "updated": {
       "type": "string"
+     },
+     "blocked": {
+      "$ref": "#/components/schemas/AbBlocked"
      }
     }
    },
@@ -39671,6 +39675,9 @@
      },
      "template": {
       "type": "string"
+     },
+     "blocked": {
+      "$ref": "#/components/schemas/AbBlocked"
      }
     }
    },
@@ -43281,6 +43288,24 @@
      "ok",
      "llm"
     ]
+   },
+   "AbBlocked": {
+    "type": [
+     "object",
+     "null"
+    ],
+    "description": "관리자가 공유를 끔 — 만든 사람·관리자에게만 옴(그 밖엔 null). 끄면 부서원에게 안 보임",
+    "properties": {
+     "ts": {
+      "type": "string"
+     },
+     "by_name": {
+      "type": "string"
+     },
+     "reason": {
+      "type": "string"
+     }
+    }
    }
   },
   "responses": {
