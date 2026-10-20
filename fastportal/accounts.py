@@ -344,6 +344,7 @@ def manage_post(ctx, c, p, req):
             else:
                 c.execute("UPDATE users SET onboarded=0 WHERE id=?", (uid,))
         elif p == "/api/account/tutorial":   # 따라 하기 본 것 기록 {id, version} / 지우기 {reset: true}(계정 설정 '사용법 진행 기록 초기화')
+            c.execute("UPDATE users SET tut_seen=tut_seen WHERE id=?", (uid,))   # 먼저 쓰기 잠금 — 동시에 온 기록이 읽고-고치고-쓰는 사이에 서로 지우지 않게
             seen = {} if req.get("reset") is True else tut_seen(c.execute("SELECT tut_seen FROM users WHERE id=?", (uid,)).fetchone()[0])
             if req.get("reset") is not True:
                 tid, ver = str(req.get("id") or ""), req.get("version", 1)

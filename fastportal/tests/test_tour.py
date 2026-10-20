@@ -122,6 +122,16 @@ class TourTest(unittest.TestCase):
                                                                   ("like", "mail-local", "2026-10-20", "a"), ("open", "kordoc-local", "2026-10-20", "b")])
         self.assertEqual(self.me("a")["used"], ["chart-local"], "연 적 있는 도구만(좋아요·남의 기록 제외)")
 
+    def test_tutorial_seen_concurrent(self):
+        import threading
+        db.init_db()
+        with db.db() as c:
+            c.execute("INSERT INTO users(id,name,dept,ts) VALUES('a','A','','2026-10-20')")
+        ids = [f"t{i}" for i in range(30)]
+        ths = [threading.Thread(target=self.tut, args=("a", {"id": i})) for i in ids]
+        [t.start() for t in ths]; [t.join() for t in ths]
+        self.assertEqual(sorted(self.me("a")["tutorials"]), sorted(ids), "동시에 보낸 기록이 하나도 사라지지 않음")
+
     def test_tutorial_seen_corrupt(self):
         db.init_db()
         with db.db() as c:
