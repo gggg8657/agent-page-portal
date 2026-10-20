@@ -14514,6 +14514,18 @@
             },
             "calib": {
              "$ref": "#/components/schemas/DigitizerCalib"
+            },
+            "interp": {
+             "type": "array",
+             "items": {
+              "type": "array",
+              "items": {
+               "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2
+             },
+             "description": "다른 선 밑에 완전히 가려 보간한 구간 — [시작 x, 끝 x] 그림 픽셀. 이 구간 안의 px 점은 '보간됨'(2026-10-20)"
             }
            },
            "required": [
@@ -29228,6 +29240,18 @@
      "cat": {
       "type": "boolean",
       "description": "막대 범주축 — v1·v2 는 픽셀값 그대로"
+     },
+     "mult": {
+      "type": "integer",
+      "description": "적용한 축 배수 지수 n — 눈금 값에 ×10^n 을 곱했음(축 끝 '×10⁻⁵'·'1e5'·축 이름 '(×10³)'). v1·v2 는 곱한 뒤 값"
+     },
+     "relative": {
+      "type": "boolean",
+      "description": "상대값 축 — 값축 숫자·값 라벨이 없어 가장 높은 격자선(없으면 가장 높은 막대)=100 으로 둔 값. 실제 값 아님"
+     },
+     "shared": {
+      "type": "boolean",
+      "description": "y축을 같이 쓰는 칸막이 그래프의 안쪽 칸 — 왼쪽 칸의 y 눈금을 빌려 보정함"
      }
     },
     "required": [
@@ -29328,6 +29352,43 @@
      },
      "score": {
       "type": "number"
+     },
+     "why": {
+      "type": "string"
+     },
+     "parts": {
+      "type": "integer",
+      "description": "y축을 같이 쓰는 칸 수(합친 상자일 때)"
+     },
+     "part_boxes": {
+      "type": "array",
+      "items": {
+       "type": "array",
+       "items": {
+        "type": "number"
+       },
+       "minItems": 4,
+       "maxItems": 4,
+       "description": "[x0, y0, x1, y1] 픽셀"
+      },
+      "description": "합친 상자의 칸별 축 상자"
+     },
+     "share_y": {
+      "type": "boolean",
+      "description": "칸막이 그래프의 안쪽 칸(y 눈금은 왼쪽 칸에서 빌림)"
+     },
+     "insets": {
+      "type": "array",
+      "items": {
+       "type": "array",
+       "items": {
+        "type": "number"
+       },
+       "minItems": 4,
+       "maxItems": 4,
+       "description": "[x0, y0, x1, y1] 픽셀"
+      },
+      "description": "이 그래프 안의 삽입 그래프 영역(눈금 글자 포함) — 자동 추출에서 뺌"
      }
     },
     "required": [
@@ -29461,12 +29522,47 @@
         "warn": {},
         "calib": {
          "$ref": "#/components/schemas/DigitizerCalib"
+        },
+        "interp": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+         },
+         "description": "다른 선 밑에 완전히 가려 보간한 구간 — [시작 x, 끝 x] 그림 픽셀. 이 구간 안의 px 점은 '보간됨'(2026-10-20)"
         }
        }
       }
      },
      "bar_guess": {
       "type": "integer"
+     },
+     "multiplier": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "찾아서 적용한 축 배수: {x?: n, y?: n, text: {축: 읽은 글자}, src: {축: 'label'|'corner'}, box?: {축: [x0,y0,x1,y1]}}"
+     },
+     "insets": {
+      "type": "array",
+      "items": {
+       "type": "array",
+       "items": {
+        "type": "number"
+       },
+       "minItems": 4,
+       "maxItems": 4,
+       "description": "[x0, y0, x1, y1] 픽셀"
+      },
+      "description": "자동 추출에서 뺀 삽입 그래프 영역"
+     },
+     "colorbar": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "그림 옆 색 띠(컬러바) {x0,y0,x1,y1} — 있으면 범례 없는 산점은 색과 상관없이 한 계열"
      }
     },
     "description": "need_panel 이면 {ok:false, error}",
@@ -29588,6 +29684,16 @@
      "legend_src": {},
      "n_err": {
       "type": "integer"
+     },
+     "relative": {
+      "type": [
+       "object",
+       "null"
+      ],
+      "description": "상대값으로 뽑았을 때 {ref: 'grid'|'bar', ref_px, base_px, grid: [격자선 행]} — 값 = (기준선−끝)/(기준선−ref)×100"
+     },
+     "box": {
+      "$ref": "#/components/schemas/DigitizerBox"
      }
     },
     "required": [
@@ -29712,6 +29818,10 @@
         "additionalProperties": true
        }
       }
+     },
+     "relative": {
+      "type": "boolean",
+      "description": "true 면 값축 숫자가 없어 상대값(가장 높은 격자선=100)으로 뽑음 — 화면·내보내기에 '상대값' 표시"
      }
     },
     "required": [
