@@ -3633,7 +3633,7 @@
   "/api/account/onboarded": {
    "post": {
     "operationId": "portalAccountOnboarded",
-    "summary": "첫 로그인 둘러보기 마침·건너뜀",
+    "summary": "첫 로그인 둘러보기 마침·건너뜀 / 다시 보이기",
     "requestBody": {
      "required": true,
      "content": {
@@ -3660,7 +3660,8 @@
     "x-permission": "self",
     "tags": [
      "portal"
-    ]
+    ],
+    "description": "`done: true`(기본) — 둘러보기를 마치거나 건너뜀, '새 기능 둘러보기' 안내를 닫음: onboarded=1, tour_seen=tour_version. `done: false` — 다음 로그인 때 둘러보기를 다시 자동으로(onboarded=0)."
    }
   },
   "/api/pin": {
@@ -23067,7 +23068,16 @@
       "description": "false = 로컬 접속(계정 없음)"
      },
      "onboarded": {
-      "type": "boolean"
+      "type": "boolean",
+      "description": "false = 첫 로그인 둘러보기를 자동으로 띄움(새 가입자, 또는 계정 설정 '다음 로그인 때 둘러보기 다시 보이기')"
+     },
+     "tour_seen": {
+      "type": "integer",
+      "description": "이 계정이 본(또는 닫은) 둘러보기 판. tour_version 보다 작으면 '새 기능 둘러보기' 안내를 한 번 띄움"
+     },
+     "tour_version": {
+      "type": "integer",
+      "description": "지금 둘러보기 판(포털 config.TOUR_VERSION)"
      },
      "developer": {
       "type": "boolean",

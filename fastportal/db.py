@@ -98,7 +98,9 @@ def init_db(seed_depts=()):
         cols = {r[1] for r in c.execute("PRAGMA table_info(users)")}
         # deactivated·deact_reason·anonymized·anon_id: 삭제 대신 비활성화 → 익명화(새 포털만 씀 — portal.py 는 모르는 열, disabled=1 로 같이 막힘)
         for col, ddl in (("iters", "INTEGER DEFAULT 200000"), ("disabled", "INTEGER DEFAULT 0"), ("seen", "TEXT"), ("theme", "TEXT"), ("onboarded", "INTEGER DEFAULT 0"),
-                         ("deactivated", "TEXT"), ("deact_reason", "TEXT"), ("anonymized", "TEXT"), ("anon_id", "TEXT")):
+                         ("deactivated", "TEXT"), ("deact_reason", "TEXT"), ("anonymized", "TEXT"), ("anon_id", "TEXT"),
+                         # tour_seen: 이 계정이 본(또는 닫은) 둘러보기 판(config.TOUR_VERSION). 열을 처음 더할 때 모두 0 → 기존 계정은 '새 기능 둘러보기' 안내를 판마다 한 번만
+                         ("tour_seen", "INTEGER DEFAULT 0")):
             if col not in cols:
                 c.execute(f"ALTER TABLE users ADD COLUMN {col} {ddl}")
                 if col == "onboarded":

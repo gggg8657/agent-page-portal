@@ -56,6 +56,8 @@ def secret_file(name):
 
 
 # ── 외부 화면·도구 서명(보안) ────────────────────────────────────────────
+# 첫 로그인 둘러보기의 판 — 둘러보기 내용이 크게 바뀌면 올림. 이 판을 안 본 기존 계정에 '새 기능 둘러보기' 안내가 한 번 뜸(/api/me tour_seen < tour_version)
+TOUR_VERSION = 2
 API_VERSION = "2026.10.19"   # 포털 API 계약 버전(GET /api/version) — 응답 모양이 바뀌면 올림(docs/api/README.md '버전')
 # 도구로 가는 요청에 포털 서명(X-Agent-Auth)을 붙이고, 도구를 띄울 때 PORTAL_TOOL_KEY 를 넘김(도구 portal_auth.py 가 확인). 0 이면 끔(옛 도구와 시험용)
 TOOL_AUTH = os.environ.get("PORTAL_TOOL_AUTH", "1") != "0"
