@@ -4,8 +4,12 @@
 /proc/net/tcp·tcp6 에 소켓 주인(uid)과 함께 보여 주므로, 접속한 쪽(peer ip:port)을 거기서 찾아 주인 uid 를 본다.
 - 표에 없으면(다른 PC·컨테이너에서 온 접속) 그대로 받는다.
 - 표에 있고 주인이 포털을 띄운 계정(또는 PORTAL_RELAY_ALLOW_UIDS)이면 받는다 — 도구·스크립트·본인 SSH 터널.
-- 그 밖의 계정이면 403 code relay_blocked. 끄기: PORTAL_RELAY_GUARD=0
+- 그 밖의 계정이라도 브라우저가 포털 주소로 직접 연 요청(다른 계정 사용자의 SSH 터널 등)이면 받는다 — direct():
+  Sec-Fetch-* 가 있고(브라우저), Origin·Referer 가 있으면 그 주소가 요청 Host 와 같고(남의 화면에서 넘어온 것이 아님),
+  X-Forwarded-For·Forwarded·Via 가 없음(중계 서버 표시 없음). 헤더는 꾸밀 수 있으므로 '편하게 대신 불러 주기'를 막는 정도.
+- 그 밖이면 403 code relay_blocked. 끄기: PORTAL_RELAY_GUARD=0
 """
+from urllib.parse import urlsplit
 import os
 import pwd
 import socket
@@ -94,6 +98,20 @@ def peer_uid(ip, port, server_port):
     return uid
 
 
+def direct(headers):
+    """브라우저가 포털 주소로 직접 연 요청처럼 보이는지(중계 서버가 대신 부른 것이 아닌지)"""
+    if not (headers.get("sec-fetch-site") or headers.get("sec-fetch-mode")):
+        return False
+    if headers.get("x-forwarded-for") or headers.get("forwarded") or headers.get("via"):
+        return False
+    host = (headers.get("host") or "").lower()
+    for h in ("origin", "referer"):
+        v = headers.get(h)
+        if v and v != "null" and urlsplit(v).netloc.lower() != host:
+            return False
+    return headers.get("sec-fetch-site", "same-origin") in ("same-origin", "none")
+
+
 def check(request):
     """받으면 None, 막으면 (uid, 사용자 이름)"""
     if not ENABLED or not request.client:
@@ -102,7 +120,7 @@ def check(request):
     if not srv[1]:
         return None
     uid = peer_uid(request.client.host, request.client.port, srv[1])
-    if uid is None or uid in ALLOW:
+    if uid is None or uid in ALLOW or direct(request.headers):
         return None
     try:
         name = pwd.getpwuid(uid).pw_name

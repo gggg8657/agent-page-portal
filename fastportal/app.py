@@ -596,7 +596,9 @@ def _relay_audit(bad, ctx):
     uid, name = bad
     print(f"relay: 다른 계정(uid {uid} {name})의 중계 요청 거절 — {ctx.method} {ctx.p}", flush=True)
     with db.db() as c:
-        accounts.audit(c, "system", "relay_block", f"uid {uid} ({name})", f"{ctx.method} {ctx.p}"[:200])
+        h = ctx.headers
+        hint = f" · ua={(h.get('user-agent') or '-')[:40]} · sfs={h.get('sec-fetch-site') or '-'} · ref={'있음' if h.get('referer') else '-'} · xff={'있음' if h.get('x-forwarded-for') else '-'}"
+        accounts.audit(c, "system", "relay_block", f"uid {uid} ({name})", (f"{ctx.method} {ctx.p}" + hint)[:300])
 
 
 async def handle(request: Request):

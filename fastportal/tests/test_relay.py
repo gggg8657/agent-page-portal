@@ -42,8 +42,9 @@ class Check(unittest.TestCase):
         relay.ENABLED, relay.ALLOW, relay._lookup = self.saved
         relay._cache.clear()
 
-    def req(self, port):
-        return SimpleNamespace(client=SimpleNamespace(host="127.0.0.1", port=port), scope={"server": ("0.0.0.0", 8700)})
+    def req(self, port, headers=None):
+        return SimpleNamespace(client=SimpleNamespace(host="127.0.0.1", port=port), scope={"server": ("0.0.0.0", 8700)},
+                               headers=headers or {})
 
     def test_outside_connection_allowed(self):
         relay._lookup = lambda ip, port, sp: None
@@ -57,6 +58,25 @@ class Check(unittest.TestCase):
         relay._lookup = lambda ip, port, sp: 1008
         uid, _name = relay.check(self.req(3))
         self.assertEqual(uid, 1008)
+
+    def test_other_account_direct_browser_allowed(self):   # 다른 계정 사용자의 SSH 터널로 브라우저가 직접 연 것
+        relay._lookup = lambda ip, port, sp: 1007
+        h = {"host": "localhost:8700", "sec-fetch-site": "same-origin", "sec-fetch-mode": "cors", "origin": "http://localhost:8700",
+             "referer": "http://localhost:8700/tool/digitizer-local"}
+        self.assertIsNone(relay.check(self.req(5, h)))
+        self.assertIsNone(relay.check(self.req(6, {"host": "localhost:8700", "sec-fetch-site": "none", "sec-fetch-mode": "navigate"})))
+
+    def test_relay_server_patterns_blocked(self):
+        relay._lookup = lambda ip, port, sp: 1008
+        cases = [
+            {"host": "127.0.0.1:8700", "user-agent": "python-httpx/0.27"},                                  # 서버가 새로 만든 요청
+            {"host": "127.0.0.1:8700", "sec-fetch-site": "same-origin", "referer": "http://10.0.0.5:8800/portal/"},   # 남의 화면 헤더를 넘김
+            {"host": "127.0.0.1:8700", "sec-fetch-site": "same-origin", "origin": "http://10.0.0.5:8800"},
+            {"host": "127.0.0.1:8700", "sec-fetch-site": "same-origin", "x-forwarded-for": "10.0.0.9"},
+            {"host": "127.0.0.1:8700", "sec-fetch-site": "cross-site"},
+        ]
+        for i, h in enumerate(cases):
+            self.assertIsNotNone(relay.check(self.req(10 + i, h)), h)
 
     def test_disabled(self):
         relay.ENABLED = False
