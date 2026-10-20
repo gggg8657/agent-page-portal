@@ -467,6 +467,26 @@
    "x-external-network-note": "외부 호출 없음 — LLM·임베딩 서버(서버 안)만",
    "x-response-style": "sse",
    "x-response-style-note": "docs·chat 은 SSE, 나머지 JSON, docs/{doc}/file 은 파일"
+  },
+  {
+   "name": "codingtest-local",
+   "description": "코딩테스트 연습 — 문제 은행(입문~고급·실무형)·격리 컨테이너 채점·LLM 단계 힌트/왜 틀렸나/정답 리뷰·사용자별 기록과 다음 문제 추천. 문서: docs/api/codingtest-local.md",
+   "x-tool-id": "codingtest",
+   "x-name": "코딩테스트 연습",
+   "x-description": "문제 풀고 제출 → 격리 채점, 막히면 단계 힌트·왜 틀렸나 코칭",
+   "x-kind": "agent",
+   "x-kind-note": "채점·기록·추천은 결정론 코드, LLM 은 api/hint·api/why·api/review 에만(LLM 이 없으면 그 셋만 503)",
+   "x-category": "개발/코딩",
+   "x-category-note": "교육/학습 성격도 있음 — 허브 분류는 개발/코딩",
+   "x-entry": "/t/codingtest-local/",
+   "x-health-path": "/t/codingtest-local/healthz",
+   "x-long-running": false,
+   "x-long-running-note": "채점은 컨테이너 시작 포함 보통 1~5초(시간 초과 제출은 테스트 시간 제한만큼 더), 코칭은 LLM 수 초~수십 초 — 버튼 연타 막기(사용자당 동시 1)",
+   "x-docs-input": "text",
+   "x-docs-input-note": "제출 코드(Python)와 선택 입력을 JSON 으로",
+   "x-external-network": false,
+   "x-external-network-note": "제출 코드는 --network none 컨테이너에서 실행. LLM 서버(내부)만 호출",
+   "x-response-style": "json"
   }
  ],
  "paths": {
@@ -22156,6 +22176,668 @@
      }
     }
    }
+  },
+  "/t/codingtest-local/api/health": {
+   "get": {
+    "tags": [
+     "codingtest-local"
+    ],
+    "operationId": "codingtestHealth",
+    "summary": "살아 있는지(문제 수)",
+    "description": "가벼운 확인.",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ok"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/codingtest-local/api/meta": {
+   "get": {
+    "tags": [
+     "codingtest-local"
+    ],
+    "operationId": "codingtestMeta",
+    "summary": "수준·유형·언어·채점기/AI 코치 상태·제한",
+    "description": "채점 이미지·LLM 확인은 60초 기억(처음엔 최대 수 초).",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CodingtestMeta"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/codingtest-local/api/problems": {
+   "get": {
+    "tags": [
+     "codingtest-local"
+    ],
+    "operationId": "codingtestProblems",
+    "summary": "문제 목록(+내 상태)",
+    "description": "문제 은행 전체(약 100개)와 내 상태(new·tried·solved)·제출 수. 거르기는 화면에서.",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CodingtestProblemList"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/codingtest-local/api/problems/{id}": {
+   "get": {
+    "tags": [
+     "codingtest-local"
+    ],
+    "operationId": "codingtestProblem",
+    "summary": "문제 하나(+내 기록·연 힌트·리뷰)",
+    "description": "숨김 테스트·참고 풀이는 주지 않음. 없는 id 는 404.",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CodingtestProblem"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^c\\d{3}$"
+      }
+     }
+    ]
+   }
+  },
+  "/t/codingtest-local/api/run": {
+   "post": {
+    "tags": [
+     "codingtest-local"
+    ],
+    "operationId": "codingtestRun",
+    "summary": "예제 실행(또는 직접 입력 실행)",
+    "description": "격리 컨테이너에서 예제 전부를 돌려 출력·기대 출력을 보여 줌(기록에는 초안 코드만 저장, 제출 수에 안 셈). input 이 있으면 그 입력 하나만(비교 없음, verdict DONE). 사용자당 동시 1(409)·채점(run+submit) 10분 40번(429).",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CodingtestCodeRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CodingtestJudgeResult"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "이미 같은 일을 하는 중(code: busy, 사용자당 한 번에 하나)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "413": {
+      "description": "요청 본문이 512KB 를 넘음",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-long-running": true
+   }
+  },
+  "/t/codingtest-local/api/submit": {
+   "post": {
+    "tags": [
+     "codingtest-local"
+    ],
+    "operationId": "codingtestSubmit",
+    "summary": "제출 — 예제+숨김 테스트 채점",
+    "description": "한 컨테이너에서 모든 테스트를 차례로, 처음 실패에서 멈춤. 숨김 테스트 실패는 번호만. 정답이면 next(다음 추천). SYS(채점 불가)는 기록에 남기지 않음. 사용자당 동시 1(409)·10분 40번(429).",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CodingtestCodeRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CodingtestJudgeResult"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "이미 같은 일을 하는 중(code: busy, 사용자당 한 번에 하나)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "413": {
+      "description": "요청 본문이 512KB 를 넘음",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-long-running": true
+   }
+  },
+  "/t/codingtest-local/api/draft": {
+   "post": {
+    "tags": [
+     "codingtest-local"
+    ],
+    "operationId": "codingtestDraft",
+    "summary": "쓰던 코드 저장(초안)",
+    "description": "문제별 마지막 코드. 64KB 이하.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CodingtestCodeRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ok"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "413": {
+      "description": "요청 본문이 512KB 를 넘음",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/codingtest-local/api/hint": {
+   "post": {
+    "tags": [
+     "codingtest-local"
+    ],
+    "operationId": "codingtestHint",
+    "summary": "단계 힌트(① 접근 방향 ② 쓸 알고리즘 ③ 의사코드)",
+    "description": "앞 단계를 연 뒤에만(아니면 400). 한 번 연 힌트는 저장해 다시 줌(cached, LLM 안 부름). 풀이 코드가 새면 서버가 걸러 냄. 사용자당 동시 1·코칭 10분 20번, 도구 전체 LLM 동시 2.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CodingtestHintRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CodingtestHint"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "이미 같은 일을 하는 중(code: busy, 사용자당 한 번에 하나)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "503": {
+      "description": "AI 코치(LLM)가 연결되지 않음(code: unavailable) — 화면은 버튼을 끄고 meta.coach.note 표시",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-llm": true,
+    "x-long-running": true
+   }
+  },
+  "/t/codingtest-local/api/why": {
+   "post": {
+    "tags": [
+     "codingtest-local"
+    ],
+    "operationId": "codingtestWhy",
+    "summary": "왜 틀렸나 — 마지막 제출 결과 설명",
+    "description": "마지막 제출(정답·채점 불가 아님)의 판정·처음 실패한 예제(숨김이면 번호만)·오류 글·내 코드를 근거로 원인과 확인할 곳. 고친 전체 코드는 주지 않음.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CodingtestIdRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CodingtestCoachText"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "이미 같은 일을 하는 중(code: busy, 사용자당 한 번에 하나)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "503": {
+      "description": "AI 코치(LLM)가 연결되지 않음(code: unavailable) — 화면은 버튼을 끄고 meta.coach.note 표시",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-llm": true,
+    "x-long-running": true
+   }
+  },
+  "/t/codingtest-local/api/review": {
+   "post": {
+    "tags": [
+     "codingtest-local"
+    ],
+    "operationId": "codingtestReview",
+    "summary": "정답 뒤 리뷰(복잡도·경계 조건·더 깔끔하게)",
+    "description": "정답을 받은 코드에 대해서만(아니면 400). 저장된 리뷰는 cached, refresh:true 로 새로.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CodingtestReviewRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CodingtestCoachText"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "이미 같은 일을 하는 중(code: busy, 사용자당 한 번에 하나)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "503": {
+      "description": "AI 코치(LLM)가 연결되지 않음(code: unavailable) — 화면은 버튼을 끄고 meta.coach.note 표시",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-llm": true,
+    "x-long-running": true
+   }
+  },
+  "/t/codingtest-local/api/solution": {
+   "post": {
+    "tags": [
+     "codingtest-local"
+    ],
+    "operationId": "codingtestSolution",
+    "summary": "풀이 보기 — 참고 풀이 코드",
+    "description": "기록에 solution_viewed 가 남고, 그 뒤 정답은 solved_after_solution. 화면은 누르기 전에 확인을 받는 것이 좋음.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CodingtestIdRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CodingtestSolution"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/codingtest-local/api/records": {
+   "get": {
+    "tags": [
+     "codingtest-local"
+    ],
+    "operationId": "codingtestRecords",
+    "summary": "내 기록 대시보드",
+    "description": "수준·유형별 해결 수, 약한 유형(최대 3)과 근거, 안 해 본 유형, 지금 수준, 다음 추천, 최근 제출 20개.",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CodingtestDashboard"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/codingtest-local/api/recommend": {
+   "get": {
+    "tags": [
+     "codingtest-local"
+    ],
+    "operationId": "codingtestRecommend",
+    "summary": "다음 문제 추천(규칙)",
+    "description": "약한 유형 → 안 해 본 유형 → 지금 수준 → 다음 수준 순서.",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CodingtestRecommendResult"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
   }
  },
  "components": {
@@ -38454,6 +39136,1237 @@
       "description": "print 만: 순서별 선 모양(SVG stroke-dasharray, null=실선)"
      }
     }
+   },
+   "CodingtestMeta": {
+    "type": "object",
+    "properties": {
+     "levels": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "enum": [
+        "입문",
+        "초급",
+        "중급",
+        "고급"
+       ]
+      }
+     },
+     "types": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "enum": [
+        "구현",
+        "정렬",
+        "탐색",
+        "DP",
+        "그래프",
+        "문자열",
+        "수학",
+        "자료구조",
+        "실무"
+       ]
+      }
+     },
+     "languages": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "name": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "id",
+        "name"
+       ],
+       "additionalProperties": false
+      }
+     },
+     "judge": {
+      "type": "object",
+      "properties": {
+       "ok": {
+        "type": "boolean"
+       },
+       "note": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "ok",
+       "note"
+      ],
+      "description": "채점기(격리 컨테이너) 사용 가능 여부 — 아니면 note 를 화면에",
+      "additionalProperties": false
+     },
+     "coach": {
+      "type": "object",
+      "properties": {
+       "ok": {
+        "type": "boolean"
+       },
+       "model": {
+        "type": "string"
+       },
+       "note": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "ok",
+       "model",
+       "note"
+      ],
+      "description": "AI 코치(LLM) 연결 여부 — false 면 힌트·왜 틀렸나·리뷰 버튼을 끄고 note 표시",
+      "additionalProperties": false
+     },
+     "limits": {
+      "type": "object",
+      "properties": {
+       "judge_per_10min": {
+        "type": "integer"
+       },
+       "coach_per_10min": {
+        "type": "integer"
+       },
+       "code_kb": {
+        "type": "integer"
+       },
+       "input_kb": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "judge_per_10min",
+       "coach_per_10min",
+       "code_kb",
+       "input_kb"
+      ],
+      "additionalProperties": false
+     },
+     "count": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "levels",
+     "types",
+     "languages",
+     "judge",
+     "coach",
+     "limits",
+     "count"
+    ],
+    "additionalProperties": false
+   },
+   "CodingtestProblemBrief": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "pattern": "^c\\d{3}$"
+     },
+     "title": {
+      "type": "string"
+     },
+     "level": {
+      "type": "string",
+      "enum": [
+       "입문",
+       "초급",
+       "중급",
+       "고급"
+      ]
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "구현",
+       "정렬",
+       "탐색",
+       "DP",
+       "그래프",
+       "문자열",
+       "수학",
+       "자료구조",
+       "실무"
+      ]
+     },
+     "tags": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "time_limit": {
+      "type": "number"
+     },
+     "memory_mb": {
+      "type": "integer"
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "new",
+       "tried",
+       "solved"
+      ],
+      "description": "new 안 푼 · tried 시도(제출했지만 정답 아님) · solved 해결"
+     },
+     "attempts": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "level",
+     "type",
+     "tags",
+     "time_limit",
+     "memory_mb",
+     "status",
+     "attempts"
+    ],
+    "additionalProperties": false
+   },
+   "CodingtestSample": {
+    "type": "object",
+    "properties": {
+     "input": {
+      "type": "string"
+     },
+     "output": {
+      "type": "string"
+     },
+     "note": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "input",
+     "output"
+    ],
+    "additionalProperties": false
+   },
+   "CodingtestFailed": {
+    "type": "object",
+    "properties": {
+     "index": {
+      "type": "integer",
+      "description": "실행 순서 번호(0부터, 예제 먼저)"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "sample",
+       "hidden"
+      ]
+     },
+     "number": {
+      "type": "integer",
+      "description": "예제면 예제 번호, 숨김이면 숨김 테스트 번호(1부터)"
+     },
+     "input": {
+      "type": "string"
+     },
+     "expected": {
+      "type": "string"
+     },
+     "output": {
+      "type": "string"
+     },
+     "error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "index",
+     "kind",
+     "number"
+    ],
+    "description": "처음 실패한 테스트. 숨김 테스트는 번호만(입력·기대 출력·내 출력은 주지 않음, 런타임 오류면 마지막 오류 줄만)",
+    "additionalProperties": false
+   },
+   "CodingtestLastSub": {
+    "type": "object",
+    "properties": {
+     "verdict": {
+      "type": "string",
+      "enum": [
+       "AC",
+       "WA",
+       "TLE",
+       "MLE",
+       "RE",
+       "OLE",
+       "CE",
+       "SYS",
+       "DONE"
+      ],
+      "description": "AC 정답 · WA 오답 · TLE 시간 초과 · MLE 메모리 초과 · RE 런타임 오류 · OLE 출력 초과 · CE 컴파일 오류 · SYS 채점 불가(Docker 없음·대기열 가득 등) · DONE 직접 입력 실행 완료(비교 없음)"
+     },
+     "label": {
+      "type": "string"
+     },
+     "failed": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/CodingtestFailed"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "compile": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "time": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "ts": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "verdict",
+     "label"
+    ],
+    "additionalProperties": false
+   },
+   "CodingtestRecord": {
+    "type": "object",
+    "properties": {
+     "status": {
+      "type": "string",
+      "enum": [
+       "new",
+       "tried",
+       "solved"
+      ],
+      "description": "new 안 푼 · tried 시도(제출했지만 정답 아님) · solved 해결"
+     },
+     "attempts": {
+      "type": "integer"
+     },
+     "first_solved": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "last_ts": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "last_code": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "last_verdict": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "AC",
+         "WA",
+         "TLE",
+         "MLE",
+         "RE",
+         "OLE",
+         "CE",
+         "SYS",
+         "DONE"
+        ],
+        "description": "AC 정답 · WA 오답 · TLE 시간 초과 · MLE 메모리 초과 · RE 런타임 오류 · OLE 출력 초과 · CE 컴파일 오류 · SYS 채점 불가(Docker 없음·대기열 가득 등) · DONE 직접 입력 실행 완료(비교 없음)"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "solution_viewed": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "solved_after_solution": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "best_time": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "hints": {
+      "type": "array",
+      "items": {
+       "type": "integer",
+       "enum": [
+        1,
+        2,
+        3
+       ]
+      }
+     },
+     "has_ac": {
+      "type": "boolean"
+     },
+     "last_sub": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/CodingtestLastSub"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "hint_texts": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "열어 본 힌트 글 {\"1\": …, \"2\": …}"
+     },
+     "review": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "status",
+     "attempts",
+     "hints"
+    ],
+    "description": "내 기록(사용자별)"
+   },
+   "CodingtestProblem": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "level": {
+      "type": "string",
+      "enum": [
+       "입문",
+       "초급",
+       "중급",
+       "고급"
+      ]
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "구현",
+       "정렬",
+       "탐색",
+       "DP",
+       "그래프",
+       "문자열",
+       "수학",
+       "자료구조",
+       "실무"
+      ]
+     },
+     "tags": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "statement": {
+      "type": "string",
+      "description": "마크다운"
+     },
+     "input": {
+      "type": "string"
+     },
+     "output": {
+      "type": "string"
+     },
+     "constraints": {
+      "type": "string"
+     },
+     "time_limit": {
+      "type": "number",
+      "description": "테스트 하나 CPU 초"
+     },
+     "memory_mb": {
+      "type": "integer"
+     },
+     "checker": {
+      "anyOf": [
+       {
+        "type": "string",
+        "description": "null = 공백 관대 글자 비교, float:<오차> = 실수 허용 오차"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "samples": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/CodingtestSample"
+      }
+     },
+     "hidden_tests": {
+      "type": "integer"
+     },
+     "record": {
+      "$ref": "#/components/schemas/CodingtestRecord"
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "level",
+     "type",
+     "tags",
+     "statement",
+     "input",
+     "output",
+     "constraints",
+     "time_limit",
+     "memory_mb",
+     "samples",
+     "hidden_tests",
+     "record"
+    ],
+    "description": "문제(숨김 테스트·참고 풀이는 없음)",
+    "additionalProperties": false
+   },
+   "CodingtestCase": {
+    "type": "object",
+    "properties": {
+     "i": {
+      "type": "integer"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "sample",
+       "custom"
+      ]
+     },
+     "s": {
+      "type": "string",
+      "enum": [
+       "AC",
+       "WA",
+       "TLE",
+       "MLE",
+       "RE",
+       "OLE",
+       "CE",
+       "SYS",
+       "DONE"
+      ],
+      "description": "AC 정답 · WA 오답 · TLE 시간 초과 · MLE 메모리 초과 · RE 런타임 오류 · OLE 출력 초과 · CE 컴파일 오류 · SYS 채점 불가(Docker 없음·대기열 가득 등) · DONE 직접 입력 실행 완료(비교 없음)"
+     },
+     "label": {
+      "type": "string"
+     },
+     "time": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "memory_kb": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "input": {
+      "type": "string"
+     },
+     "expected": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "output": {
+      "type": "string"
+     },
+     "error": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "i",
+     "kind",
+     "s",
+     "label"
+    ],
+    "additionalProperties": false
+   },
+   "CodingtestRecommend": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "level": {
+      "type": "string",
+      "enum": [
+       "입문",
+       "초급",
+       "중급",
+       "고급"
+      ]
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "구현",
+       "정렬",
+       "탐색",
+       "DP",
+       "그래프",
+       "문자열",
+       "수학",
+       "자료구조",
+       "실무"
+      ]
+     },
+     "reason": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "level",
+     "type",
+     "reason"
+    ],
+    "description": "규칙 추천(약한 유형 → 안 해 본 유형 → 지금 수준 → 다음 수준)",
+    "additionalProperties": false
+   },
+   "CodingtestJudgeResult": {
+    "type": "object",
+    "properties": {
+     "verdict": {
+      "type": "string",
+      "enum": [
+       "AC",
+       "WA",
+       "TLE",
+       "MLE",
+       "RE",
+       "OLE",
+       "CE",
+       "SYS",
+       "DONE"
+      ],
+      "description": "AC 정답 · WA 오답 · TLE 시간 초과 · MLE 메모리 초과 · RE 런타임 오류 · OLE 출력 초과 · CE 컴파일 오류 · SYS 채점 불가(Docker 없음·대기열 가득 등) · DONE 직접 입력 실행 완료(비교 없음)"
+     },
+     "label": {
+      "type": "string",
+      "description": "정답·오답·시간 초과·메모리 초과·런타임 오류·출력 초과·컴파일 오류·채점 불가·실행 완료"
+     },
+     "passed": {
+      "type": "integer"
+     },
+     "total": {
+      "type": "integer"
+     },
+     "time": {
+      "type": "number"
+     },
+     "memory_kb": {
+      "type": "integer"
+     },
+     "cases": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/CodingtestCase"
+      }
+     },
+     "failed": {
+      "$ref": "#/components/schemas/CodingtestFailed"
+     },
+     "compile": {
+      "type": "string"
+     },
+     "error": {
+      "type": "string",
+      "description": "채점 불가 이유(SYS)"
+     },
+     "seconds": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "hidden_total": {
+      "type": "integer"
+     },
+     "record": {
+      "$ref": "#/components/schemas/CodingtestRecord"
+     },
+     "next": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/CodingtestRecommend"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "verdict",
+     "label",
+     "passed",
+     "total",
+     "cases"
+    ],
+    "additionalProperties": false
+   },
+   "CodingtestCodeRequest": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "pattern": "^c\\d{3}$"
+     },
+     "code": {
+      "type": "string",
+      "maxLength": 65536
+     },
+     "input": {
+      "type": "string",
+      "description": "api/run 만: 있으면 예제 대신 이 입력 하나로 실행(출력만, 비교 없음, 256KB 이하)"
+     }
+    },
+    "required": [
+     "id",
+     "code"
+    ],
+    "additionalProperties": false
+   },
+   "CodingtestIdRequest": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "pattern": "^c\\d{3}$"
+     }
+    },
+    "required": [
+     "id"
+    ],
+    "additionalProperties": false
+   },
+   "CodingtestHintRequest": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "level": {
+      "type": "integer",
+      "enum": [
+       1,
+       2,
+       3
+      ],
+      "description": "① 접근 방향 ② 쓸 알고리즘 ③ 의사코드 — 앞 단계를 연 뒤에만"
+     },
+     "code": {
+      "type": "string",
+      "description": "지금 코드(선택, 없으면 마지막 저장 코드) — 힌트를 맞춤"
+     }
+    },
+    "required": [
+     "id",
+     "level"
+    ],
+    "additionalProperties": false
+   },
+   "CodingtestReviewRequest": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "refresh": {
+      "type": "boolean",
+      "description": "저장된 리뷰 대신 새로 받기"
+     }
+    },
+    "required": [
+     "id"
+    ],
+    "additionalProperties": false
+   },
+   "CodingtestHint": {
+    "type": "object",
+    "properties": {
+     "level": {
+      "type": "integer"
+     },
+     "text": {
+      "type": "string",
+      "description": "마크다운"
+     },
+     "cached": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "level",
+     "text",
+     "cached"
+    ],
+    "additionalProperties": false
+   },
+   "CodingtestCoachText": {
+    "type": "object",
+    "properties": {
+     "text": {
+      "type": "string",
+      "description": "마크다운"
+     },
+     "cached": {
+      "type": "boolean"
+     },
+     "verdict": {
+      "type": "string",
+      "enum": [
+       "AC",
+       "WA",
+       "TLE",
+       "MLE",
+       "RE",
+       "OLE",
+       "CE",
+       "SYS",
+       "DONE"
+      ],
+      "description": "AC 정답 · WA 오답 · TLE 시간 초과 · MLE 메모리 초과 · RE 런타임 오류 · OLE 출력 초과 · CE 컴파일 오류 · SYS 채점 불가(Docker 없음·대기열 가득 등) · DONE 직접 입력 실행 완료(비교 없음)"
+     },
+     "label": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "text"
+    ],
+    "additionalProperties": false
+   },
+   "CodingtestSolution": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "code": {
+      "type": "string"
+     },
+     "note": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "code",
+     "note"
+    ],
+    "additionalProperties": false
+   },
+   "CodingtestTypeStat": {
+    "type": "object",
+    "properties": {
+     "type": {
+      "type": "string",
+      "enum": [
+       "구현",
+       "정렬",
+       "탐색",
+       "DP",
+       "그래프",
+       "문자열",
+       "수학",
+       "자료구조",
+       "실무"
+      ]
+     },
+     "total": {
+      "type": "integer"
+     },
+     "tried": {
+      "type": "integer"
+     },
+     "solved": {
+      "type": "integer"
+     },
+     "attempts": {
+      "type": "integer"
+     },
+     "fails": {
+      "type": "integer"
+     },
+     "hints": {
+      "type": "integer"
+     },
+     "solution": {
+      "type": "integer"
+     },
+     "weakness": {
+      "type": "number"
+     },
+     "why": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "type",
+     "total",
+     "tried",
+     "solved"
+    ],
+    "additionalProperties": false
+   },
+   "CodingtestLevelStat": {
+    "type": "object",
+    "properties": {
+     "level": {
+      "type": "string",
+      "enum": [
+       "입문",
+       "초급",
+       "중급",
+       "고급"
+      ]
+     },
+     "total": {
+      "type": "integer"
+     },
+     "tried": {
+      "type": "integer"
+     },
+     "solved": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "level",
+     "total",
+     "tried",
+     "solved"
+    ],
+    "additionalProperties": false
+   },
+   "CodingtestSub": {
+    "type": "object",
+    "properties": {
+     "ts": {
+      "type": "string"
+     },
+     "id": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "verdict": {
+      "type": "string",
+      "enum": [
+       "AC",
+       "WA",
+       "TLE",
+       "MLE",
+       "RE",
+       "OLE",
+       "CE",
+       "SYS",
+       "DONE"
+      ],
+      "description": "AC 정답 · WA 오답 · TLE 시간 초과 · MLE 메모리 초과 · RE 런타임 오류 · OLE 출력 초과 · CE 컴파일 오류 · SYS 채점 불가(Docker 없음·대기열 가득 등) · DONE 직접 입력 실행 완료(비교 없음)"
+     },
+     "label": {
+      "type": "string"
+     },
+     "time": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "passed": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "total": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "ts",
+     "id",
+     "verdict",
+     "label"
+    ],
+    "additionalProperties": false
+   },
+   "CodingtestDashboard": {
+    "type": "object",
+    "properties": {
+     "solved": {
+      "type": "integer"
+     },
+     "tried": {
+      "type": "integer"
+     },
+     "total": {
+      "type": "integer"
+     },
+     "submissions": {
+      "type": "integer"
+     },
+     "by_type": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/CodingtestTypeStat"
+      }
+     },
+     "by_level": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/CodingtestLevelStat"
+      }
+     },
+     "weak": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "type": {
+         "type": "string",
+         "enum": [
+          "구현",
+          "정렬",
+          "탐색",
+          "DP",
+          "그래프",
+          "문자열",
+          "수학",
+          "자료구조",
+          "실무"
+         ]
+        },
+        "weakness": {
+         "type": "number"
+        },
+        "why": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "type",
+        "weakness",
+        "why"
+       ],
+       "additionalProperties": false
+      }
+     },
+     "untried": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "enum": [
+        "구현",
+        "정렬",
+        "탐색",
+        "DP",
+        "그래프",
+        "문자열",
+        "수학",
+        "자료구조",
+        "실무"
+       ]
+      }
+     },
+     "level_now": {
+      "type": "string",
+      "enum": [
+       "입문",
+       "초급",
+       "중급",
+       "고급"
+      ]
+     },
+     "recommend": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/CodingtestRecommend"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "recent": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/CodingtestSub"
+      }
+     }
+    },
+    "required": [
+     "solved",
+     "tried",
+     "total",
+     "submissions",
+     "by_type",
+     "by_level",
+     "weak",
+     "untried",
+     "level_now",
+     "recommend",
+     "recent"
+    ],
+    "additionalProperties": false
+   },
+   "CodingtestProblemList": {
+    "type": "array",
+    "items": {
+     "$ref": "#/components/schemas/CodingtestProblemBrief"
+    }
+   },
+   "CodingtestRecommendResult": {
+    "type": "object",
+    "properties": {
+     "recommend": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/CodingtestRecommend"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "recommend"
+    ],
+    "additionalProperties": false
    }
   },
   "responses": {
@@ -38630,7 +40543,8 @@
     "shield-local",
     "avatar-local",
     "padong-local",
-    "agent-builder-local"
+    "agent-builder-local",
+    "codingtest-local"
    ]
   }
  ]
