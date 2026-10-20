@@ -14088,6 +14088,16 @@
          "whole": {
           "type": "boolean",
           "description": "true 면 패널 고르기 건너뜀"
+         },
+         "force": {
+          "type": "boolean",
+          "default": false,
+          "description": "true 면 '지원하지 않는 형식' 판정을 무시하고 그대로 자동 보정"
+         },
+         "deskew": {
+          "type": "boolean",
+          "default": true,
+          "description": "false 면 기울기 보정 안 함(기본은 0.2~5° 기운 스캔을 바로 세운 그림으로 처리)"
          }
         },
         "required": [
@@ -21593,6 +21603,10 @@
      },
      "onboarded": {
       "type": "boolean"
+     },
+     "developer": {
+      "type": "boolean",
+      "description": "개발자 권한(개발자 업로드 탭 사용 가능)"
      }
     }
    },
@@ -30928,6 +30942,61 @@
       "type": "object",
       "additionalProperties": true,
       "description": "값축이 끊긴 그래프일 때만 — 코드 확인 필요"
+     },
+     "code": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "enum": [
+       "unsupported_chart",
+       null
+      ],
+      "description": "unsupported_chart 면 3D·등고선·히트맵·파이(도넛)·극좌표로 판정해 자동 추출을 멈춤(HTTP 200). message 에 안내"
+     },
+     "unsupported": {
+      "type": [
+       "object",
+       "null"
+      ],
+      "description": "지원하지 않는 형식 판정 근거",
+      "properties": {
+       "kind": {
+        "type": "string"
+       },
+       "label": {
+        "type": "string",
+        "description": "화면 표시용 이름(예: 3D 그래프)"
+       },
+       "why": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "deskew": {
+      "type": [
+       "object",
+       "null"
+      ],
+      "description": "기울기 보정을 했으면 바로 세운 새 그림. 이후 호출(crop·extract 등)은 image.id 로",
+      "properties": {
+       "angle": {
+        "type": "number",
+        "description": "돌린 각도(°)"
+       },
+       "from": {
+        "type": "string",
+        "description": "원래 그림 id"
+       },
+       "image": {
+        "type": "object",
+        "description": "/api/image 응답과 같은 모양(id·w·h …)",
+        "additionalProperties": true
+       }
+      }
      }
     },
     "required": [
