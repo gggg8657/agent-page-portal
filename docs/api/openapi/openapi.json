@@ -14727,6 +14727,32 @@
               "right"
              ],
              "description": "막대: 오른쪽 축 계열이면 표 머리글에 '(오른쪽 축)'"
+            },
+            "shared": {
+             "type": "array",
+             "items": {
+              "type": "array",
+              "items": {
+               "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2
+             },
+             "description": "겹침 구간 — 엑셀 계열 시트의 '보간됨' 열에 '겹침'(나머지 보간 구간은 '보간')(2026-10-20)"
+            },
+            "line_style": {
+             "type": [
+              "string",
+              "null"
+             ],
+             "enum": [
+              "solid",
+              "dashed",
+              "dotted",
+              "dashdot",
+              null
+             ],
+             "description": "실선이 아니면 엑셀 '보정' 시트에 '선 모양' 줄(2026-10-20)"
             }
            },
            "required": [
@@ -22227,6 +22253,1165 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/CodingtestRecommendResult"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/digitizer-local/api/review": {
+   "post": {
+    "tags": [
+     "digitizer-local"
+    ],
+    "operationId": "digitizerReview",
+    "summary": "AI 검수 — 추출 결과를 VLM 이 보고 정해진 행동만 제안, 픽셀로 확인한 것만 적용",
+    "description": "누를 때만(자동 처리 api/auto 안에서는 부르지 않음). 원본 자른 그림 + 추출 선(S1·S2… 이름표) 겹쳐 보기 2장과 계열 요약을 VLM 에 보내 JSON 스키마 안내 디코딩으로 swap·drop·rename·split_by_style·merge·missing·value_check 만 받는다. 서버가 픽셀로 확인한 제안만 적용(swap: 두 선이 그 x 에서 만나고 바꾸면 방향이 더 잘 이어질 때, drop: 이유별 근거, rename: 범례 이름만, missing: 그 색으로 다시 뽑아 선이 나올 때), 나머지는 rejected[].why. value_check 는 경고만 — VLM 이 읽은 숫자는 데이터에 쓰지 않음. 그림·범례 글자는 데이터로만 다룸. 같은 상태(그림·보정·계열·모델)면 저장된 결과(cached=true, VLM 안 부름). 사용자당 동시 1·10분 10번(넘으면 429 code=busy), VLM 동시 2, 시간 제한 120초. 패널은 지금 고른 한 칸만(화면이 칸마다 따로 처리).",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{16}$",
+          "description": "그림 id(지금 패널 — 자른 그림이면 그 id)"
+         },
+         "calib": {
+          "$ref": "#/components/schemas/DigitizerCalib"
+         },
+         "box": {
+          "$ref": "#/components/schemas/DigitizerBox"
+         },
+         "series": {
+          "type": "array",
+          "items": {
+           "type": "object",
+           "additionalProperties": true,
+           "properties": {
+            "name": {
+             "type": "string"
+            },
+            "color": {
+             "type": "string"
+            },
+            "px": {
+             "type": "array",
+             "items": {
+              "type": "array",
+              "items": {
+               "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2,
+              "description": "[x, y] 픽셀(왼쪽 위 원점, y 아래로 증가)"
+             }
+            },
+            "mode": {
+             "type": "string"
+            },
+            "how": {
+             "type": "string"
+            },
+            "kind": {
+             "type": "string"
+            },
+            "line_style": {
+             "type": [
+              "string",
+              "null"
+             ],
+             "enum": [
+              "solid",
+              "dashed",
+              "dotted",
+              "dashdot",
+              null
+             ],
+             "description": "선 모양 — 실선·파선·점선·일점쇄선(2026-10-20). 같은 색 계열을 모양으로 가른 계열은 이름 뒤에 ' · 실선'(또는 범례의 모양 이름)"
+            },
+            "interp": {
+             "type": "array",
+             "items": {
+              "type": "array",
+              "items": {
+               "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2
+             }
+            },
+            "shared": {
+             "type": "array",
+             "items": {
+              "type": "array",
+              "items": {
+               "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2
+             },
+             "description": "겹침 구간 — [시작 x, 끝 x] 그림 픽셀. 다른 선(또는 같은 자리 표식) 밑에 같은 값으로 숨어 그 경로·표식으로 채운 점. 이 구간은 interp 에도 들어 있음(예전 화면은 '보간됨'으로 봄) — 화면·엑셀은 '겹침'으로 따로 표시(2026-10-20)"
+            },
+            "dropped": {
+             "type": "boolean",
+             "description": "AI 검수가 뺀 계열(점 없음)"
+            },
+            "ai": {
+             "type": "boolean",
+             "description": "AI 검수가 다시 뽑은 계열"
+            }
+           },
+           "required": [
+            "name"
+           ]
+          },
+          "description": "지금 계열(S1·S2… 순서)"
+         },
+         "legend": {
+          "type": "array",
+          "items": {
+           "type": "string"
+          },
+          "maxItems": 30,
+          "description": "api/auto 의 vlm.legend[].name — rename 은 이 이름(또는 '이름 · 선 모양')만"
+         },
+         "style_legend": {
+          "type": "object",
+          "additionalProperties": {
+           "type": "string"
+          },
+          "description": "detect.style_legend"
+         },
+         "model": {
+          "type": [
+           "string",
+           "null"
+          ]
+         }
+        },
+        "required": [
+         "id",
+         "calib",
+         "box",
+         "series"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "message": {
+           "type": "string"
+          },
+          "actions": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": [
+             "type"
+            ],
+            "properties": {
+             "type": {
+              "type": "string",
+              "enum": [
+               "swap",
+               "drop",
+               "rename",
+               "split_by_style",
+               "merge",
+               "missing",
+               "value_check"
+              ]
+             },
+             "series": {
+              "type": "string",
+              "description": "S1·S2… (요청 series 순서)"
+             },
+             "other": {
+              "type": "string"
+             },
+             "x_from": {
+              "type": "number"
+             },
+             "x_to": {
+              "type": "number"
+             },
+             "reason": {
+              "type": "string",
+              "enum": [
+               "gridline",
+               "trendline",
+               "raw_trace",
+               "legend",
+               "text",
+               "other",
+               ""
+              ]
+             },
+             "name": {
+              "type": "string"
+             },
+             "color": {
+              "type": "string"
+             },
+             "style": {
+              "type": "string"
+             },
+             "hint": {
+              "type": "string"
+             },
+             "x": {
+              "type": "number"
+             },
+             "approx_y": {
+              "type": "number"
+             },
+             "why": {
+              "type": "string",
+              "description": "적용·거절 이유(한국어)"
+             },
+             "series_ids": {
+              "type": "array",
+              "items": {
+               "type": "string"
+              }
+             }
+            }
+           },
+           "description": "VLM 이 제안한 행동(형식만 정리)"
+          },
+          "applied": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": [
+             "type"
+            ],
+            "properties": {
+             "type": {
+              "type": "string",
+              "enum": [
+               "swap",
+               "drop",
+               "rename",
+               "split_by_style",
+               "merge",
+               "missing",
+               "value_check"
+              ]
+             },
+             "series": {
+              "type": "string",
+              "description": "S1·S2… (요청 series 순서)"
+             },
+             "other": {
+              "type": "string"
+             },
+             "x_from": {
+              "type": "number"
+             },
+             "x_to": {
+              "type": "number"
+             },
+             "reason": {
+              "type": "string",
+              "enum": [
+               "gridline",
+               "trendline",
+               "raw_trace",
+               "legend",
+               "text",
+               "other",
+               ""
+              ]
+             },
+             "name": {
+              "type": "string"
+             },
+             "color": {
+              "type": "string"
+             },
+             "style": {
+              "type": "string"
+             },
+             "hint": {
+              "type": "string"
+             },
+             "x": {
+              "type": "number"
+             },
+             "approx_y": {
+              "type": "number"
+             },
+             "why": {
+              "type": "string",
+              "description": "적용·거절 이유(한국어)"
+             },
+             "series_ids": {
+              "type": "array",
+              "items": {
+               "type": "string"
+              }
+             }
+            }
+           },
+           "description": "적용한 행동(why = 확인 근거)"
+          },
+          "rejected": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": [
+             "type"
+            ],
+            "properties": {
+             "type": {
+              "type": "string",
+              "enum": [
+               "swap",
+               "drop",
+               "rename",
+               "split_by_style",
+               "merge",
+               "missing",
+               "value_check"
+              ]
+             },
+             "series": {
+              "type": "string",
+              "description": "S1·S2… (요청 series 순서)"
+             },
+             "other": {
+              "type": "string"
+             },
+             "x_from": {
+              "type": "number"
+             },
+             "x_to": {
+              "type": "number"
+             },
+             "reason": {
+              "type": "string",
+              "enum": [
+               "gridline",
+               "trendline",
+               "raw_trace",
+               "legend",
+               "text",
+               "other",
+               ""
+              ]
+             },
+             "name": {
+              "type": "string"
+             },
+             "color": {
+              "type": "string"
+             },
+             "style": {
+              "type": "string"
+             },
+             "hint": {
+              "type": "string"
+             },
+             "x": {
+              "type": "number"
+             },
+             "approx_y": {
+              "type": "number"
+             },
+             "why": {
+              "type": "string",
+              "description": "적용·거절 이유(한국어)"
+             },
+             "series_ids": {
+              "type": "array",
+              "items": {
+               "type": "string"
+              }
+             }
+            }
+           },
+           "description": "거절한 행동(why = 이유)"
+          },
+          "warnings": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "series": {
+              "type": "string"
+             },
+             "x": {
+              "type": "number"
+             },
+             "value": {
+              "type": "number"
+             },
+             "ai_value": {
+              "type": "number"
+             },
+             "text": {
+              "type": "string"
+             }
+            }
+           }
+          },
+          "series": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+             "name": {
+              "type": "string"
+             },
+             "color": {
+              "type": "string"
+             },
+             "px": {
+              "type": "array",
+              "items": {
+               "type": "array",
+               "items": {
+                "type": "number"
+               },
+               "minItems": 2,
+               "maxItems": 2,
+               "description": "[x, y] 픽셀(왼쪽 위 원점, y 아래로 증가)"
+              }
+             },
+             "mode": {
+              "type": "string"
+             },
+             "how": {
+              "type": "string"
+             },
+             "kind": {
+              "type": "string"
+             },
+             "line_style": {
+              "type": [
+               "string",
+               "null"
+              ],
+              "enum": [
+               "solid",
+               "dashed",
+               "dotted",
+               "dashdot",
+               null
+              ],
+              "description": "선 모양 — 실선·파선·점선·일점쇄선(2026-10-20). 같은 색 계열을 모양으로 가른 계열은 이름 뒤에 ' · 실선'(또는 범례의 모양 이름)"
+             },
+             "interp": {
+              "type": "array",
+              "items": {
+               "type": "array",
+               "items": {
+                "type": "number"
+               },
+               "minItems": 2,
+               "maxItems": 2
+              }
+             },
+             "shared": {
+              "type": "array",
+              "items": {
+               "type": "array",
+               "items": {
+                "type": "number"
+               },
+               "minItems": 2,
+               "maxItems": 2
+              },
+              "description": "겹침 구간 — [시작 x, 끝 x] 그림 픽셀. 다른 선(또는 같은 자리 표식) 밑에 같은 값으로 숨어 그 경로·표식으로 채운 점. 이 구간은 interp 에도 들어 있음(예전 화면은 '보간됨'으로 봄) — 화면·엑셀은 '겹침'으로 따로 표시(2026-10-20)"
+             },
+             "dropped": {
+              "type": "boolean",
+              "description": "AI 검수가 뺀 계열(점 없음)"
+             },
+             "ai": {
+              "type": "boolean",
+              "description": "AI 검수가 다시 뽑은 계열"
+             }
+            },
+            "required": [
+             "name"
+            ]
+           },
+           "description": "적용 뒤 계열(뺀 계열은 dropped=true·점 없음, 나눈·찾은 계열은 뒤에 붙음)"
+          },
+          "series_before": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+             "name": {
+              "type": "string"
+             },
+             "color": {
+              "type": "string"
+             },
+             "px": {
+              "type": "array",
+              "items": {
+               "type": "array",
+               "items": {
+                "type": "number"
+               },
+               "minItems": 2,
+               "maxItems": 2,
+               "description": "[x, y] 픽셀(왼쪽 위 원점, y 아래로 증가)"
+              }
+             },
+             "mode": {
+              "type": "string"
+             },
+             "how": {
+              "type": "string"
+             },
+             "kind": {
+              "type": "string"
+             },
+             "line_style": {
+              "type": [
+               "string",
+               "null"
+              ],
+              "enum": [
+               "solid",
+               "dashed",
+               "dotted",
+               "dashdot",
+               null
+              ],
+              "description": "선 모양 — 실선·파선·점선·일점쇄선(2026-10-20). 같은 색 계열을 모양으로 가른 계열은 이름 뒤에 ' · 실선'(또는 범례의 모양 이름)"
+             },
+             "interp": {
+              "type": "array",
+              "items": {
+               "type": "array",
+               "items": {
+                "type": "number"
+               },
+               "minItems": 2,
+               "maxItems": 2
+              }
+             },
+             "shared": {
+              "type": "array",
+              "items": {
+               "type": "array",
+               "items": {
+                "type": "number"
+               },
+               "minItems": 2,
+               "maxItems": 2
+              },
+              "description": "겹침 구간 — [시작 x, 끝 x] 그림 픽셀. 다른 선(또는 같은 자리 표식) 밑에 같은 값으로 숨어 그 경로·표식으로 채운 점. 이 구간은 interp 에도 들어 있음(예전 화면은 '보간됨'으로 봄) — 화면·엑셀은 '겹침'으로 따로 표시(2026-10-20)"
+             },
+             "dropped": {
+              "type": "boolean",
+              "description": "AI 검수가 뺀 계열(점 없음)"
+             },
+             "ai": {
+              "type": "boolean",
+              "description": "AI 검수가 다시 뽑은 계열"
+             }
+            },
+            "required": [
+             "name"
+            ]
+           }
+          },
+          "ids": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           }
+          },
+          "model": {
+           "type": "string"
+          },
+          "vlm_calls": {
+           "type": "integer"
+          },
+          "elapsed": {
+           "type": "number"
+          },
+          "cached": {
+           "type": "boolean"
+          },
+          "key": {
+           "type": "string"
+          },
+          "validated": {
+           "type": "boolean"
+          }
+         },
+         "required": [
+          "ok",
+          "applied",
+          "rejected",
+          "series"
+         ]
+        }
+       }
+      }
+     },
+     "429": {
+      "description": "이미 검수 중이거나 10분 10번을 넘음",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "code": {
+           "type": "string",
+           "enum": [
+            "busy"
+           ]
+          }
+         },
+         "required": [
+          "error"
+         ]
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/digitizer-local/api/review/apply": {
+   "post": {
+    "tags": [
+     "digitizer-local"
+    ],
+    "operationId": "digitizerReviewApply",
+    "summary": "AI 검수 행동 다시 적용(행동마다 되돌리기)",
+    "description": "VLM 을 부르지 않음. 검수 때 적용한 행동(applied) 가운데 skip 번호를 뺀 나머지를 원래 계열(series_before)에 같은 확인을 거쳐 다시 적용.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{16}$",
+          "description": "그림 id(지금 패널 — 자른 그림이면 그 id)"
+         },
+         "calib": {
+          "$ref": "#/components/schemas/DigitizerCalib"
+         },
+         "box": {
+          "$ref": "#/components/schemas/DigitizerBox"
+         },
+         "series": {
+          "type": "array",
+          "items": {
+           "type": "object",
+           "additionalProperties": true,
+           "properties": {
+            "name": {
+             "type": "string"
+            },
+            "color": {
+             "type": "string"
+            },
+            "px": {
+             "type": "array",
+             "items": {
+              "type": "array",
+              "items": {
+               "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2,
+              "description": "[x, y] 픽셀(왼쪽 위 원점, y 아래로 증가)"
+             }
+            },
+            "mode": {
+             "type": "string"
+            },
+            "how": {
+             "type": "string"
+            },
+            "kind": {
+             "type": "string"
+            },
+            "line_style": {
+             "type": [
+              "string",
+              "null"
+             ],
+             "enum": [
+              "solid",
+              "dashed",
+              "dotted",
+              "dashdot",
+              null
+             ],
+             "description": "선 모양 — 실선·파선·점선·일점쇄선(2026-10-20). 같은 색 계열을 모양으로 가른 계열은 이름 뒤에 ' · 실선'(또는 범례의 모양 이름)"
+            },
+            "interp": {
+             "type": "array",
+             "items": {
+              "type": "array",
+              "items": {
+               "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2
+             }
+            },
+            "shared": {
+             "type": "array",
+             "items": {
+              "type": "array",
+              "items": {
+               "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2
+             },
+             "description": "겹침 구간 — [시작 x, 끝 x] 그림 픽셀. 다른 선(또는 같은 자리 표식) 밑에 같은 값으로 숨어 그 경로·표식으로 채운 점. 이 구간은 interp 에도 들어 있음(예전 화면은 '보간됨'으로 봄) — 화면·엑셀은 '겹침'으로 따로 표시(2026-10-20)"
+            },
+            "dropped": {
+             "type": "boolean",
+             "description": "AI 검수가 뺀 계열(점 없음)"
+            },
+            "ai": {
+             "type": "boolean",
+             "description": "AI 검수가 다시 뽑은 계열"
+            }
+           },
+           "required": [
+            "name"
+           ]
+          },
+          "description": "지금 계열(S1·S2… 순서)"
+         },
+         "legend": {
+          "type": "array",
+          "items": {
+           "type": "string"
+          },
+          "maxItems": 30,
+          "description": "api/auto 의 vlm.legend[].name — rename 은 이 이름(또는 '이름 · 선 모양')만"
+         },
+         "style_legend": {
+          "type": "object",
+          "additionalProperties": {
+           "type": "string"
+          },
+          "description": "detect.style_legend"
+         },
+         "model": {
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "actions": {
+          "type": "array",
+          "items": {
+           "type": "object",
+           "additionalProperties": true,
+           "required": [
+            "type"
+           ],
+           "properties": {
+            "type": {
+             "type": "string",
+             "enum": [
+              "swap",
+              "drop",
+              "rename",
+              "split_by_style",
+              "merge",
+              "missing",
+              "value_check"
+             ]
+            },
+            "series": {
+             "type": "string",
+             "description": "S1·S2… (요청 series 순서)"
+            },
+            "other": {
+             "type": "string"
+            },
+            "x_from": {
+             "type": "number"
+            },
+            "x_to": {
+             "type": "number"
+            },
+            "reason": {
+             "type": "string",
+             "enum": [
+              "gridline",
+              "trendline",
+              "raw_trace",
+              "legend",
+              "text",
+              "other",
+              ""
+             ]
+            },
+            "name": {
+             "type": "string"
+            },
+            "color": {
+             "type": "string"
+            },
+            "style": {
+             "type": "string"
+            },
+            "hint": {
+             "type": "string"
+            },
+            "x": {
+             "type": "number"
+            },
+            "approx_y": {
+             "type": "number"
+            },
+            "why": {
+             "type": "string",
+             "description": "적용·거절 이유(한국어)"
+            },
+            "series_ids": {
+             "type": "array",
+             "items": {
+              "type": "string"
+             }
+            }
+           }
+          }
+         },
+         "skip": {
+          "type": "array",
+          "items": {
+           "type": "integer"
+          },
+          "description": "빼고 적용할 actions 번호(0부터)"
+         }
+        },
+        "required": [
+         "id",
+         "calib",
+         "box",
+         "series",
+         "actions"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "series": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+             "name": {
+              "type": "string"
+             },
+             "color": {
+              "type": "string"
+             },
+             "px": {
+              "type": "array",
+              "items": {
+               "type": "array",
+               "items": {
+                "type": "number"
+               },
+               "minItems": 2,
+               "maxItems": 2,
+               "description": "[x, y] 픽셀(왼쪽 위 원점, y 아래로 증가)"
+              }
+             },
+             "mode": {
+              "type": "string"
+             },
+             "how": {
+              "type": "string"
+             },
+             "kind": {
+              "type": "string"
+             },
+             "line_style": {
+              "type": [
+               "string",
+               "null"
+              ],
+              "enum": [
+               "solid",
+               "dashed",
+               "dotted",
+               "dashdot",
+               null
+              ],
+              "description": "선 모양 — 실선·파선·점선·일점쇄선(2026-10-20). 같은 색 계열을 모양으로 가른 계열은 이름 뒤에 ' · 실선'(또는 범례의 모양 이름)"
+             },
+             "interp": {
+              "type": "array",
+              "items": {
+               "type": "array",
+               "items": {
+                "type": "number"
+               },
+               "minItems": 2,
+               "maxItems": 2
+              }
+             },
+             "shared": {
+              "type": "array",
+              "items": {
+               "type": "array",
+               "items": {
+                "type": "number"
+               },
+               "minItems": 2,
+               "maxItems": 2
+              },
+              "description": "겹침 구간 — [시작 x, 끝 x] 그림 픽셀. 다른 선(또는 같은 자리 표식) 밑에 같은 값으로 숨어 그 경로·표식으로 채운 점. 이 구간은 interp 에도 들어 있음(예전 화면은 '보간됨'으로 봄) — 화면·엑셀은 '겹침'으로 따로 표시(2026-10-20)"
+             },
+             "dropped": {
+              "type": "boolean",
+              "description": "AI 검수가 뺀 계열(점 없음)"
+             },
+             "ai": {
+              "type": "boolean",
+              "description": "AI 검수가 다시 뽑은 계열"
+             }
+            },
+            "required": [
+             "name"
+            ]
+           }
+          },
+          "applied": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": [
+             "type"
+            ],
+            "properties": {
+             "type": {
+              "type": "string",
+              "enum": [
+               "swap",
+               "drop",
+               "rename",
+               "split_by_style",
+               "merge",
+               "missing",
+               "value_check"
+              ]
+             },
+             "series": {
+              "type": "string",
+              "description": "S1·S2… (요청 series 순서)"
+             },
+             "other": {
+              "type": "string"
+             },
+             "x_from": {
+              "type": "number"
+             },
+             "x_to": {
+              "type": "number"
+             },
+             "reason": {
+              "type": "string",
+              "enum": [
+               "gridline",
+               "trendline",
+               "raw_trace",
+               "legend",
+               "text",
+               "other",
+               ""
+              ]
+             },
+             "name": {
+              "type": "string"
+             },
+             "color": {
+              "type": "string"
+             },
+             "style": {
+              "type": "string"
+             },
+             "hint": {
+              "type": "string"
+             },
+             "x": {
+              "type": "number"
+             },
+             "approx_y": {
+              "type": "number"
+             },
+             "why": {
+              "type": "string",
+              "description": "적용·거절 이유(한국어)"
+             },
+             "series_ids": {
+              "type": "array",
+              "items": {
+               "type": "string"
+              }
+             }
+            }
+           }
+          },
+          "rejected": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": [
+             "type"
+            ],
+            "properties": {
+             "type": {
+              "type": "string",
+              "enum": [
+               "swap",
+               "drop",
+               "rename",
+               "split_by_style",
+               "merge",
+               "missing",
+               "value_check"
+              ]
+             },
+             "series": {
+              "type": "string",
+              "description": "S1·S2… (요청 series 순서)"
+             },
+             "other": {
+              "type": "string"
+             },
+             "x_from": {
+              "type": "number"
+             },
+             "x_to": {
+              "type": "number"
+             },
+             "reason": {
+              "type": "string",
+              "enum": [
+               "gridline",
+               "trendline",
+               "raw_trace",
+               "legend",
+               "text",
+               "other",
+               ""
+              ]
+             },
+             "name": {
+              "type": "string"
+             },
+             "color": {
+              "type": "string"
+             },
+             "style": {
+              "type": "string"
+             },
+             "hint": {
+              "type": "string"
+             },
+             "x": {
+              "type": "number"
+             },
+             "approx_y": {
+              "type": "number"
+             },
+             "why": {
+              "type": "string",
+              "description": "적용·거절 이유(한국어)"
+             },
+             "series_ids": {
+              "type": "array",
+              "items": {
+               "type": "string"
+              }
+             }
+            }
+           }
+          },
+          "warnings": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "additionalProperties": true
+           }
+          }
+         },
+         "required": [
+          "ok",
+          "series"
+         ]
         }
        }
       }
@@ -32119,6 +33304,36 @@
           "right"
          ],
          "description": "오른쪽 축 계열이면 'right'(calib 가 calib2). 막대 모드에서는 막대 위를 지나는 선만 점이 있음(2026-10-20)"
+        },
+        "line_style": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "solid",
+          "dashed",
+          "dotted",
+          "dashdot",
+          null
+         ],
+         "description": "선 모양 — 실선·파선·점선·일점쇄선(2026-10-20). 같은 색 계열을 모양으로 가른 계열은 이름 뒤에 ' · 실선'(또는 범례의 모양 이름)"
+        },
+        "shared": {
+         "type": "array",
+         "items": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+         },
+         "description": "겹침 구간 — [시작 x, 끝 x] 그림 픽셀. 다른 선(또는 같은 자리 표식) 밑에 같은 값으로 숨어 그 경로·표식으로 채운 점. 이 구간은 interp 에도 들어 있음(예전 화면은 '보간됨'으로 봄) — 화면·엑셀은 '겹침'으로 따로 표시(2026-10-20)"
+        },
+        "split": {
+         "type": "boolean",
+         "description": "같은 색 범례 계열을 선 모양·표식으로 가른 계열"
         }
        }
       }
@@ -32148,6 +33363,13 @@
       "type": "object",
       "additionalProperties": true,
       "description": "그림 옆 색 띠(컬러바) {x0,y0,x1,y1} — 있으면 범례 없는 산점은 색과 상관없이 한 계열"
+     },
+     "style_legend": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "범례의 검은 모양 견본(예: 실선+속 찬 점 = '3 boxes', 파선+빈 원 = '4 boxes')을 계열이 아니라 모양 이름으로 본 것 {solid|dashed|dotted|dashdot: 이름} — 같은 색 실선·파선 계열 이름 뒤에 붙음(2026-10-20)"
      }
     },
     "description": "need_panel 이면 {ok:false, error}",
@@ -32591,6 +33813,11 @@
      "bar": {},
      "saved": {
       "type": "string"
+     },
+     "review": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "화면이 저장한 AI 검수 결과(actions·applied·rejected·warnings·before·undone) — 다시 열면 VLM 을 다시 부르지 않음(2026-10-20)"
      }
     },
     "description": "서버는 형식을 검사하지 않고 그대로 저장 — 화면이 정한 모양. 이력이 읽는 필드: name, image.id, calib, series[].name, series[].px"
