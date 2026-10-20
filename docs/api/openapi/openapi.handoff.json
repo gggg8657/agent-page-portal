@@ -34932,7 +34932,8 @@
     "battery-local",
     "shield-local",
     "avatar-local",
-    "padong-local"
+    "padong-local",
+    "agent-builder-local"
    ]
   }
  ]
