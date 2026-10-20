@@ -16,7 +16,7 @@ class ListsTest(unittest.TestCase):
         self.p.stop()
 
     def test_per_account(self):
-        self.assertEqual(lists.get(self.c, "a"), {"fav": [], "recent": []})
+        self.assertEqual(lists.get(self.c, "a"), {"fav": [], "recent": [], "home": "clean"})
         lists.put(self.c, "a", {"kind": "fav", "items": ["sql-local", "chart-local"]})
         self.assertEqual(lists.get(self.c, "a")["fav"], ["sql-local", "chart-local"])
         self.assertEqual(lists.get(self.c, "b")["fav"], [], "다른 계정에 보이면 안 됨")
@@ -28,6 +28,16 @@ class ListsTest(unittest.TestCase):
         self.assertEqual(lists.get(self.c, "a")["fav"], [])
         lists.put(self.c, "a", {"kind": "recent", "items": [f"t{i}-local" for i in range(30)]})
         self.assertEqual(len(lists.get(self.c, "a")["recent"]), 10)
+
+    def test_home_pref(self):
+        self.assertEqual(lists.put(self.c, "a", {"kind": "home", "items": ["plaza"]}), {"home": "plaza"})
+        self.assertEqual(lists.get(self.c, "a")["home"], "plaza")
+        self.assertEqual(lists.get(self.c, "b")["home"], "clean", "다른 계정은 기본값")
+        lists.put(self.c, "a", {"kind": "home", "items": ["clean"]})
+        self.assertEqual(lists.get(self.c, "a")["home"], "clean")
+        for items in (["x"], [], ["clean", "plaza"], "plaza"):
+            with self.assertRaises(ValueError):
+                lists.put(self.c, "a", {"kind": "home", "items": items})
 
     def test_bad_input(self):
         for req in ({"kind": "x", "items": []}, {"kind": "fav", "items": "sql-local"}, {"kind": "fav", "items": [1]}):
