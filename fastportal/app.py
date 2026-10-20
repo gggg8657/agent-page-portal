@@ -18,15 +18,16 @@ env: portal.py 와 같음(PORT 기본 8720, AGENT_DATA, AGENT_OWNERS, TLS_CERT·
      PORTAL_JOBS_SECRET(도구 토큰을 만드는 비밀값 — 없으면 _data/.portal_jobs_secret) PORTAL_JOBS_ALLOW(내부 경로를 더 받을 IP, 쉼표) PORTAL_JOBS_KEEPALIVE(SSE 빈 줄 초, 25)
      모두의 에이전트(flows.py·devsubmit.py): FLOW_RUN_MAX_BYTES(흐름 실행 본문 상한, 40MB) FLOW_MAX_RUNS(포털 전체 동시 흐름, 4)
      DEVSUBMIT_ZIP_MAX(개발자 zip 상한, 50MB) DEVCHECK_DOCKER_HOST(tcp://127.0.0.1:2375) DEVCHECK_IMAGE(dongjukim/agent-portal:v2) DEVCHECK_PYTHON DEVCHECK_TIMEOUT(180초)
+     F12 코드 수집·엿보기 막기: PORTAL_PROBE·PORTAL_PROBE_MAX·PORTAL_PROBE_WINDOW·PORTAL_PROBE_BLOCK_S·PORTAL_PROBE_BLOCK_MAX_S(probe.py) PORTAL_LEGACY_STRIP(proxy.py·strip.py) — 빌드 자산 권한은 webguard.py
      (모두 config.py 한곳에서 읽음 — 모두의 에이전트 값은 그 모듈 머리에서)
 tools.json 의 "host": 그 도구는 다른 컨테이너·서버(http://<host>:<port>) — 상태 확인·프록시만, 시작·중지는 409"""
-import asyncio, json, os, threading, time, urllib.parse
+import asyncio, json, os, re, secrets, threading, time, urllib.parse
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from starlette.concurrency import run_in_threadpool
 
-from . import accounts, auth, community, config, db, devsubmit, dwell, flows, idea, jobs, lists, pages, pkgindex, proxy, sessions, tools, workspace
+from . import accounts, auth, community, config, db, devsubmit, dwell, flows, idea, jobs, lists, pages, pkgindex, probe, proxy, sessions, tools, workspace
 from .config import OWNERS, TLS
 from .ctx import Ctx, TooBig, drain, length, not_implemented, parse_json, read_body, too_big
 
@@ -64,6 +65,9 @@ app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None
 
 
 # ── GET ─────────────────────────────────────────────────────────────────
+KNOWN = re.compile(r"/($|api/|t/|guide(/|$)|account$|approvals$|admin$)")   # 로그인 뒤 GET 이 갈 수 있는 주소(그 밖은 404)
+
+
 def get_sync(ctx):
     """막히는 일(DB·파일)을 하는 GET 전부 — 스레드 풀에서. 비동기로 할 일은 문자열 표시로 돌려줌('proxy'·'jobs_stream'·'tools')"""
     p = ctx.p
@@ -87,6 +91,8 @@ def get_sync(ctx):
             return ctx.bare(302, [("Location", "/")])
         sessions.end_session(ctx.cookie)
         return ctx.bare(302, [("Location", "/login"), ("Set-Cookie", sessions.cookie("", 0))])
+    if not KNOWN.match(p):   # 포털에 없는 주소(/.env·/.git/HEAD·/config.py·/src/ 등)는 로그인 여부와 상관없이 404 — 로그인 화면으로 보내지 않음(있는지 알리지 않음)
+        return ctx.send({"error": "not found"}, code=404)
     if not ctx.auth():
         return ctx.need_login()
     if p == "/api/me":
@@ -507,18 +513,79 @@ async def route(ctx, request):
     return not_implemented(ctx.method)
 
 
+# ── 엿보기 탐지(probe.py) ───────────────────────────────────────────────
+STATIC_EXT = re.compile(r"\.(png|jpe?g|gif|webp|svg|ico|css|js|mjs|woff2?|ttf|mp3|wav|ogg|mp4|webm|pdf|glb|gltf)$", re.I)
+
+
+def _probe_exempt(ctx):
+    """상태 확인·브라우저 자동 요청·이 서버 안의 로컬 주인 토큰 요청은 세지도 막지도 않음"""
+    if probe.exempt_path(ctx.p):
+        return True
+    h = ctx.headers.get("x-local-owner")
+    return bool(h) and sessions.local_owner(ctx.client, h)
+
+
+def _probe_user(ctx):
+    """세는 단위의 계정 — 경로가 아직 계정을 안 봤으면(로그인 전 404 등) 쿠키로 확인(거절 응답·차단 IP 일 때만 부름)"""
+    if ctx.uid is None and sessions.SID_RE.search(ctx.cookie):
+        ctx.auth()
+    return ctx.uid or ""
+
+
+def _probe_alert(ctx, user, hit):
+    """차단을 새로 걸었을 때: 감사 기록 + 관리자 알림함(작업 알림 'security' — 링크는 관리 화면)"""
+    sec, total, distinct, sample = hit
+    ip = ctx.client or "?"
+    detail = f"ip={ip} 계정={user or '(로그인 안 함)'} · {int(probe.WINDOW)}초에 거절 {total}번·다른 주소 {distinct}개 → {sec}초 차단 · 예: {', '.join(sample)}"[:1000]
+    print("probe:", detail, flush=True)
+    try:
+        with db.db() as c:
+            accounts.audit(c, user or "-", "probe_block", ip, detail)
+        j = jobs.upsert("owner", "security", "failed", f"probe-{int(time.time())}-{secrets.token_hex(3)}",
+                        f"의심 요청 차단: {user or '로그인 안 함'} ({ip})", "/admin", detail[:500])
+        if j:
+            jobs.HUB.publish("job", j, j["user"])
+    except Exception as e:
+        print("probe: 기록 실패", type(e).__name__, e, flush=True)
+
+
+def _blocked_response(ctx, left):
+    r = ctx.send({"error": f"짧은 시간에 없는·권한 없는 주소 요청이 너무 많아 잠시 막았습니다. {left}초 뒤에 다시 해 주세요",
+                  "code": "probe_blocked", "retry_after": left}, code=429, headers=[("Retry-After", str(left)), ("Cache-Control", "no-store")])
+    if ctx.method in ("POST", "PUT", "PATCH", "DELETE"):
+        r.raw_headers.append((b"connection", b"close"))   # 본문은 읽지 않고 끊음
+    return r
+
+
 async def handle(request: Request):
     ctx = Ctx(request)
-    try:
-        r = await route(ctx, request)
-    except ValueError:   # Content-Length 형식 오류 등
-        r = ctx.send({"error": "요청 형식이 틀립니다", "code": "bad_request"}, code=400)
-    except Exception as e:   # 예상 못 한 오류: 내부 정보(경로·스택)는 로그에만, 응답은 짧게
-        print("error:", ctx.method, ctx.p, type(e).__name__, e, flush=True)
-        r = ctx.send({"error": "서버 오류", "code": "server_error"}, code=500)
+    exempt = not probe.ENABLED or _probe_exempt(ctx)
+    r = None
+    if not exempt and probe.ip_has_block(ctx.client or ""):   # 이 IP 에 차단이 있을 때만 계정을 봄(평소엔 딕셔너리 한 번)
+        left = probe.blocked(ctx.client or "", await run_in_threadpool(_probe_user, ctx))
+        if left:
+            r = _blocked_response(ctx, left)
+    if r is None:
+        try:
+            r = await route(ctx, request)
+        except ValueError:   # Content-Length 형식 오류 등
+            r = ctx.send({"error": "요청 형식이 틀립니다", "code": "bad_request"}, code=400)
+        except Exception as e:   # 예상 못 한 오류: 내부 정보(경로·스택)는 로그에만, 응답은 짧게
+            print("error:", ctx.method, ctx.p, type(e).__name__, e, flush=True)
+            r = ctx.send({"error": "서버 오류", "code": "server_error"}, code=500)
+        st = getattr(r, "status_code", 200)
+        if not exempt and probe.is_counted(st) and not (st == 404 and ctx.p.startswith("/t/") and STATIC_EXT.search(ctx.p)):   # 도구 화면의 없는 그림·글꼴은 안 셈
+            user = await run_in_threadpool(_probe_user, ctx)
+            hit = probe.record(ctx.client or "", user, ctx.method, ctx.p)
+            if hit:
+                await run_in_threadpool(_probe_alert, ctx, user, hit)
     extra = cors_headers(ctx)
     if extra:
         r.raw_headers = [(k, v) for k, v in r.raw_headers if k.lower() not in (b"access-control-allow-origin", b"vary")] + extra
+    try:
+        r.raw_headers.append((b"x-robots-tag", b"noindex, nofollow"))   # 검색·수집기 색인 안 함(내부 포털)
+    except AttributeError:
+        pass
     return r
 
 

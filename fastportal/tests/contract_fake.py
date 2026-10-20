@@ -204,7 +204,7 @@ def hdr(hd, k):
 
 
 NEW_REQ = {"x-agent-auth", "cookie"}   # 새 포털이 일부러 바꾼 도구 쪽 헤더: 서명(X-Agent-Auth)을 붙이고 쿠키는 안 넘김 — '보안' 절에서 따로 확인
-NEW_RESP = {"x-content-type-options", "referrer-policy", "x-frame-options", "content-security-policy"}   # 새 포털이 붙이는 보안 응답 헤더
+NEW_RESP = {"x-content-type-options", "referrer-policy", "x-frame-options", "content-security-policy", "x-robots-tag"}   # 새 포털이 붙이는 보안 응답 헤더
 
 
 def norm(r):
@@ -457,9 +457,11 @@ etag = None
 st, hd, _ = req(WEBP, "GET", "/app/assets/index-AbC12345.js", tok=False); etag = hdr(hd, "etag")[0]
 st, _, _ = req(WEBP, "GET", "/app/assets/index-AbC12345.js", {"If-None-Match": etag}, tok=False)
 check(f"ETag 일치 → {st}", st == 304, kind="설정")
-for path, exp in (("/app/assets/old-Zz999999.js", 404), ("/app/nope.png", 404), ("/app/%2e%2e/tools.json", 404), ("/app/..%2f..%2fbind-local%2fapp.py", 404), ("/app", 302)):
-    st, hd, b = req(WEBP, "GET", path, tok=False)
+for path, exp in (("/app/assets/old-Zz999999.js", 401), ("/app/nope.png", 404), ("/app/%2e%2e/tools.json", 404), ("/app/..%2f..%2fbind-local%2fapp.py", 404), ("/app", 302)):
+    st, hd, b = req(WEBP, "GET", path, tok=False)   # 로그인 화면이 안 쓰는 자산은 로그인 전 401(있든 없든 — webguard)
     check(f"{path} → {st}", st == exp and b"bind.txt" not in b and b"remote-local" not in b, kind="설정")
+st, _, _ = req(WEBP, "GET", "/app/assets/old-Zz999999.js", CK, tok=False)
+check(f"로그인한 상태로 없는 자산 → {st}", st == 404, kind="설정")
 st, _, b = req(WEBP, "GET", "/api/me", tok=False)
 check(f"WEB_DIST 켜도 로그인 안 한 API 는 {st}", st == 401, kind="설정")
 st, _, b = req(WEBP, "GET", "/web/landing.json", tok=False)
@@ -483,7 +485,7 @@ launch("weblink", WEBL, {"WEB_DIST": LNK})
 st1, _, b1 = req(WEBL, "GET", "/app/login", tok=False)
 os.symlink(WEB2, LNK + ".new"); os.replace(LNK + ".new", LNK)   # 원자적으로 바꿈
 st2, _, b2 = req(WEBL, "GET", "/app/login", tok=False)
-st3, _, _ = req(WEBL, "GET", "/app/assets/index-AbC12345.js", tok=False)
+st3, _, _ = req(WEBL, "GET", "/app/assets/index-AbC12345.js", CK, tok=False)
 check(f"WEB_DIST 링크를 바꾸면 재시작 없이 새 빌드 → {st1}/{st2}, 옛 자산 {st3}", st1 == 200 and b'data-v="2"' not in b1 and st2 == 200 and b'data-v="2"' in b2 and st3 == 404, kind="설정")
 
 print("\n## '/' 전환 준비(WEB_ROOT=1·WEB_ROOT_DIST — 기본 꺼짐)")
@@ -510,8 +512,11 @@ st, hd, b = req(RTP, "GET", "/assets/index-R00t1234.js", tok=False)
 check(f"/assets/… → {st} 긴 캐시", st == 200 and b == b"console.log(2)" and "immutable" in hdr(hd, "cache-control")[0], kind="설정")
 st, _, b = req(RTP, "GET", "/theme-boot.js", tok=False)
 check(f"/theme-boot.js → {st} 루트 빌드 것", st == 200 and b == b"/*boot-root*/", kind="설정")
-for path, exp in (("/assets/old-Zz999999.js", 404), ("/assets/..%2f..%2ftools.json", 404)):
+for path, exp in (("/assets/old-Zz999999.js", 401), ("/assets/..%2f..%2ftools.json", 404)):   # 로그인 전: 공개 목록 밖 자산은 401(있든 없든), .. 이 든 경로는 404
     st, _, b = req(RTP, "GET", path, tok=False)
+    check(f"{path} → {st}", st == exp and b"remote-local" not in b, kind="설정")
+for path, exp in (("/assets/old-Zz999999.js", 404), ("/assets/..%2f..%2ftools.json", 404)):
+    st, _, b = req(RTP, "GET", path, CK, tok=False)
     check(f"{path} → {st}", st == exp and b"remote-local" not in b, kind="설정")
 st, _, _ = req(RTP, "GET", "/api/me", tok=False)
 st2, _, _ = req(RTP, "GET", "/api/me", CK, tok=False)

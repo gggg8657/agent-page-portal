@@ -239,9 +239,36 @@ bash agent-page-portal/scripts/start-fastportal.sh stop
 
 **React 화면(agent-page-web) — 같은 출처로**: `WEB_DIST=<빌드 폴더>` 를 주면 포털이 `WEB_PREFIX`(기본 `/app`) 아래에서 그 정적 파일을 직접 내보냅니다(따로 프록시 서버 없음 → 로컬 주인 판정이 섞이지 않음).
 `/app` → `/app/` 302 · 파일이 있으면 그 파일 · 없는 경로는 `index.html`(SPA 폴백: `/app/login`, `/app/tool/…`) · 없는 자산(`assets/…`·확장자 있는 이름)은 404 · `assets/`(해시 붙은 이름)는 `Cache-Control: public, max-age=31536000, immutable`, 그 밖(`index.html` 등)은 `no-cache` + ETag · HTML 엔 CSP(`'self'` 만)·`X-Frame-Options: SAMEORIGIN`.
-로그인 화면(`/app/login`)과 자산은 로그인 없이 내보내고, 그 밖의 화면 주소는 로그인 전이면 `/app/login?next=<라우터 경로>` 로 302(포털 `/` 처럼 — 화면이 401 을 받고 옮기는 것보다 빠르고 콘솔 오류 없음). API 는 예전처럼 401. 이미 로그인한 채 `/app/login` 이면 `next`(라우터 경로 `/all`·`/approvals`·`/admin`·`/tool/x` 는 `/app/…` 로, `/t/<dir>/` 는 `/app/tool/<dir>`, `/guide/` 같은 포털 경로는 그대로)로 302.
+로그인 화면(`/app/login`)과 그 화면이 쓰는 자산만 로그인 없이 내보내고(나머지 자산은 로그인·권한 — 아래 'F12 코드 수집·엿보기 막기'), 그 밖의 화면 주소는 로그인 전이면 `/app/login?next=<라우터 경로>` 로 302(포털 `/` 처럼 — 화면이 401 을 받고 옮기는 것보다 빠르고 콘솔 오류 없음). API 는 예전처럼 401. 이미 로그인한 채 `/app/login` 이면 `next`(라우터 경로 `/all`·`/approvals`·`/admin`·`/tool/x` 는 `/app/…` 로, `/t/<dir>/` 는 `/app/tool/<dir>`, `/guide/` 같은 포털 경로는 그대로)로 302.
 운영 배포: agent-page-web `npm run deploy`(= `scripts/deploy.sh`) — 빌드를 `<상위>/_web/releases/<시각>` 에 두고 `_web/app` 링크를 원자적으로 바꿈(옛 해시 자산 유지, `--rollback`). 포털 재시작 필요 없음.
 React 랜딩이 읽는 `GET /web/landing.json`·`/app/web/landing.json`(분류·도구 수, 로그인 화면과 같은 값)도 이때만 열립니다. React 쪽은 빌드 base(`WEB_BASE`, 기본 `/app/`)를 라우터 `basename`·`toLogin`·로그아웃이 따릅니다(agent-page-web `src/lib/base.ts`). 이미지 빌드는 multi-stage(Node 단계 `npm ci && npm run build` → `dist` 를 포털 이미지의 `WEB_DIST` 로 복사, 빌드 결과는 저장소에 넣지 않음).
+
+**F12 코드 수집·엿보기 막기(2026-10-20)** — 브라우저 개발자 도구(F12)로 화면 코드를 통째로 받아 가거나 주소를 훑는 것을 줄임. 로그인한 브라우저에 내려간 것은 결국 읽을 수 있으므로(아래 '한계') '로그인 전·권한 없는 계정에 안 보냄'이 목표.
+
+| 대상 | 로그인 전 | 일반 계정 | 부서장 | 개발자 | 관리자 |
+|---|---|---|---|---|---|
+| 로그인 화면 번들(`index.html` 진입 JS·CSS — React 라우터·로그인 화면만) | 200 | 200 | 200 | 200 | 200 |
+| 그 밖의 React 번들(셸·홈·도구 화면 등, `/assets/*`·`/app/assets/*`) | 401 | 200 | 200 | 200 | 200 |
+| 관리 화면 번들(`src/pages/Admin.tsx` 에서만 불리는 조각) | 401 | 404 | 404 | 404 | 200 |
+| 승인 화면 번들(`src/pages/Approvals.tsx`) | 401 | 404 | 200 | 404 | 200 |
+| 개발자 업로드·제출 상세·패키지 목록 올리기(`src/pages/DevTools.tsx`) | 401 | 404 | 404 | 200 | 200 |
+| `.vite/`(manifest)·점으로 시작하는 경로·`.map` | 404 | 404 | 404 | 404 | 404 |
+
+- 판단은 React 빌드의 `.vite/manifest.json`(agent-page-web `build.manifest`)으로 매 배포 자동(`fastportal/webguard.py`, 화면 파일 이름은 `ROLE_SRC`). manifest 에 없는 파일(배포 때 옮겨 온 옛 번들)은 로그인한 계정에 엶 — '확실히 관리·개발자 것'만 닫음. 옛 빌드의 manifest 도 `deploy.sh` 가 `.vite/manifest.<시각>.json` 으로 옮겨 두어 계속 가림. 로그인·권한 번들은 `Cache-Control: private`(공유 캐시 안 됨)·`Vary: Cookie`.
+- **포털에 없는 주소**(`/.env`·`/.git/HEAD`·`/config.py`·`/_data/`·`/fastportal/`·`/package.json`·`/src/` 등)는 로그인 여부와 상관없이 404(예전엔 로그인 전이면 로그인 화면으로 보냄). 디렉터리 목록·백업 파일·소스맵은 내보내지 않음.
+- **기존 도구 화면**(`/t/<도구>/` 첫 HTML): 새 화면(React)이 모두 '검증 중(beta)'이고 CAD·파동이는 기존 화면을 iframe 으로만 쓰므로 막지 않고, **일반 계정에는 주석을 걷은 HTML** 을 보냄(관리자는 원본) — `fastportal/strip.py`: HTML 주석, `<script>` 안 줄 맨 앞 `//`·`/* */`, `<style>` 안 줄 맨 앞 `/* */` 만(문자열·템플릿·정규식은 토크나이저로 건너뜀, 저작권·라이선스 주석은 남김, 확신이 없으면 원본). 도구 화면 26개(숨긴 것 포함) 전부 원본과 AST(TypeScript 파서)가 같고 브라우저 오류가 늘지 않음을 확인(`fastportal/tests/test_guard.py`). 끄기: `PORTAL_LEGACY_STRIP=0`. 도구의 별도 JS 파일(`/t/<도구>/static/*.js`)은 그대로.
+- **엿보기 탐지·잠시 차단**(`fastportal/probe.py`): 접속지(IP)+계정별로 최근 60초의 거절 응답(401·403·404·405·CSRF 거절)을 세어 **서로 다른 주소 30개** 또는 **거절 150번**이 넘으면 모든 요청에 **429 `code: "probe_blocked"` + `Retry-After`** — 처음 60초, 24시간 안에 다시 걸리면 2배씩(최대 1시간). 차단마다 감사 기록(`probe_block`, 누가·IP·건수·주소 예시 — 관리 화면 '감사 기록')과 관리자 알림함('포털 보안 · 의심 요청 차단', 링크 관리 화면). 같은 주소를 되풀이하는 폴링 404 는 '다른 주소' 수를 늘리지 않고, 도구 화면의 없는 그림·글꼴(`/t/…/*.png` 등) 404 는 세지 않음. 빼는 것: 이 서버 안 + `X-Local-Owner` 토큰 요청, `/api/version`·`/healthz`·`/t/<도구>/healthz`, `/favicon.ico`·`/robots.txt`·`/apple-touch-icon*`·`/.well-known/*`. 셈·차단은 메모리에만 — **포털을 다시 켜면 풀림**(감사 기록은 남음).
+- 모든 응답 `X-Robots-Tag: noindex, nofollow`, `Server` 헤더 없음(도구가 준 `Server`·`X-Powered-By` 도 뺌). React 번들 맨 앞에 저작권 주석(`/*! © 2026 DongJu Kim (gggg8657) · All rights reserved · … */`, 압축 뒤에 붙여 지워지지 않음), 소스맵 없음.
+- **하지 않은 것**: F12·오른쪽 클릭 막기 스크립트 — 주소창·다른 브라우저·curl 로 바로 우회되고, 접근성(키보드·화면 낭독기)·복사 같은 정상 사용만 망가뜨림. JS 난독화 — 폐쇄망에 이미 있는 node_modules 에 난독화 도구가 없고 새 의존성을 들이지 않음(넣는다면 번들 크기·속도·오류 추적 비용 대비 효과는 '읽기 귀찮게' 정도).
+- **한계**: 로그인한 브라우저에 보낸 것(그 계정이 받을 수 있는 번들·도구 화면·API 응답)은 개발자 도구로 읽을 수 있음. 비밀은 화면 코드에 두지 않고 서버 권한 검사로 지킴(모든 관리 API 는 서버에서 403).
+
+| 환경변수 | 기본 | 설명 |
+|---|---|---|
+| `PORTAL_PROBE` | 1 | 엿보기 탐지·차단(0 이면 끔) |
+| `PORTAL_PROBE_MAX` | 30 | 창 안 '서로 다른 거절 주소' 문턱(거절 총수 문턱은 ×5) |
+| `PORTAL_PROBE_WINDOW` | 60 | 세는 창(초) |
+| `PORTAL_PROBE_BLOCK_S`·`PORTAL_PROBE_BLOCK_MAX_S` | 60·3600 | 첫 차단 초·다시 걸릴 때 2배씩 늘리는 상한 |
+| `PORTAL_LEGACY_STRIP` | 1 | 기존 도구 화면 주석 걷기(일반 계정만) |
 
 워커는 **1개**(비동기)로 씁니다. 작업 알림 SSE 구독(작업 표는 DB 지만 실시간 전달은 프로세스 안 큐)·도구 켜짐 캐시·GPU 캐시가 프로세스 메모리라, 워커를 늘리면 이 셋을 공유 저장소(예: Redis pub/sub)로 옮겨야 합니다(세션·잠금·계정은 이미 DB). 막히는 일(DB·PIN 해시·nvidia-smi)은 스레드 풀에서 돌아 이벤트 루프를 막지 않습니다.
 

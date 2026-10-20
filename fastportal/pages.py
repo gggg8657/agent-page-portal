@@ -2,7 +2,7 @@
 응답은 넘겨받은 ctx(app.Ctx: send·bare·redirect·auth·html_page)로만 만든다 — 이 모듈은 ctx 를 import 하지 않음(순환 없음)."""
 import base64, json, os, re, time, urllib.parse
 
-from . import accounts, auth, config, sessions, tools
+from . import accounts, auth, config, sessions, tools, webguard
 from .config import THEME_DIR, V2_DIR, WEB_DIST, WEB_PREFIX, WEB_ROOT, WEB_ROOT_DIST
 from .db import db
 
@@ -203,7 +203,8 @@ def theme_file(ctx, p):
 # ── React 화면(agent-page-web 빌드) 같은 출처로 내보내기 ─────────────────────────
 # WEB_DIST(빌드 폴더)가 있으면 WEB_PREFIX(기본 /app) 아래에서 dist 를 내보냄. 파일이 없는 경로는 index.html(SPA 폴백),
 # 없는 자산(assets/·확장자 있는 파일)은 404. assets/ 는 해시 붙은 이름이라 1년 캐시, 그 밖(index.html 등)은 no-cache.
-# 로그인 화면(/app/login)과 자산은 로그인 없이 내보내고, 그 밖의 화면 주소는 로그인 전이면 /app/login?next= 로 302. 규칙은 agent-page-web/server.py static() 과 같음
+# 로그인 화면(/app/login)과 그 화면이 쓰는 자산만 로그인 없이 내보내고(webguard — 나머지 자산은 401, 관리·승인·개발자 화면 번들은 그 역할만),
+# 그 밖의 화면 주소는 로그인 전이면 /app/login?next= 로 302. .vite/(manifest)·점으로 시작하는 경로·.map 은 404
 # '/' 전환(WEB_ROOT=1): 포털 화면 주소(/ · /login · /all · /fav · /recent · /account · /approvals · /admin · /tool/*)와
 # 빌드 자산(/assets/* · /theme-boot.js · /fonts.css)을 WEB_ROOT_DIST(agent-page-web `npm run build:root`·deploy.sh --root)에서 내보낸다.
 # /api · /t · /theme · /guide · /logout · /landing 과 /app(WEB_DIST)은 그대로.
@@ -251,6 +252,19 @@ def web_file(ctx, p):
             nxt = prefix + nxt
         return ctx.redirect(nxt)
     dist = os.path.realpath(dist_env)
+    if any(x.startswith(".") for x in rel.split("/")) or rel.lower().endswith(".map"):   # .vite/(manifest)·.git·소스맵 등은 밖으로 안 냄
+        return ctx.send({"error": "not found"}, code=404)
+    gated = None
+    if rel.startswith("assets/"):   # 빌드 자산 권한(webguard): 로그인 화면 번들만 공개, 나머지 로그인, 관리·승인·개발자 화면 번들은 그 역할만
+        need = webguard.policy(dist, prefix).need(rel)
+        if need != "public":
+            if not ctx.auth():
+                ctx.setcookie = None
+                return ctx.send({"error": "로그인이 필요합니다", "login": "/login"}, code=401, headers=[("Cache-Control", "no-store")])
+            if need != "login" and not (need & webguard.user_roles(ctx)):
+                ctx.setcookie = None
+                return ctx.send({"error": "not found"}, code=404, headers=[("Cache-Control", "no-store")])
+            gated = need
     f = os.path.realpath(os.path.join(dist, rel)) if rel and "\x00" not in rel else ""
     if not (f and f.startswith(dist + os.sep) and os.path.isfile(f)):
         if rel.startswith("assets/") or re.search(r"\.[A-Za-z0-9]{1,12}$", rel.rsplit("/", 1)[-1]):
@@ -265,8 +279,10 @@ def web_file(ctx, p):
     st = os.stat(f)
     etag = f'"{int(st.st_mtime)}-{st.st_size}"'
     immutable = f.startswith(os.path.join(dist, "assets") + os.sep)
-    hd = [("ETag", etag), ("Cache-Control", "public, max-age=31536000, immutable" if immutable else "no-cache"), ("X-Content-Type-Options", "nosniff"),
-          ("Referrer-Policy", "same-origin")]
+    cc = "no-cache" if not immutable else "private, max-age=31536000, immutable" if gated else "public, max-age=31536000, immutable"   # 로그인·권한 번들은 브라우저에만(공유 캐시 안 됨)
+    hd = [("ETag", etag), ("Cache-Control", cc), ("X-Content-Type-Options", "nosniff"), ("Referrer-Policy", "same-origin")]
+    if gated:
+        hd.append(("Vary", "Cookie"))
     if ext == ".html":
         hd += [("Content-Security-Policy", WEB_CSP), ("X-Frame-Options", "SAMEORIGIN")]
     if ctx.headers.get("if-none-match") == etag:

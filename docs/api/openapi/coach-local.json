@@ -895,6 +895,7 @@
        "ip_locked",
        "busy",
        "rate_limited",
+       "probe_blocked",
        "unsupported",
        "unavailable",
        "csrf",

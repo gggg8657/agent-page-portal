@@ -2,7 +2,7 @@
 도구로 보내는 헤더 규칙: 사용자 헤더(X-Agent-User 등)·쿠키(전부 — 도구는 쿠키를 안 씀)·로컬 주인 토큰·서명은 버리고
 포털이 정한 X-Agent-User + 서명(X-Agent-Auth, config.TOOL_AUTH)을 붙임. 모든 메서드(GET·POST·PUT·DELETE·PATCH·HEAD·OPTIONS)를 넘김.
 도구 응답: 포털 쿠키(ag*)를 덮는 Set-Cookie 는 버리고, 보안 헤더(nosniff·frame-ancestors 등)를 붙이고, API 가 주는 HTML·SVG(사용자 내용)는 sandbox 로.
-도구 첫 화면 HTML 에만 사용법(?)·테마·저작자 표기를 끼워 넣음. 오래 걸리는 POST 는 작업 알림(jobs)에 자동 기록."""
+도구 첫 화면 HTML 에만 사용법(?)·테마·저작자 표기를 끼워 넣음(일반 사용자에겐 주석을 걷은 HTML — strip.py, PORTAL_LEGACY_STRIP). 오래 걸리는 POST 는 작업 알림(jobs)에 자동 기록."""
 import asyncio, http.cookiejar, os, re, secrets, sqlite3, tempfile, time, urllib.parse
 
 import anyio
@@ -10,7 +10,7 @@ import httpx
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import Response
 
-from . import config, jobs, pages, tools
+from . import config, jobs, pages, strip, tools
 from .config import HOP
 from .ctx import Raw, TooBig, drain, length, too_big
 
@@ -20,6 +20,7 @@ SPOOL_MEM = 8 * 1024 * 1024   # 청크 업로드: 이보다 크면 메모리 대
 # 사용자 내용일 수 있는 문서형 응답(API 가 주는 HTML·SVG·XML) → 별도 출처처럼 격리(sandbox: 스크립트는 돌아도 포털 쿠키·API 에 못 닿음)
 SANDBOX_TYPES = ("text/html", "image/svg+xml", "application/xhtml+xml", "text/xml", "application/xml")
 REDIRECTS = (301, 302, 303, 307, 308)
+STRIP = os.environ.get("PORTAL_LEGACY_STRIP", "1") != "0"   # 기존 도구 화면(첫 HTML)의 주석을 일반 사용자에겐 걷어 냄(strip.py) — 0 이면 원본
 CLIENT = {"c": None}
 
 
@@ -153,7 +154,7 @@ def response_headers(ctx, r, rest):
     out = [(b"set-cookie", ctx.setcookie.encode())] if ctx.setcookie else []
     for k, v in r.headers.raw:
         kl = k.decode("latin-1").lower()
-        if kl in HOP or (kl == "set-cookie" and AG_SETCOOKIE.match(v)):
+        if kl in HOP or kl in ("server", "x-powered-by") or (kl == "set-cookie" and AG_SETCOOKIE.match(v)):   # 도구 서버 종류·버전은 내보내지 않음
             continue
         out.append((k, v))
     have = {k.decode("latin-1").lower() for k, _ in out}
@@ -264,7 +265,12 @@ async def proxy(ctx):
             rec(); return ctx.send({"error": f"{t['dir']} 응답 없음 ({_errname(e)}) — 포털에서 '시작'을 누르세요"}, code=502)
         finally:
             await r.aclose()
-        body = await run_in_threadpool(lambda: ctx.html_page(raw.decode("utf-8", "replace") + ctx.help_html(t["dir"]), "tool", t["dir"]))
+        def page():
+            html = raw.decode("utf-8", "replace")
+            if STRIP and not ctx.is_owner:   # 일반 사용자에겐 주석을 걷은 화면(동작 같음 — strip.py). 관리자는 원본
+                html = strip.stripped(html)
+            return ctx.html_page(html + ctx.help_html(t["dir"]), "tool", t["dir"])
+        body = await run_in_threadpool(page)
         rec()
         return Raw(body, r.status_code, out)
     up_len = r.headers.get("content-length")
