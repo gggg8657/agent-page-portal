@@ -64,7 +64,7 @@ def _read(t, path, user):
     if not host:
         raise ValueError("도구 주소 설정을 확인하세요")
     host = f"[{host}]" if ":" in host else host
-    req = urllib.request.Request(f"http://{host}:{int(t['port'])}{path}", headers={**jobs.tool_headers(user), "Accept": "application/json"})
+    req = urllib.request.Request(f"http://{host}:{int(t['port'])}{path}", headers={**jobs.tool_headers(user, t["dir"]), "Accept": "application/json"})
     with jobs.TOOL_OPENER.open(req, timeout=5) as r:
         if "application/json" not in r.headers.get("Content-Type", ""):
             raise ValueError("도구가 JSON 이력을 반환하지 않습니다")

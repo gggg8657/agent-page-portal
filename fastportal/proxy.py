@@ -197,12 +197,12 @@ async def spool_body(ctx):
     return n, it()
 
 
-def upstream_headers(ctx, length_):
+def upstream_headers(ctx, length_, tool_dir):
     """도구로 보낼 요청 헤더(규칙은 머리말)"""
     hd = [(k.decode("latin-1"), v.decode("latin-1")) for k, v in ctx.request.headers.raw if k.decode("latin-1").lower() not in DROP_REQ]
     hd.append(("X-Agent-User", ctx.agent_user))
     if config.TOOL_AUTH:
-        hd.append(("X-Agent-Auth", jobs.sign(ctx.agent_user)))
+        hd.append(("X-Agent-Auth", jobs.sign(ctx.agent_user, tool_dir)))
     hd.append(("Accept-Encoding", "identity"))   # 압축 안 받음(portal.py 의 urllib 와 같음) — 첫 화면 HTML 에 끼워 넣어야 하므로
     if length_ is not None:
         hd.append(("Content-Length", str(length_)))
@@ -255,7 +255,7 @@ async def proxy(ctx):
             rec(); return too_big(ctx, config.MAX_BODY)
         if not clen:
             clen, content = None, None
-    hd = upstream_headers(ctx, clen)
+    hd = upstream_headers(ctx, clen, t["dir"])
     host = tools.tool_host(t)
     if not host:   # tools.json 의 host 형식이 틀림 — 엉뚱한 주소로 보내지 않음(값은 응답에 안 넣음)
         print("proxy: tools.json host 형식 틀림:", t["dir"], flush=True)

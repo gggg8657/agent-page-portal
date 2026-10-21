@@ -83,7 +83,7 @@ def _builder_post(path, body):
     t = tools.tool(community.BUILDER)
     if not t or not tools.tool_host(t):
         return 502, None
-    hd = {**jobs.tool_headers("owner"), "Accept": "application/json", "Content-Type": "application/json"}
+    hd = {**jobs.tool_headers("owner", community.BUILDER), "Accept": "application/json", "Content-Type": "application/json"}
     rq = urllib.request.Request(f"http://{tools.tool_host(t)}:{int(t['port'])}{path}", data=json.dumps(body).encode(), headers=hd, method="POST")
     try:
         with jobs.TOOL_OPENER.open(rq, timeout=10) as r:

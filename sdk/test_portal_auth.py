@@ -43,15 +43,22 @@ assert c == 200 and j["ok"] and j["tool"] == "test-local" and j["auth"] == "stan
 os.environ["PORTAL_TOOL_KEY"] = "k" * 43
 assert get("/x")[0] == 401                                            # 헤더 없음
 assert get("/x", {"X-Agent-User": "owner"})[0] == 401                 # 사용자만(위장)
-assert get("/x", pa.sign("kim")) == (200, {"user": "kim"})            # 서명 맞음
-assert get("/x", pa.sign("kim"), method="POST") == (200, {"user": "kim"})
-bad = pa.sign("kim"); bad["X-Agent-User"] = "owner"
+assert get("/x", pa.sign("kim", "test-local")) == (200, {"user": "kim"})            # 서명 맞음
+assert get("/x", pa.sign("kim", "test-local"), method="POST") == (200, {"user": "kim"})
+bad = pa.sign("kim", "test-local"); bad["X-Agent-User"] = "owner"
 assert get("/x", bad)[0] == 401                                       # 서명은 kim, 사용자 바꿔치기
-old = pa.sign("kim", now=time.time() - 600)
+old = pa.sign("kim", "test-local", now=time.time() - 600)
 assert get("/x", old)[0] == 401                                       # 10분 전 서명
 assert get("/x", {"X-Agent-User": "kim", "X-Agent-Auth": "v1.x.y"})[0] == 401
-assert get("/x", {"X-Agent-Auth": pa.sign("kim")["X-Agent-Auth"]})[0] == 401   # 사용자 헤더 없이
-assert pa.sign("") == {}                                              # 사용자 없으면 서명 안 함
+assert get("/x", {"X-Agent-Auth": pa.sign("kim", "test-local")["X-Agent-Auth"]})[0] == 401   # 사용자 헤더 없이
+assert pa.sign("", "test-local") == {}
+assert get("/x", pa.sign("kim", "other-local"))[0] == 401   # 다른 도구 앞으로 만든 서명은 이 도구에서 안 통함(로그에 남은 서명 재사용 막기)
+v1 = pa.sign("kim", "test-local"); ts = v1["X-Agent-Auth"].split(".")[1]   # 예전 v1 형식은 받지 않음
+v1["X-Agent-Auth"] = "v1.%s.%s" % (ts, __import__("hmac").new(("k" * 43).encode(), f"v1|{ts}|kim".encode(), "sha256").hexdigest())
+assert pa.verify("kim", v1["X-Agent-Auth"], "test-local", now=int(ts)) == (time.strftime("%Y-%m-%d", time.gmtime(int(ts))) < pa.V1_UNTIL)   # 옮기는 동안만
+_u = pa.V1_UNTIL; pa.V1_UNTIL = "2000-01-01"
+assert get("/x", v1)[0] == 401                                        # 날짜가 지나면 v1 거부
+pa.V1_UNTIL = _u                                              # 사용자 없으면 서명 안 함
 c, j = get("/healthz")
 assert c == 200 and j["auth"] == "signed", j                           # 헬스는 서명 없이
 os.environ["PORTAL_TOOL_KEY"] = "other-key-xxxxxxxxxxxxxxxxx"
@@ -74,8 +81,8 @@ f = Fake("172.17.0.9"); assert pa.check(f, "t")                       # 옮기�
 f = Fake("172.18.0.9"); assert not pa.check(f, "t") and f.code == 403
 os.environ["PORTAL_TOOL_KEY"] = "k" * 43
 f = Fake("172.17.0.9"); assert pa.check(f, "t")                       # 서명 모드에서도 허용 대역은 서명 없이
-f = Fake("172.17.0.9", {"X-Agent-Auth": "v1.1.bad", "X-Agent-User": "kim"}); assert not pa.check(f, "t") and f.code == 401   # 틀린 서명은 허용 대역이어도 거부
-f = Fake("10.0.0.5", pa.sign("kim")); assert pa.check(f, "t")         # 서명 맞으면 어디서든
+f = Fake("172.17.0.9", {"X-Agent-Auth": "v2.1.bad", "X-Agent-User": "kim"}); assert not pa.check(f, "t") and f.code == 401   # 틀린 서명은 허용 대역이어도 거부
+f = Fake("10.0.0.5", pa.sign("kim", "t")); assert pa.check(f, "t")         # 서명 맞으면 어디서든
 os.environ.pop("PORTAL_AUTH_ALLOW_UNSIGNED")
 # 4) 오류 문장 정리
 assert pa.scrub("No such file: '/home/u/agent-page/x.json'") == "No such file: '<경로>'"

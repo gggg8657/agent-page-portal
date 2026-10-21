@@ -56,7 +56,7 @@ def _tool_url(d, path):
 def _req(user, d, path, body, deadline):
     url = _tool_url(d, path)
     data = json.dumps(body, ensure_ascii=False).encode()
-    hd = {**jobs.tool_headers(user), "Content-Type": "application/json", "Accept-Encoding": "identity"}
+    hd = {**jobs.tool_headers(user, d), "Content-Type": "application/json", "Accept-Encoding": "identity"}
     left = deadline - time.time()
     if left <= 0:
         raise StepError("단계 시간 제한을 넘었습니다")
