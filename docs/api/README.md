@@ -324,14 +324,13 @@ npx @redocly/cli lint docs/api/openapi/openapi.json                             
 | 도구가 받는 요청 | 키가 있으면 서명이 맞는 요청만(아니면 401 `code: unauthenticated`). 키가 없으면(포털 없이 띄움) 127.0.0.1 요청만(아니면 403). 예외 `GET /healthz`(데이터 없음). 바인드 기본 127.0.0.1 |
 | 도구 → 포털 응답 | 도구가 포털 쿠키(`ag…`)를 덮는 Set-Cookie 는 버림. `X-Content-Type-Options: nosniff`·`Referrer-Policy: same-origin`·`X-Frame-Options`·CSP `frame-ancestors` 를 붙임. 도구 API 가 주는 HTML·SVG·XML(사용자 내용일 수 있음)은 CSP `sandbox` — 그 안의 스크립트는 포털 쿠키·API 에 못 닿음 |
 | 도구 → 포털 작업 알림 | 도구별 HMAC 토큰 + 접속지(127.0.0.1·tools.json host·`PORTAL_JOBS_ALLOW`) |
-| 관리자 | 계정 `AGENT_OWNERS`, 또는 서버 안(127.0.0.1)에서 비밀 헤더 `X-Local-Owner`(토큰 파일, 600). 관리 API 는 서버에서 권한 확인. 숨긴 도구는 관리자만 쓰고 켬 |
+| 관리자 | 계정 `AGENT_OWNERS`, 또는 서버 안(127.0.0.1)에서 비밀 헤더 `X-Local-Owner`(토큰 파일, 600). 관리 API 는 서버에서 권한 확인. 숨긴 도구는 관리자만 쓰고 켬. 도구에는 관리자 계정도 자기 `X-Agent-User`(작업 폴더 `u/<id>`)로 가고 권한은 서명된 `X-Agent-Role: admin`(`X-Agent-Role-Auth: r1.<초>.HMAC(도구 키, "r1\|<초>\|<사용자>\|<역할>")`) — `owner` 는 로컬 주인 토큰뿐 |
 | 비밀 파일 | `.local_owner_token`·`.portal_jobs_secret`(권한 600) — 기본 `_data/`, 도구가 같은 데이터 폴더를 붙이는 컨테이너 구성에서는 `PORTAL_SECRETS_DIR`(포털만 붙는 볼륨, 700). 값은 로그·응답에 찍지 않음. 백업은 `umask 077` |
 | 오류 응답 | 내부 경로·주소·스택은 응답에 넣지 않음(포털: 로그에만, 도구: `portal_auth.scrub`) |
 | 감사 기록 | `audit` 표: 로그인·로그인 실패·가입·도구 시작/중지/등록·도구 켜기/끄기(`tool_enable`·`tool_disable`)·공유 에이전트 끄기/켜기·관리 작업(부서·부서장·PIN 초기화·정지·비활성화·익명화)·승인 |
 
 **알려진 한계(설계상, 다음 단계)**
 - 모든 도구가 포털과 같은 출처(`/t/<도구>/`)라, 도구 첫 화면의 XSS 는 포털 API 를 부를 수 있습니다(도구 화면이 인라인 스크립트를 써서 `script-src` 를 조이지 못함). 근본 대책은 도구별 출처 분리(서브도메인) — 지금은 sandbox·nosniff·도구 쪽 입력 정리로 줄임.
-- 관리자 계정이 여럿이어도 도구에는 `X-Agent-User: owner` 하나로 갑니다(도구 쪽 '주인' 작업 폴더 공유).
 - HTTP 로 운영 중이면 쿠키에 Secure 가 없습니다 — 폐쇄망 이전 때 HTTPS(`TLS_CERT·TLS_KEY` 또는 앞단 HTTPS + `PORTAL_COOKIE_SECURE=1`) 권장.
 - 실시간 알림(SSE)은 포털 프로세스 하나 전제(워커 1개).
 

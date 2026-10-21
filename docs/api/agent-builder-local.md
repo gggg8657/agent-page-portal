@@ -44,7 +44,7 @@ OpenAPI 3.1: [`openapi/agent-builder-local.json`](openapi/agent-builder-local.js
 | GET | 그 밖의 경로 | 화면(`ui.html`) | | |
 
 ## 권한·공유 규칙
-- 사람 구분은 포털이 붙이는 `X-Agent-User` 하나. `owner` = 관리자.
+- 사람 구분은 포털이 붙이는 `X-Agent-User`(계정 id). 관리자 = 로컬 주인 `owner` 또는 서명된 `X-Agent-Role: admin`(관리자 계정 — 작업 폴더는 자기 `u/<id>`).
 - **부서·부서장**은 같은 서버 포털 DB(`_data/portal.db` 의 `users.dept`·`dept_heads`)를 **읽기 전용**으로 조회(포털 코드 변경 없음).
 - 에이전트 설정·자료는 **공유 데이터**(만든 계정 기록). 고치기·지우기·자료 올리기·시험 대화는 만든 사람·관리자만(403). 응답엔 계정 id 대신 `can_edit`·`owner_name`.
 - **볼 수 있는 사람**: 만든 사람·관리자, 부서 공개가 **승인된** 뒤 그 부서 사람, 승인 대기 중이면 그 부서 승인자(검토용). 그 밖에는 404(있는지도 알리지 않음).
