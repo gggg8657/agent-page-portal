@@ -28,12 +28,12 @@ class ClaimStartTest(unittest.TestCase):
 class ToolHeadersTest(unittest.TestCase):
     def test_sign_only_with_tool_auth(self):
         with mock.patch.object(jobs.config, "TOOL_AUTH", True):
-            hd = jobs.tool_headers("kim")
+            hd = jobs.tool_headers("kim", "a-local")
         self.assertEqual(hd["X-Agent-User"], "kim")
         ts = hd["X-Agent-Auth"].split(".")[1]
-        self.assertEqual(hd["X-Agent-Auth"], jobs.sign("kim", int(ts)), "도구가 확인하는 서명과 같음")
+        self.assertEqual(hd["X-Agent-Auth"], jobs.sign("kim", "a-local", int(ts)), "도구가 확인하는 서명과 같음")
         with mock.patch.object(jobs.config, "TOOL_AUTH", False):
-            self.assertEqual(jobs.tool_headers("kim"), {"X-Agent-User": "kim"})
+            self.assertEqual(jobs.tool_headers("kim", "a-local"), {"X-Agent-User": "kim"})
 
 
 class AddToolTest(unittest.TestCase):

@@ -59,10 +59,11 @@ def token_for(tool_dir):
 TOOL_KEY = hmac.new(SECRET, b"portal-proxy", hashlib.sha256).hexdigest()
 
 
-def sign(user, now=None):
-    """도구로 가는 요청에 붙일 X-Agent-Auth 값: v1.<초>.HMAC(TOOL_KEY, "v1|<초>|<user>") — portal_auth.verify 와 같은 규칙"""
+def sign(user, tool_dir, now=None):
+    """도구로 가는 요청에 붙일 X-Agent-Auth 값: v2.<초>.HMAC(TOOL_KEY, "v2|<초>|<받는 도구 dir>|<user>") — portal_auth.verify 와 같은 규칙.
+    받는 도구 이름이 들어가므로 한 도구 로그에 남은 서명을 다른 도구에 다시 쓸 수 없음"""
     ts = str(int(now if now is not None else time.time()))
-    return f"v1.{ts}." + hmac.new(TOOL_KEY.encode(), f"v1|{ts}|{user}".encode(), hashlib.sha256).hexdigest()
+    return f"v2.{ts}." + hmac.new(TOOL_KEY.encode(), f"v2|{ts}|{tool_dir}|{user}".encode(), hashlib.sha256).hexdigest()
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -73,9 +74,9 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 TOOL_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())   # 포털이 도구를 직접 부를 때 — 프록시 안 거치고, 리디렉트를 안 따름(서명 헤더가 다른 주소로 새지 않게)
 
 
-def tool_headers(user):
-    """포털이 도구를 직접 부를 때의 사용자 헤더 + 서명(TOOL_AUTH 일 때 — 도구도 그때만 확인함)"""
-    return {"X-Agent-User": user, **({"X-Agent-Auth": sign(user)} if config.TOOL_AUTH else {})}
+def tool_headers(user, tool_dir):
+    """포털이 도구(tool_dir)를 직접 부를 때의 사용자 헤더 + 서명(TOOL_AUTH 일 때 — 도구도 그때만 확인함)"""
+    return {"X-Agent-User": user, **({"X-Agent-Auth": sign(user, tool_dir)} if config.TOOL_AUTH else {})}
 
 
 def tool_env(t, port=None):

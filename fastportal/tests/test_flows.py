@@ -118,7 +118,7 @@ class FlowsTest(unittest.TestCase):
         for _, user, auth, _ in SEEN:
             self.assertEqual(user, "alice")
             if config.TOOL_AUTH:
-                self.assertTrue(auth and auth.startswith("v1."), "포털 서명")
+                self.assertTrue(auth and auth.startswith("v2."), "포털 서명")
 
     def test_stops_at_failed_step(self):
         st = [{"adapter": "kordoc.polish"}, {"adapter": "kordoc.polish"}, {"adapter": "kordoc.polish"}]

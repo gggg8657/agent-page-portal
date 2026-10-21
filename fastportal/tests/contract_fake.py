@@ -865,8 +865,8 @@ print("\n## 보안 — 외부 화면을 붙일 때(새 포털, 예전 포털과 
 import hmac as _hm
 KEY = _hm.new(open(SECF).read().strip().encode(), b"portal-proxy", hashlib.sha256).hexdigest()
 rb = json.loads(req(NEW, "GET", "/t/fake-local/echo", CK)[2]); h = dict(rb["headers"])
-ok_sig = bool(h.get("x-agent-auth")) and _hm.compare_digest(h["x-agent-auth"].split(".")[2], _hm.new(KEY.encode(), f"v1|{h['x-agent-auth'].split('.')[1]}|tester".encode(), hashlib.sha256).hexdigest())
-check("도구로 가는 요청에 포털 서명(X-Agent-Auth = HMAC(키, v1|초|사용자))", ok_sig and abs(time.time() - int(h["x-agent-auth"].split(".")[1])) < 60, h.get("x-agent-auth", "")[:20], kind="보안")
+ok_sig = bool(h.get("x-agent-auth")) and _hm.compare_digest(h["x-agent-auth"].split(".")[2], _hm.new(KEY.encode(), f"v2|{h['x-agent-auth'].split('.')[1]}|fake-local|tester".encode(), hashlib.sha256).hexdigest())
+check("도구로 가는 요청에 포털 서명(X-Agent-Auth = HMAC(키, v2|초|받는 도구|사용자))", ok_sig and abs(time.time() - int(h["x-agent-auth"].split(".")[1])) < 60, h.get("x-agent-auth", "")[:20], kind="보안")
 rb = json.loads(req(NEW, "GET", "/t/fake-local/echo", {**CK, "X-Agent-Auth": "v1.1.forged"})[2])
 check("밖에서 보낸 X-Agent-Auth 는 버리고 포털 값으로", dict(rb["headers"]).get("x-agent-auth", "").split(".")[2] != "forged", kind="보안")
 check("도구를 띄울 때 PORTAL_TOOL_KEY 를 넘김(포털 비밀값은 안 넘김)", JE.get("PORTAL_TOOL_KEY") == KEY and not JE.get("PORTAL_JOBS_SECRET"), kind="보안")

@@ -72,7 +72,7 @@ def _builder(user, path):
     t = tools.tool(BUILDER)
     if not t or not tools.tool_host(t) or time.time() < _DOWN[0]:
         return 502, None
-    hd = {**jobs.tool_headers(user), "Accept": "application/json"}
+    hd = {**jobs.tool_headers(user, BUILDER), "Accept": "application/json"}
     try:
         with jobs.TOOL_OPENER.open(urllib.request.Request(f"http://{tools.tool_host(t)}:{int(t['port'])}{path}", headers=hd), timeout=5) as r:
             return r.status, json.loads(r.read(4 * 1024 * 1024) or b"{}")
