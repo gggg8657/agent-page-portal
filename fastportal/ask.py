@@ -475,11 +475,14 @@ class AskStream(Response):
             async for tok in stream_llm(messages(text, hist, cards, flow, fm, ags)):
                 state["answer"].append(tok)
                 await send({"type": "http.response.body", "body": sse({"delta": tok}), "more_body": True})
-        except RuntimeError as e:
+        except Exception as e:   # RuntimeError = LLM 오류 문장. 그 밖(깨진 줄 등)도 빈 답 대신 오류로 끝냄
+            msg = str(e) if isinstance(e, RuntimeError) else "답을 받다가 서버 오류가 났습니다 — 다시 해 주세요"
+            if not isinstance(e, RuntimeError):
+                print("ask: 스트림 오류", type(e).__name__, e, flush=True)
             ans = "".join(state["answer"]).strip()
-            mid = await run_in_threadpool(save_answer, uid, conv["id"], ans or f"(오류: {e})", dict(extra, error=str(e)))
+            mid = await run_in_threadpool(save_answer, uid, conv["id"], ans or f"(오류: {msg})", dict(extra, error=msg))
             state["saved"] = True
-            await send({"type": "http.response.body", "body": sse({"error": str(e), "code": "llm", "msg_id": mid}), "more_body": False})
+            await send({"type": "http.response.body", "body": sse({"error": msg, "code": "llm", "msg_id": mid}), "more_body": False})
             return
         ans = "".join(state["answer"]).strip()
         mid = await run_in_threadpool(save_answer, uid, conv["id"], ans, extra)

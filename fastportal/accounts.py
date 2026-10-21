@@ -269,7 +269,7 @@ def manage_get(ctx, p):
             if not (ctx.is_owner or heads):
                 return ctx.send({"error": "부서장·관리자만 볼 수 있습니다"}, code=403)
             pend = [r for r in req_rows(c, "status='pending'") if can_decide(c, ctx.uid, r)]
-            cut = timeutil.kst_day_start_utc(30)   # 최근 30일(KST 달력) — 저장값은 UTC
+            cut = timeutil.kst_day_start_utc(29)   # 최근 30일(오늘 포함, KST 달력) — 저장값은 UTC
             members = {d: [dict(r) for r in c.execute(
                 "SELECT u.id, u.name, u.seen, (SELECT COUNT(*) FROM events e WHERE e.user=u.id AND e.kind='open') total, "
                 "(SELECT COUNT(*) FROM events e WHERE e.user=u.id AND e.kind='open' AND e.ts>=?) recent, "

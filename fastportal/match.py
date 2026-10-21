@@ -270,10 +270,11 @@ def query_vector(q):
         v = embed_sync([q], EMBED_TIMEOUT)[0]
     except Exception:
         return None
-    if len(_QV) > 512:
-        for kk in sorted(_QV, key=lambda x: _QV[x][0])[:128]:
-            _QV.pop(kk, None)
-    _QV[k] = (t, v)
+    with _EMB_LOCK:   # 여러 스레드가 동시에 넣고 지우면 sorted 도중 RuntimeError·KeyError
+        if len(_QV) > 512:
+            for kk in sorted(_QV, key=lambda x: _QV[x][0])[:128]:
+                _QV.pop(kk, None)
+        _QV[k] = (t, v)
     return v
 
 

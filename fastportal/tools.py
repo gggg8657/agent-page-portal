@@ -244,7 +244,7 @@ def _posts_common(c):
 
 
 def usage(c):
-    cut = timeutil.kst_day_start_utc(30)   # 최근 30일(KST 달력) — 저장값은 UTC
+    cut = timeutil.kst_day_start_utc(29)   # 최근 30일(오늘 포함, KST 달력) — 저장값은 UTC
     out = {}
     for r in c.execute("SELECT dir, SUM(kind='open') total, SUM(kind='open' AND ts>=?) recent, "
                        "COUNT(DISTINCT CASE WHEN kind='open' THEN user END) users, SUM(kind='like') likes FROM events GROUP BY dir", (cut,)):
@@ -253,7 +253,7 @@ def usage(c):
 
 
 def user_rank(c):
-    cut = timeutil.kst_day_start_utc(30)   # 최근 30일(KST 달력) — 저장값은 UTC
+    cut = timeutil.kst_day_start_utc(29)   # 최근 30일(오늘 포함, KST 달력) — 저장값은 UTC
     return [{"user": r["name"], "n": r["n"]} for r in
             c.execute("SELECT u.name, COUNT(*) n FROM events e JOIN users u ON u.id=e.user WHERE e.kind='open' AND e.ts>=? GROUP BY e.user ORDER BY n DESC LIMIT 5", (cut,))]
 

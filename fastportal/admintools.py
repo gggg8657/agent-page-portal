@@ -30,7 +30,7 @@ def active_jobs(c, d):
 def tools_get(ctx, up):
     if not ctx.is_owner:
         return _forbidden(ctx)
-    cut = timeutil.kst_day_start_utc(30)   # 최근 30일(KST 달력) — 저장값은 UTC
+    cut = timeutil.kst_day_start_utc(29)   # 최근 30일(오늘 포함, KST 달력) — 저장값은 UTC
     with db() as c:
         st = toolstate.rows(c)
         use = {r[0]: (r[1] or 0, r[2] or 0) for r in c.execute(

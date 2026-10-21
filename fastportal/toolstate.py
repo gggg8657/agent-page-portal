@@ -35,8 +35,8 @@ def off():
     try:
         with db() as c:
             v = frozenset(r[0] for r in c.execute("SELECT dir FROM tool_state WHERE enabled=0"))
-    except Exception:   # 표가 아직 없음(시험·예전 DB)
-        v = frozenset()
+    except Exception:   # 표가 아직 없음(시험·예전 DB) — 잠깐의 DB 오류면 직전 값(빈 값이면 꺼진 도구가 그동안 열림)
+        v = _C["v"]
     with _LOCK:
         _C.update(t=time.monotonic(), v=v)
     return v
