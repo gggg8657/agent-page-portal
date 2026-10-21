@@ -20393,6 +20393,14 @@
              "type": "integer"
             }
            }
+          },
+          "att_max_files": {
+           "type": "integer",
+           "description": "대화 하나 첨부 파일 수 상한"
+          },
+          "att_max_total_mb": {
+           "type": "integer",
+           "description": "대화 하나 첨부 크기 합계 상한(MB)"
           }
          }
         }
@@ -20509,10 +20517,12 @@
        "enum": [
         "mine",
         "dept",
-        "fav"
+        "fav",
+        "admin"
        ],
        "default": "mine"
-      }
+      },
+      "description": "admin = 관리자만(부서 공개·대기 + 공유를 끈 것, 아니면 403)"
      }
     ],
     "responses": {
@@ -20726,6 +20736,10 @@
            "mid",
            "long"
           ]
+         },
+         "allow_fork": {
+          "type": "boolean",
+          "description": "다른 사람이 복제(지시문 포함) 허용 — 기본 참. 끄면 남의 duplicate 는 403 '만든 사람이 복제를 허용하지 않았습니다'"
          }
         }
        }
@@ -20923,7 +20937,8 @@
       }
      }
     },
-    "x-permission": "creator"
+    "x-permission": "creator",
+    "description": " 내 에이전트(관리자는 모두) 또는 내가 볼 수 있는 부서 공개 에이전트를 내 초안(나만)으로 복제 — 자료 포함. 볼 수 없으면 404, 공개 안 된 남의 것은 403"
    }
   },
   "/t/agent-builder-local/api/agents/{id}/delete": {
@@ -21470,7 +21485,7 @@
     ],
     "operationId": "agentBuilderChat",
     "summary": "질문 → 인용 달린 답 (SSE)",
-    "description": "mode=test 시험 대화: 만든 사람·관리자만(403), 기록 안 남음, history(최근 3턴 [{q,a}])를 화면이 보냄. mode=real 실제 대화: 볼 수 있는 사람, 게시 전이면 만든 사람만(409), 대화가 본인 폴더에 저장되고 conv 로 이어 감. 자료에서 못 찾고 only_docs 면 LLM 을 부르지 않고 '올린 자료에서 찾지 못했습니다.'",
+    "description": "mode=test 시험 대화: 만든 사람·관리자만(403), 기록 안 남음, history(최근 3턴 [{q,a}])를 화면이 보냄. mode=real 실제 대화: 볼 수 있는 사람, 게시 전이면 만든 사람만(409), 대화가 본인 폴더에 저장되고 conv 로 이어 감. 자료에서 못 찾고 only_docs 면 LLM 을 부르지 않고 '올린 자료에서 찾지 못했습니다.' conv 에 대화 첨부가 있으면 첨부 글이 ATT_INLINE_CHARS(기본 12000자) 이하면 전문을, 넘으면 질문마다 조각 검색(BM25+임베딩 RRF)으로 넣고 에이전트 자료와 합침 — 첨부가 앞 번호, 근거 src=att|agent.",
     "parameters": [
      {
       "name": "id",
@@ -21506,7 +21521,7 @@
          },
          "conv": {
           "type": "string",
-          "description": "real: 이어 갈 대화 id"
+          "description": "real: 이어 갈 대화 id(첨부만 하고 질문 전인 빈 대화도 됨). test: 시험 대화 첨부를 쓸 대화 id(api/agents/{id}/attach mode=test 가 준 것, 기록은 안 남음)"
          },
          "history": {
           "type": "array",
@@ -21669,7 +21684,7 @@
      "agent-builder-local"
     ],
     "operationId": "agentBuilderConv",
-    "summary": "지난 대화 하나(본인 것만, 남의 것은 404)",
+    "summary": "지난 대화 하나 + 그 대화 첨부(본인 것만, 남의 것은 404)",
     "parameters": [
      {
       "name": "id",
@@ -21726,7 +21741,7 @@
      "agent-builder-local"
     ],
     "operationId": "agentBuilderConvDelete",
-    "summary": "지난 대화 지우기",
+    "summary": "지난 대화 지우기(그 대화 첨부도 같이)",
     "parameters": [
      {
       "name": "id",
@@ -21745,6 +21760,379 @@
       "schema": {
        "type": "string"
       }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-permission": "self"
+   }
+  },
+  "/t/agent-builder-local/api/agents/{id}/attach": {
+   "post": {
+    "tags": [
+     "agent-builder-local"
+    ],
+    "operationId": "agentBuilderAttach",
+    "summary": "대화 첨부 올리기 → 읽기·색인 (SSE)",
+    "description": "사용자가 그 대화에만 붙이는 파일 — 본인 폴더(convs/<에이전트>/<대화>.att)에 저장, 에이전트 자료·색인에는 안 들어가고 만든 사람·관리자도 못 봄. 형식·파일 하나 상한은 자료 올리기와 같음(HWP·HWPX·PDF·DOCX·XLSX·XLS·TXT·MD, 50MB, kordoc). conv 를 안 주면 새 대화를 만들어 첫 이벤트 {conv} 로 알림(질문 전에는 지난 대화 목록에 안 나오고, 질문 없이 하루 지나면 지움). 상한(대화 하나): 파일 5개(ATT_MAX_FILES, 넘으면 409) · 크기 합계 100MB(ATT_MAX_TOTAL_MB, 413) · 읽은 글 합계 40만 자(ATT_MAX_TEXT_CHARS, 스트림 안 error). mode=test 는 시험 대화용(만든 사람·관리자만, 403).",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{6,16}$"
+      },
+      "description": "에이전트 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "file_name",
+         "file_b64"
+        ],
+        "properties": {
+         "conv": {
+          "type": "string",
+          "description": "붙일 대화 id(없으면 새로 만듦)"
+         },
+         "mode": {
+          "enum": [
+           "real",
+           "test"
+          ],
+          "default": "real"
+         },
+         "file_name": {
+          "type": "string",
+          "maxLength": 120
+         },
+         "file_b64": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공(SSE)"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     },
+     "403": {
+      "description": "권한 없음 — mode=test 인데 만든 사람·관리자가 아님",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "409": {
+      "description": "게시 전 에이전트(만든 사람 아님) 또는 첨부 파일 수 상한",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "413": {
+      "description": "파일 하나 50MB 또는 대화 첨부 크기 합계 초과",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "x-permission": "self",
+    "x-long-running": true,
+    "x-stream-events": [
+     {
+      "conv": "대화 id(첫 이벤트)"
+     },
+     {
+      "stage": "parse|embed",
+      "msg": "진행 문장"
+     },
+     {
+      "done": {
+       "conv": "대화 id",
+       "file": "AbDoc"
+      }
+     },
+     {
+      "error": "한국어 설명"
+     }
+    ]
+   }
+  },
+  "/t/agent-builder-local/api/agents/{id}/convs/{conv}/chunk": {
+   "get": {
+    "tags": [
+     "agent-builder-local"
+    ],
+    "operationId": "agentBuilderAttChunk",
+    "summary": "첨부 근거 조각 + 앞뒤 조각(본인 대화만, 남의 것은 404)",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{6,16}$"
+      },
+      "description": "에이전트 id"
+     },
+     {
+      "name": "conv",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{6,16}$"
+      },
+      "description": "대화 id"
+     },
+     {
+      "name": "id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      },
+      "description": "AbCite.chunk (src=att)"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "doc": {
+           "type": "string"
+          },
+          "doc_name": {
+           "type": "string"
+          },
+          "kind": {
+           "type": "string"
+          },
+          "page": {
+           "type": [
+            "integer",
+            "null"
+           ]
+          },
+          "heading": {
+           "type": "string"
+          },
+          "text": {
+           "type": "string"
+          },
+          "before": {
+           "type": "string"
+          },
+          "after": {
+           "type": "string"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-permission": "self"
+   }
+  },
+  "/t/agent-builder-local/api/agents/{id}/convs/{conv}/attach/{file}/file": {
+   "get": {
+    "tags": [
+     "agent-builder-local"
+    ],
+    "operationId": "agentBuilderAttFile",
+    "summary": "첨부 원본 파일(본인 대화만)",
+    "description": "PDF·TXT·MD 는 inline, 그 밖은 attachment(파일 이름 RFC 5987)",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{6,16}$"
+      },
+      "description": "에이전트 id"
+     },
+     {
+      "name": "conv",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{6,16}$"
+      },
+      "description": "대화 id"
+     },
+     {
+      "name": "file",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{6,16}$"
+      },
+      "description": "첨부 파일 id(AbDoc.id)"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "원본 파일",
+      "content": {
+       "application/octet-stream": {}
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-permission": "self"
+   }
+  },
+  "/t/agent-builder-local/api/agents/{id}/convs/{conv}/attach/{file}/delete": {
+   "post": {
+    "tags": [
+     "agent-builder-local"
+    ],
+    "operationId": "agentBuilderAttDelete",
+    "summary": "첨부 하나 빼기(본인 대화만)",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{6,16}$"
+      },
+      "description": "에이전트 id"
+     },
+     {
+      "name": "conv",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{6,16}$"
+      },
+      "description": "대화 id"
+     },
+     {
+      "name": "file",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{6,16}$"
+      },
+      "description": "첨부 파일 id(AbDoc.id)"
      }
     ],
     "requestBody": {
@@ -22169,6 +22557,141 @@
      }
     },
     "x-permission": "dept-head"
+   }
+  },
+  "/t/agent-builder-local/api/stats": {
+   "get": {
+    "operationId": "abStats",
+    "summary": "참여 현황(모두의 에이전트) — 수만",
+    "tags": [
+     "agent-builder-local"
+    ],
+    "description": "전체 에이전트 수·만든 사람 수·부서 공개 수·최근 7일 새로 만든 수·최근 7일 질문 수, 제작자 순위(부서에 공개한 에이전트만 — 이름·부서·공개 수·질문 수). 비공개 에이전트의 제목·내용은 나가지 않음",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "agents",
+          "creators",
+          "shared",
+          "new_7d",
+          "asks_7d",
+          "top_creators"
+         ],
+         "properties": {
+          "agents": {
+           "type": "integer"
+          },
+          "creators": {
+           "type": "integer"
+          },
+          "shared": {
+           "type": "integer"
+          },
+          "new_7d": {
+           "type": "integer"
+          },
+          "asks_7d": {
+           "type": "integer"
+          },
+          "top_creators": {
+           "type": "array",
+           "maxItems": 5,
+           "items": {
+            "type": "object",
+            "properties": {
+             "name": {
+              "type": "string"
+             },
+             "dept": {
+              "type": "string"
+             },
+             "agents": {
+              "type": "integer"
+             },
+             "uses_7d": {
+              "type": "integer"
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "서명 없음"
+     }
+    }
+   }
+  },
+  "/t/agent-builder-local/api/agents/{id}/block": {
+   "post": {
+    "operationId": "abAgentBlock",
+    "summary": "공유 끄기·켜기(관리자)",
+    "tags": [
+     "agent-builder-local"
+    ],
+    "x-permission": "admin",
+    "description": "포털 관리 화면 '에이전트 관리'(POST /api/admin/agent)가 부름. off=true 면 부서원 목록·보기·복제·참여 현황·순위에서 빠지고 만든 사람·관리자만 봄. 자료·대화·설정은 그대로.",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "off"
+        ],
+        "properties": {
+         "off": {
+          "type": "boolean"
+         },
+         "reason": {
+          "type": "string",
+          "maxLength": 200
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "에이전트 상세(AbAgent)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AbAgent"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "off 형식"
+     },
+     "403": {
+      "description": "관리자 아님"
+     },
+     "404": {
+      "description": "없음·볼 수 없음"
+     }
+    }
    }
   },
   "/api/version": {
@@ -40143,6 +40666,31 @@
      "updated": {
       "type": "string"
      },
+     "created": {
+      "type": "string"
+     },
+     "dept": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "부서 공개(승인)면 그 부서, 아니면 null"
+     },
+     "forks": {
+      "type": "integer",
+      "description": "복제된 수(비공개 복제본 포함, 수만)"
+     },
+     "forked_from": {
+      "type": [
+       "object",
+       "null"
+      ],
+      "description": "복제본이면 원본 {id(볼 수 있을 때만), name, owner_name, at, viewable}"
+     },
+     "allow_fork": {
+      "type": "boolean",
+      "description": "만든 사람이 복제를 허용했는지(기본 참). 지시문 본문은 여전히 만든 사람·관리자·승인자만 봄"
+     },
      "blocked": {
       "$ref": "#/components/schemas/AbBlocked"
      }
@@ -40275,8 +40823,31 @@
      "template": {
       "type": "string"
      },
+     "forks": {
+      "type": "integer",
+      "description": "복제된 수(비공개 복제본 포함, 수만)"
+     },
+     "forked_from": {
+      "type": [
+       "object",
+       "null"
+      ],
+      "description": "복제본이면 원본 {id(볼 수 있을 때만), name, owner_name, at, viewable}"
+     },
+     "forks_list": {
+      "type": "array",
+      "description": "이걸로 만든 에이전트 — 내가 볼 수 있는 복제본만 {id,name,owner_name}"
+     },
+     "allow_fork": {
+      "type": "boolean",
+      "description": "만든 사람이 복제를 허용했는지(기본 참). 지시문 본문은 여전히 만든 사람·관리자·승인자만 봄"
+     },
      "blocked": {
       "$ref": "#/components/schemas/AbBlocked"
+     },
+     "wants_files": {
+      "type": "boolean",
+      "description": "지시문에 올린·첨부·파일·회의록이 있음 — 대화 화면이 '파일을 함께 올리면 잘 답합니다' 안내를 띄움(지시문 본문은 안 보냄)"
      }
     }
    },
@@ -40289,7 +40860,7 @@
      },
      "chunk": {
       "type": "string",
-      "description": "근거 조각 id — GET api/agents/{id}/chunk?id=… 에 씀"
+      "description": "근거 조각 id — src=agent 는 GET api/agents/{id}/chunk?id=…, src=att 는 GET api/agents/{id}/convs/{conv}/chunk?id=…"
      },
      "doc": {
       "type": "string"
@@ -40309,6 +40880,17 @@
      "quote": {
       "type": "string",
       "description": "조각 앞 400자"
+     },
+     "src": {
+      "enum": [
+       "att",
+       "agent"
+      ],
+      "description": "att = 사용자가 이 대화에 첨부한 파일(본인만), agent = 에이전트 자료"
+     },
+     "conv": {
+      "type": "string",
+      "description": "src=att 일 때 대화 id — 조각은 GET api/agents/{id}/convs/{conv}/chunk?id=…"
      }
     }
    },
@@ -40341,6 +40923,14 @@
      "conv": {
       "type": "string",
       "description": "mode=real 일 때 저장된 대화 id"
+     },
+     "att_mode": {
+      "enum": [
+       "full",
+       "search",
+       null
+      ],
+      "description": "대화 첨부를 어떻게 넣었나: full = 전문(ATT_INLINE_CHARS 이하), search = 질문마다 조각 검색, null = 첨부 없음"
      }
     }
    },
@@ -40449,6 +41039,13 @@
         }
        }
       }
+     },
+     "attachments": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/AbDoc"
+      },
+      "description": "이 대화에 사용자가 첨부한 파일(본인만)"
      }
     }
    },

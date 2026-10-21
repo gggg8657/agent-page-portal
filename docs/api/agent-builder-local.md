@@ -25,6 +25,10 @@ OpenAPI 3.1: [`openapi/agent-builder-local.json`](openapi/agent-builder-local.js
 | GET | `api/agents/{id}/chunk?id=` | 근거 조각 + 앞뒤 | 아니오 | 볼 수 있는 사람 |
 | POST | `api/agents/{id}/chat` | 질문 → 인용 달린 답 | 예 — LLM, **SSE** | test: 만든 사람·관리자 / real: 볼 수 있는 사람 |
 | GET | `api/agents/{id}/convs` | 내 지난 대화 목록 | 아니오 | 본인 것만 |
+| POST | `api/agents/{id}/attach` | 대화 첨부 올리기 → 읽기·색인(그 대화에만) | 예 — **SSE** | real: 볼 수 있는 사람 / test: 만든 사람·관리자 |
+| GET | `api/agents/{id}/convs/{conv}/chunk?id=` | 첨부 근거 조각 + 앞뒤 | 아니오 | 본인 대화만(남의 것 404) |
+| GET | `api/agents/{id}/convs/{conv}/attach/{file}/file` | 첨부 원본 파일 | 아니오 | 본인 대화만 |
+| POST | `api/agents/{id}/convs/{conv}/attach/{file}/delete` | 첨부 하나 빼기 | 아니오 | 본인 대화만 |
 | GET | `api/agents/{id}/convs/{conv}` | 지난 대화 하나 | 아니오 | 본인 것만(남의 것 404) |
 | POST | `api/agents/{id}/convs/{conv}/delete` | 지난 대화 지우기 | 아니오 | 본인 |
 | POST | `api/agents/{id}/fav` | 즐겨찾기 켜기·끄기 | 아니오 | 본인 |
@@ -97,6 +101,14 @@ OpenAPI 3.1: [`openapi/agent-builder-local.json`](openapi/agent-builder-local.js
 ### GET api/approvals · POST api/approvals/{id}
 - 목록 `{"pending": [{"id", "name", "desc", "owner_name", "dept", "requested", "docs", "instructions", "examples"}]}`
 - 결정 `{"ok": true|false, "note": "선택"}` → `{"review": …}`. 승인자가 아니면 403, 볼 수 없으면 404, 대기 중 아니면 409.
+
+### 대화 첨부 (2026-10-21)
+사용자가 **그 대화에만** 붙이는 파일입니다(안건·회의록 등). 본인 폴더(`convs/<에이전트>/<대화>.att/` — 원본·`index.db`)에 저장되고 에이전트 자료·색인에는 들어가지 않으며, 만든 사람·관리자도 못 봅니다(남의 대화 404). 틀림 알리기에도 첨부 내용은 가지 않습니다.
+- `POST api/agents/{id}/attach` `{"conv"?: "대화 id", "mode": "real|test", "file_name", "file_b64"}` — SSE: (conv 를 안 주면 새 대화를 만들어 먼저) `{"conv"}` → `{"stage", "msg"}`… → `{"done": {"conv", "file"}}` 또는 `{"error"}`. 형식·파일 하나 상한은 자료 올리기와 같음(HWP·HWPX·PDF·DOCX·XLSX·XLS·TXT·MD, 50MB, kordoc). `test` 는 시험 대화용(만든 사람·관리자, 기록에 남지 않음).
+- 상한(대화 하나, 서버 환경변수): 파일 5개(`ATT_MAX_FILES`, 넘으면 409) · 크기 합계 100MB(`ATT_MAX_TOTAL_MB`, 413) · 읽은 글 합계 40만 자(`ATT_MAX_TEXT_CHARS`, 스트림 안 `error`). `GET api/me` 의 `att_max_files`·`att_max_total_mb` 로 화면이 미리 알 수 있음.
+- `GET api/agents/{id}/convs/{conv}` 에 `attachments`(AbDoc 목록)가 붙음 — 지난 대화를 열면 그 첨부가 다시 붙음. `POST …/convs/{conv}/delete` 는 첨부도 같이 지움. 질문 없이 첨부만 한 빈 대화·시험 대화 첨부는 하루 뒤 지움.
+- `GET …/convs/{conv}/chunk?id=` 첨부 근거 조각 + 앞뒤, `GET …/convs/{conv}/attach/{file}/file` 원본(PDF·TXT·MD 는 inline, 그 밖은 attachment), `POST …/convs/{conv}/attach/{file}/delete` 하나 빼기.
+- 채팅 `POST api/agents/{id}/chat {"conv"}`: 그 대화에 첨부가 있으면 첨부 글이 1만 2천 자(`ATT_INLINE_CHARS`) 이하면 전문을, 넘으면 질문마다 조각 검색(BM25 + 임베딩 RRF)으로 넣고 에이전트 자료와 합침 — 첨부가 앞 번호. 근거 `AbCite.src` = `att`(첨부, `conv` 포함 — 화면 표시 "첨부: 파일명 p.N") | `agent`(에이전트 자료).
 
 ## 오류
 `{"error": "한국어 설명"}` — 400 잘못된 본문(JSON 아님·객체 아님·형식), 403 권한, 404 없음·볼 수 없음, 409 상태, 413 크기, 500 "서버 내부 오류"(자세한 것은 server.log). SSE 도중 오류는 HTTP 200 + `error` 이벤트. 응답에 서버 경로·내부 주소·계정 id 를 넣지 않는다.
