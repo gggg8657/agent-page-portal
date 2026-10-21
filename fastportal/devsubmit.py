@@ -304,24 +304,34 @@ class Locked(Exception):
 LOCK_MSG = "실행 격리 준비 중 — 지금은 승인할 수 없습니다"
 
 
+DAILY_MAX = 20   # 개발자당 하루 제출 수 — 제출마다 zip·푼 파일(최대 약 250MB)이 디스크에 남음(형식 오류 zip 을 계속 올리면 디스크가 참)
+
+
+def _gate(c, uid):
+    """올릴 수 없으면 (상태 코드, code, 문구), 되면 None — 본문 전(precheck)과 후(submit)가 같은 규칙"""
+    if not is_developer(c, uid):
+        return 403, "forbidden", "개발자 권한이 필요합니다 — 관리자에게 요청하세요"
+    if c.execute("SELECT COUNT(*) FROM dev_submissions WHERE uid=? AND status IN ('checking','sandbox')", (uid,)).fetchone()[0]:
+        return 400, "bad_request", "검사 중인 제출이 있습니다 — 끝난 뒤 다시 올리세요"
+    if c.execute("SELECT COUNT(*) FROM dev_submissions WHERE uid=? AND created>=?", (uid, now()[:10])).fetchone()[0] >= DAILY_MAX:
+        return 429, "rate_limited", f"제출은 하루 {DAILY_MAX}번까지입니다 — 내일 다시 올리세요"
+    return None
+
+
 def precheck(ctx):
-    """POST /api/dev/submit 본문을 읽기 전에 — 개발자가 아니면 403, 검사 중인 제출이 있으면 400. 통과면 None.
+    """POST /api/dev/submit 본문을 읽기 전에 — 막히면 응답, 통과면 None.
     (본문 50MB 를 받은 뒤에야 권한을 보면, 로그인한 아무나 큰 본문을 여러 개 동시에 보내 포털 메모리를 쓸 수 있음)"""
     with db() as c:
-        if not is_developer(c, ctx.uid):
-            return ctx.send({"error": "개발자 권한이 필요합니다 — 관리자에게 요청하세요", "code": "forbidden"}, code=403)
-        if c.execute("SELECT COUNT(*) FROM dev_submissions WHERE uid=? AND status IN ('checking','sandbox')", (ctx.uid,)).fetchone()[0]:
-            return ctx.send({"error": "검사 중인 제출이 있습니다 — 끝난 뒤 다시 올리세요", "code": "bad_request"}, code=400)
-    return None
+        g = _gate(c, ctx.uid)
+    return ctx.send({"error": g[2], "code": g[1]}, code=g[0]) if g else None
 
 
 def submit(ctx, data):
     """POST /api/dev/submit — 본문 zip. 개발자만"""
     with db() as c:
-        if not is_developer(c, ctx.uid):
-            raise PermissionError("개발자 권한이 필요합니다 — 관리자에게 요청하세요")
-        if c.execute("SELECT COUNT(*) FROM dev_submissions WHERE uid=? AND status IN ('checking','sandbox')", (ctx.uid,)).fetchone()[0]:
-            raise ValueError("검사 중인 제출이 있습니다 — 끝난 뒤 다시 올리세요")
+        g = _gate(c, ctx.uid)
+    if g:
+        raise (PermissionError if g[0] == 403 else ValueError)(g[2])
     if len(data) < 22 or data[:2] != b"PK":
         raise ValueError("zip 파일을 올려 주세요")
     sid = secrets.token_urlsafe(9)

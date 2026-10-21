@@ -115,6 +115,16 @@ class DevSubmitTest(unittest.TestCase):
         devsubmit.submit(self.ctx("dev"), mkzip(GOOD))   # 검사 중(sandbox) 제출이 생김
         self.assertEqual(devsubmit.precheck(mk("dev"))[0], 400, "검사 중 제출이 있으면 본문 전에 400")
 
+    def test_daily_cap(self):
+        with db() as c:
+            c.executemany("INSERT INTO dev_submissions(id, uid, agent_user, dir, title, status, created, updated, size, nfiles) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                          [(f"old{i:06d}", "dev", "dev", "x", "x", "failed", devsubmit.now(), devsubmit.now(), 1, 1) for i in range(devsubmit.DAILY_MAX)])
+        sent = []
+        mk = SimpleNamespace(uid="dev", agent_user="dev", is_owner=False, send=lambda d, code=200: sent.append((code, d)) or (code, d))
+        self.assertEqual(devsubmit.precheck(mk)[0], 429, "하루 상한이면 본문 전에 거절")
+        with self.assertRaises(ValueError):
+            devsubmit.submit(self.ctx("dev"), mkzip(GOOD))
+
     def test_corrupt_zip_is_400(self):
         z = bytearray(mkzip(GOOD))
         i = z.index(b"import os")   # 파일 내용 한 바이트를 바꿔 CRC 를 깨뜨림(목록은 멀쩡)
