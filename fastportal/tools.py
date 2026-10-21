@@ -88,6 +88,19 @@ def alive_sync(addr):
 
 
 # ── 시작·중지·등록 (portal.py 와 같은 환경변수·BIND·GPU) ──────────────────
+_STARTING = {}   # 도구 → 시작을 누른 시각. shortcut: 프로세스 메모리 — 포털을 여러 개 띄워 일반 사용자가 나눠 쓰면 DB 로
+_STARTING_LOCK = threading.Lock()
+
+
+def claim_start(t):
+    """켜는 중(모델 적재 등)이 아니면 시작 자리를 잡고 True. 막는 시간은 tools.json 의 start_s(기본 180초) — 포트가 열리면 '이미 실행 중'이 막음"""
+    with _STARTING_LOCK:   # 확인과 기록 사이에 다른 요청이 끼면 둘 다 setup.sh 를 띄움
+        if time.time() - _STARTING.get(t["dir"], 0) < t.get("start_s", 180):
+            return False
+        _STARTING[t["dir"]] = time.time()
+        return True
+
+
 def start(t, extra_env=None):
     if is_remote(t):
         return   # 다른 컨테이너의 도구 — 그쪽이 띄움
@@ -130,12 +143,16 @@ def stop(t):
         return
     cwd = os.path.join(BASE, t["dir"])
     if os.path.exists(os.path.join(cwd, "setup.sh")):
-        subprocess.run(["bash", "setup.sh", "stop"], cwd=cwd, capture_output=True)
+        try:
+            subprocess.run(["bash", "setup.sh", "stop"], cwd=cwd, capture_output=True, timeout=60)
+        except subprocess.TimeoutExpired:
+            pass   # 멈춘 stop 이 스레드를 잡지 않게 — 아래에서 포트 주인을 직접 끔
     for pid in port_pids(t["port"]):
         try:
             os.kill(pid, 15)
         except OSError:
             pass
+    _STARTING.pop(t["dir"], None)
 
 
 _ADD_LOCK = threading.Lock()
@@ -236,12 +253,6 @@ def user_rank(c):
     cut = (datetime.date.today() - datetime.timedelta(days=30)).isoformat()
     return [{"user": r["name"], "n": r["n"]} for r in
             c.execute("SELECT u.name, COUNT(*) n FROM events e JOIN users u ON u.id=e.user WHERE e.kind='open' AND e.ts>=? GROUP BY e.user ORDER BY n DESC LIMIT 5", (cut,))]
-
-
-def posts(c, user):
-    return [dict(r) | {"tags": json.loads(r["tags"] or "[]"), "liked": bool(r["liked"])} for r in
-            c.execute("SELECT p.*, (SELECT COUNT(*) FROM post_likes WHERE post=p.id) likes, "
-                      "(SELECT COUNT(*) FROM post_likes WHERE post=p.id AND user=?) liked FROM posts p ORDER BY id DESC LIMIT 50", (user,))]
 
 
 def tool_list(c, up, uid, u=None):

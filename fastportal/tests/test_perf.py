@@ -1,7 +1,7 @@
 """빠른 성능 개선(2026-10-20 부하 시험 후속) — SQLite 연결 재사용, 세션 확인 캐시와 무효화(로그아웃·PIN 변경·초기화·비활성화·이름),
 /api/tools 집계 캐시(공통 집계는 캐시, 계정별 liked 는 계정마다), 스레드 풀 상한 env, 미리 압축(.gz) 자산.
 통합 시험은 임시 데이터 폴더로 포털을 따로 띄움(운영 _data 를 건드리지 않음)."""
-import gzip, os, sqlite3, tempfile, threading, time, unittest
+import gzip, json, os, sqlite3, tempfile, threading, time, unittest
 from unittest.mock import patch
 
 from fastportal import config, db as dbm, pages, sessions, tools
@@ -190,7 +190,9 @@ class ToolsStatsCacheTest(unittest.TestCase):
         self.assertEqual(a["posts"][0]["likes"], 1)
         self.assertEqual(a["posts"][0]["tags"], ["#x"])
         with dbm.db() as c:   # 예전 계산과 같은 모양·값
-            old = tools.posts(c, "u2")
+            old = [dict(r) | {"tags": json.loads(r["tags"] or "[]"), "liked": bool(r["liked"])} for r in
+                   c.execute("SELECT p.*, (SELECT COUNT(*) FROM post_likes WHERE post=p.id) likes, "
+                             "(SELECT COUNT(*) FROM post_likes WHERE post=p.id AND user=?) liked FROM posts p ORDER BY id DESC LIMIT 50", ("u2",))]
         self.assertEqual(b["posts"], old)
         self.assertEqual(list(b["posts"][0]), list(old[0]), "키 순서도 같음")
         self.assertEqual(a["tools"][0]["usage"]["total"], 1)

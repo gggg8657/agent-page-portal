@@ -323,10 +323,6 @@ def change_pin(ctx, c, req):
     return ctx.send({"ok": True}, headers=[("Set-Cookie", sessions.cookie(tok, persist=keep))])
 
 
-_STARTING = {}   # 도구 → 마지막으로 시작을 누른 시각
-START_GAP = 60   # 초 — 이 안에 일반 사용자가 다시 시작을 누르면 409(관리자는 바로 다시 띄울 수 있음)
-
-
 def tool_action(ctx, c, path, req):
     """POST /api/open · /api/like · /api/start · /api/stop {dir}"""
     t = tools.tool(req.get("dir"))
@@ -345,16 +341,14 @@ def tool_action(ctx, c, path, req):
             return ctx.send({"error": "unknown tool"}, code=404)
         if tools.alive_sync(tools.tool_addr(t)) and not ctx.is_owner:
             return ctx.send({"error": "이미 실행 중입니다"}, code=409)
-        last = _STARTING.get(t["dir"], 0)
-        if time.time() - last < START_GAP and not ctx.is_owner:   # 켜지는 중(모델 적재 등)에 또 누르면 여러 벌이 뜸 — 잠깐 막음
+        if not tools.claim_start(t) and not ctx.is_owner:   # 켜지는 중에 또 누르면 여러 벌이 뜸(관리자는 바로 다시 띄울 수 있음)
             return ctx.send({"error": "켜는 중입니다 — 잠시 뒤 다시 확인하세요", "code": "starting"}, code=409)
-        _STARTING[t["dir"]] = time.time()
         tools.start(t, jobs.tool_env(t)); tools.alive_reset()   # 켜짐 캐시 비움 — 다음 /api/tools 가 바로 다시 확인
         accounts.audit(c, ctx.uid, "tool_start", t["dir"])
     elif path == "/api/stop":
         if not ctx.is_owner:
             return ctx.send({"error": "도구 중지는 관리자만 할 수 있습니다"}, code=403)
-        tools.stop(t); tools.alive_reset(); _STARTING.pop(t["dir"], None)
+        tools.stop(t); tools.alive_reset()
         accounts.audit(c, ctx.uid, "tool_stop", t["dir"])
     else:
         return ctx.send({"error": "not found"}, code=404)
