@@ -35,7 +35,9 @@
 - 시각은 UTC ISO(`+00:00`).
 
 ## 문서 (`doc`)
-- `nodes[]`: `{id, shape: rect|round|diamond|ellipse|cylinder|parallelogram|hexagon|text, text(줄바꿈 \n), bbox: [x1,y1,x2,y2], fill, stroke, color(글자), font_px, check, src: {text: ocr|llm|none}}`
+- `nodes[]`: `{id, shape: rect|round|diamond|ellipse|cylinder|parallelogram|hexagon|image|text, text(줄바꿈 \n), bbox: [x1,y1,x2,y2], fill, stroke, color(글자), font_px, check, src: {text: ocr|llm|none}, dashed?, bold?, rotation?(90|-90, 세로 글), note?(확인할 까닭)}` — `image` 는 아이콘·캡처 등 도형으로 바꾸기 어려운 부분(내보낼 때 원본에서 bbox 만큼 잘라 그림으로)
+- 연결선 `from`·`to` 는 묶음 id 도 됨(판에 닿는 화살표). `color`·`label_color`·`note` 선택. 묶음은 `fill`·`stroke`·`label_box`(판 바깥 위 제목)·`label_color` 선택
+- 긴 변 1100px 미만 그림은 안에서 2~2.5배 키워 처리(`sources.upscale`), 좌표는 원본 크기
 - `edges[]`: `{id, from, to, label, dashed, arrow: end|both|none, check, label_box?}`
 - `groups[]`: `{id, label, bbox, children(노드·묶음 id), dashed, fill, stroke, check}`
 - 저장(`doc`·`export` 의 `doc`) 때 서버가 검사: id 형식(`[a-z]\w{0,15}`, 겹치면 400), 좌표는 그림 안으로, 없는 노드를 가리키는 선·자기 자신으로 가는 선은 버림, 노드 800·선 1,500·묶음 200개까지, 문서 4MB.
