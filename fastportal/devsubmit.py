@@ -271,11 +271,13 @@ def _notify(user, sid, status, title, msg):
         print("devsubmit: 알림 실패", type(e).__name__, e, flush=True)
 
 
-def _update(sid, **kw):
+def _update(sid, only_if, **kw):
+    """상태가 아직 only_if 일 때만 바꿈(그사이 관리자가 거절했으면 안 바꿈) → 바꿨는지"""
     kw["updated"] = now()
     cols = ", ".join(f"{k}=?" for k in kw)
     with db() as c:
-        c.execute(f"UPDATE dev_submissions SET {cols} WHERE id=?", (*[json.dumps(v, ensure_ascii=False) if isinstance(v, (dict, list)) else v for v in kw.values()], sid))
+        return c.execute(f"UPDATE dev_submissions SET {cols} WHERE id=? AND status=?",
+                         (*[json.dumps(v, ensure_ascii=False) if isinstance(v, (dict, list)) else v for v in kw.values()], sid, only_if)).rowcount > 0
 
 
 def _pipeline(sid, agent_user, top, src):
@@ -285,7 +287,8 @@ def _pipeline(sid, agent_user, top, src):
         print("devsubmit: 검증 오류", sid, type(e).__name__, e, flush=True)
         res = {"status": "failed", "reason": "검증 중 서버 오류", "steps": [], "log": ""}
     status = "failed" if res["status"] == "failed" else "review"
-    _update(sid, sandbox=res, status=status)
+    if not _update(sid, "sandbox", sandbox=res, status=status):
+        return   # 검증 중에 거절됨 — 결과·알림 버림
     lab = {"passed": "통과", "failed": "실패", "skipped": "건너뜀"}[res["status"]]
     _notify(agent_user, sid, "done" if status == "review" else "failed", f"제출 {top}: 격리 검증 {lab}",
             "관리자 승인을 기다립니다" if status == "review" else res.get("reason", ""))

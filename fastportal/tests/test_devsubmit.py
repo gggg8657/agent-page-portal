@@ -21,6 +21,8 @@ def mkzip(entries):
 GOOD = {"hello-local/app.py": "import os, portal_auth\nPORT = int(os.environ['PORT'])\nBIND = os.environ.get('BIND', '127.0.0.1')\n",
         "hello-local/README.md": "# hello", "hello-local/agent.json": json.dumps({"title": "Hello", "desc": "인사", "group": "기타", "usage": "사용법 " * 10})}
 
+PIPELINE = devsubmit._pipeline
+
 
 class DevSubmitTest(unittest.TestCase):
     def setUp(self):
@@ -112,6 +114,17 @@ class DevSubmitTest(unittest.TestCase):
         self.assertIsNone(devsubmit.precheck(mk("dev")))
         devsubmit.submit(self.ctx("dev"), mkzip(GOOD))   # 검사 중(sandbox) 제출이 생김
         self.assertEqual(devsubmit.precheck(mk("dev"))[0], 400, "검사 중 제출이 있으면 본문 전에 400")
+
+    def test_reject_during_sandbox_stays_rejected(self):
+        s = devsubmit.submit(self.ctx("dev"), mkzip(GOOD))   # status=sandbox(검증은 패치로 멈춤)
+        devsubmit.decide(self.ctx("owner", True), {"id": s["id"], "ok": False, "note": "보안 문제"})
+        sent = []
+        with patch.object(devsubmit, "sandbox", lambda *a: {"status": "passed", "steps": [], "log": ""}), \
+             patch.object(devsubmit, "_notify", lambda *a: sent.append(a)):
+            PIPELINE(s["id"], "dev", "hello-local", "")   # 검증이 거절 뒤에 끝남(setUp 이 _pipeline 을 막아 둬서 진짜를 부름)
+        with db() as c:
+            self.assertEqual(c.execute("SELECT status FROM dev_submissions WHERE id=?", (s["id"],)).fetchone()[0], "rejected")
+        self.assertEqual(sent, [], "거절한 제출로 '승인 대기' 알림을 다시 보내지 않음")
 
     def test_approve_locked(self):
         s = devsubmit.submit(self.ctx("dev"), mkzip(GOOD))
