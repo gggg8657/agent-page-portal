@@ -24,6 +24,13 @@ class WorkspaceTest(unittest.TestCase):
     def save(self, uid="alice", **kw):
         return workspace.save(uid, {"tool": "sql-local", "title": "개인 질문", "payload": {"input": "예산"}, **kw})
 
+    def test_bad_id_is_400_not_500(self):
+        for bad in ([1], 5, {"x": 1}, "../x"):   # [] 같은 빈 값은 "새 작업"(id 없음)
+            with self.assertRaises(ValueError, msg=bad):
+                self.save(id=bad, revision=1)
+            with self.assertRaises(ValueError, msg=bad):
+                workspace.modify("alice", {"id": bad, "action": "archive"})
+
     def test_account_isolation_even_with_forged_owner(self):
         item = self.save(uid="alice")
         other = self.save(uid="bob", payload={"uid": "alice", "input": "다른 작업"})

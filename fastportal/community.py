@@ -250,13 +250,10 @@ def write_review(ctx, req):
         raise PermissionError("자기 것에는 리뷰를 쓸 수 없습니다")
     _rate(ctx.uid)
     with db() as c:
-        r = c.execute("SELECT id FROM reviews WHERE kind=? AND target=? AND uid=?", (kind, tid, ctx.uid)).fetchone()
-        if r:
-            c.execute("UPDATE reviews SET stars=?, body=?, updated=? WHERE id=?", (stars, body, now(), r[0]))
-            rid = r[0]
-        else:
-            rid = secrets.token_urlsafe(9)
-            c.execute("INSERT INTO reviews(id, kind, target, uid, stars, body, created, updated) VALUES(?,?,?,?,?,?,?,?)", (rid, kind, tid, ctx.uid, stars, body, now(), now()))
+        c.execute("INSERT INTO reviews(id, kind, target, uid, stars, body, created, updated) VALUES(?,?,?,?,?,?,?,?) "   # 한 사람 하나 — 동시에 두 번 와도(UNIQUE) 고쳐 씀
+                  "ON CONFLICT(kind, target, uid) DO UPDATE SET stars=excluded.stars, body=excluded.body, updated=excluded.updated",
+                  (secrets.token_urlsafe(9), kind, tid, ctx.uid, stars, body, now(), now()))
+        rid = c.execute("SELECT id FROM reviews WHERE kind=? AND target=? AND uid=?", (kind, tid, ctx.uid)).fetchone()[0]
         accounts.audit(c, ctx.uid, "review_write", f"{kind}:{tid}", f"#{rid} ★{stars}")
         return {"ok": True, "id": rid, "summary": summary(c, [f"{kind}:{tid}"])[f"{kind}:{tid}"]}
 

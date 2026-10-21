@@ -45,6 +45,13 @@ class CommunityTest(unittest.TestCase):
         for x in reversed(self.p): x.stop()
         self.tmp.cleanup()
 
+    def test_review_again_updates_same_row(self):
+        a = community.write_review(ctx("bob"), {"kind": "tool", "id": "sql-local", "stars": 3})
+        b = community.write_review(ctx("bob"), {"kind": "tool", "id": "sql-local", "stars": 5, "body": "다시"})
+        self.assertEqual(a["id"], b["id"])
+        with db() as c:
+            self.assertEqual(tuple(c.execute("SELECT COUNT(*), MAX(stars) FROM reviews WHERE uid='bob'").fetchone()), (1, 5))
+
     def test_visibility_and_own(self):
         with self.assertRaises(PermissionError):
             community.write_review(ctx("alice"), {"kind": "tool", "id": "sql-local", "stars": 5})   # 자기 도구

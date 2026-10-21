@@ -331,8 +331,10 @@ def submit(ctx, data):
     os.makedirs(os.path.join(base, "src"), mode=0o700)
     try:
         top, files = _unpack(data, os.path.join(base, "src"))
-    except Exception:
+    except Exception as e:
         shutil.rmtree(base, ignore_errors=True)
+        if isinstance(e, zipfile.BadZipFile):   # 풀다가 CRC 오류 — ValueError 가 아니라서 500 이었음
+            raise ValueError("zip 파일이 깨졌습니다") from None
         raise
     with open(os.path.join(base, "upload.zip"), "xb") as f:
         f.write(data)

@@ -145,6 +145,8 @@ def save(uid, req):
         raise ValueError("제목은 1~200자")
     raw, ts = _json(req.get("payload")), now()
     item_id = req.get("id")
+    if item_id and not (isinstance(item_id, str) and ID_RE.fullmatch(item_id)):   # 목록·숫자 등은 sqlite 가 500 을 냄
+        raise ValueError("작업 id 형식이 틀립니다")
     with db() as c:
         if item_id:
             old = c.execute("SELECT * FROM work_items WHERE uid=? AND id=?", (uid, item_id)).fetchone()
@@ -173,6 +175,8 @@ class Conflict(ValueError):
 
 def modify(uid, req):
     item_id, action = req.get("id"), req.get("action")
+    if not (isinstance(item_id, str) and ID_RE.fullmatch(item_id)):
+        raise ValueError("작업 id 형식이 틀립니다")
     with db() as c:
         r = c.execute("SELECT * FROM work_items WHERE uid=? AND id=?", (uid, item_id)).fetchone()
         if not r:

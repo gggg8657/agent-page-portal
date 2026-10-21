@@ -115,6 +115,13 @@ class DevSubmitTest(unittest.TestCase):
         devsubmit.submit(self.ctx("dev"), mkzip(GOOD))   # 검사 중(sandbox) 제출이 생김
         self.assertEqual(devsubmit.precheck(mk("dev"))[0], 400, "검사 중 제출이 있으면 본문 전에 400")
 
+    def test_corrupt_zip_is_400(self):
+        z = bytearray(mkzip(GOOD))
+        i = z.index(b"import os")   # 파일 내용 한 바이트를 바꿔 CRC 를 깨뜨림(목록은 멀쩡)
+        z[i] ^= 0x01
+        with self.assertRaises(ValueError):
+            devsubmit.submit(self.ctx("dev"), bytes(z))
+
     def test_check_error_does_not_block_next_upload(self):
         with patch.object(devsubmit, "check_tree", side_effect=RuntimeError("boom")):
             with self.assertRaises(RuntimeError):
