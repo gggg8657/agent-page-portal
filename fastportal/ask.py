@@ -79,7 +79,7 @@ def acquire(uid):
     t = time.time()
     with _LOCK:
         b = _BUSY.get(uid)
-        if b and t - b < LLM_TIMEOUT + 60:
+        if b and t - b[0] < LLM_TIMEOUT + 60:
             raise Refused("이전 답을 쓰는 중입니다 — 끝난 뒤 다시 보내 주세요(한 번에 하나)", "busy", 409)
         v = [x for x in _CALLS.get(uid, ()) if x > t - RATE_S]
         if len(v) >= RATE_N:
@@ -88,14 +88,19 @@ def acquire(uid):
             raise Refused("지금 묻는 사람이 많습니다 — 잠시 뒤 다시 해 주세요", "busy_global", 503, 10)
         v.append(t)
         _CALLS[uid] = v
-        _BUSY[uid] = t
+        tok = object()
+        _BUSY[uid] = (t, tok)
         _GLOBAL["n"] += 1
+        return tok
 
 
-def release(uid):
+def release(uid, tok):
+    """acquire 한 번에 꼭 한 번 — 전체 수는 늘 하나 뺌. 사용자 자리는 그 자리가 아직 이 요청 것일 때만 비움
+    (오래 걸린 답 뒤에 새 요청이 자리를 덮어썼으면, 먼저 끝난 쪽이 남의 자리를 지우거나 전체 수를 못 빼서 새던 것)"""
     with _LOCK:
-        if _BUSY.pop(uid, None) is not None:
-            _GLOBAL["n"] = max(0, _GLOBAL["n"] - 1)
+        _GLOBAL["n"] = max(0, _GLOBAL["n"] - 1)
+        if (_BUSY.get(uid) or (0, None))[1] is tok:
+            _BUSY.pop(uid)
 
 
 # ── 대화 기록(모두 uid 로 거름 — 남의 대화는 없는 것과 같게 404) ────────────────
@@ -366,7 +371,8 @@ async def pick_cards(text, snip, fm, is_owner, agent_user=None):
     """→ (cards, flow, how, agents) how: sure|llm|fallback|file|none. agents: 그 사람이 열 수 있는 공유 빌더 에이전트 —
     도구 카드가 붙는 말이거나, 도구보다 에이전트가 더 맞고 TASK_MAYBE 이상일 때만(LLM 길잡이가 할 일이 아니라고 하면 안 붙임)"""
     q = (text + (" " + snip[:300] if snip else "")).strip()
-    res = await run_in_threadpool(match.search, q[:match.Q_MAX], is_owner, fm["ext"] if fm else None, 5, agent_user)
+    from .app import run_slow   # 검색어 임베딩·빌더 조회가 수 초 — 화면용 풀(4개) 대신 느린 풀에서(/api/match 와 같게)
+    res = await run_slow(match.search, q[:match.Q_MAX], is_owner, fm["ext"] if fm else None, 5, agent_user)
     cards, flow, how = await _pick_tools(res, text, fm)
     ags = res.get("agents") or []
     top_tool = res["tools"][0]["score"] if res["tools"] else 0.0
@@ -406,8 +412,8 @@ def sse(obj):
 class AskStream(Response):
     """POST /api/ask/send 응답 — 메타(대화·카드) → 답 조각 → 끝. 브라우저가 끊으면 LLM 연결도 닫고 그때까지 쓴 답을 저장"""
 
-    def __init__(self, ctx, req):
-        self.status_code, self.background, self.ctx, self.req = 200, None, ctx, req
+    def __init__(self, ctx, req, tok):
+        self.status_code, self.background, self.ctx, self.req, self.tok = 200, None, ctx, req, tok
         from .ctx import hval
         from .pages import _SIG_A
         hd = [("X-Author", hval(_SIG_A)), ("Content-Type", "text/event-stream; charset=utf-8"), ("Cache-Control", "no-store"),
@@ -437,7 +443,7 @@ class AskStream(Response):
                 tg.start_soon(pump)
                 tg.start_soon(watch)
         finally:
-            release(uid)
+            release(uid, self.tok)
             if state["conv"] and not state["saved"]:   # 끊김·오류 — 쓴 데까지라도 남김
                 part = "".join(state["answer"]).strip()
                 ex = dict(state["extra"] or {}, partial=True)
@@ -490,10 +496,10 @@ def send_stream(ctx, body):
     except ValueError:
         return ctx.send({"error": "요청 본문은 JSON 객체여야 합니다", "code": "bad_request"}, code=400)
     try:
-        acquire(ctx.uid)
+        tok = acquire(ctx.uid)
     except Refused as e:
         return ctx.send({"error": str(e), "code": e.code}, code=e.status, headers=[("Retry-After", str(e.retry))] if e.retry else None)
-    return AskStream(ctx, req)
+    return AskStream(ctx, req, tok)
 
 
 # ── 라우팅(app.py 가 부름) ───────────────────────────────────────────────

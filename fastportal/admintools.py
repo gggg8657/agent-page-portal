@@ -67,10 +67,11 @@ def tool_post(ctx, req):
             if n and req.get("confirm") is not True:
                 return ctx.send({"error": f"진행 중인 작업이 {n}건 있습니다 — 그래도 멈추려면 확인하세요", "code": "jobs_running", "active_jobs": n}, code=409)
         changed = toolstate.set_state(c, ctx.uid, t["dir"], en, reason)
-        if stop and not tools.is_remote(t):
-            tools.stop(t); tools.alive_reset()
+    if stop and not tools.is_remote(t):   # 커밋한 뒤에 — setup.sh stop(최대 60초) 동안 DB 쓰기 잠금을 잡으면 다른 쓰기가 모두 'database is locked'
+        tools.stop(t); tools.alive_reset()
+        with db() as c:
             accounts.audit(c, ctx.uid, "tool_stop", t["dir"], "끄면서 멈춤")
-            stopped = True
+        stopped = True
     toolstate.reset()   # 커밋한 뒤 — 다음 요청이 바로 새 상태를 봄
     toolstate.write_file()
     tools.stats_reset()

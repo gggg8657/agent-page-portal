@@ -75,7 +75,7 @@ async def run_slow(fn, *args):
     return await anyio.to_thread.run_sync(fn, *args, limiter=slow_limiter())
 
 
-SLOW_POST = re.compile(r"/api/(idea/|workspace/sync$|pin$|admin/reset$)")   # post_sync 중 오래 걸리는 것(LLM·도구 이력·PIN 해시)
+SLOW_POST = re.compile(r"/api/(idea/|workspace/sync$|pin$|admin/reset$|admin/tool$)")   # post_sync 중 오래 걸리는 것(LLM·도구 이력·PIN 해시)
 SLOW_GET = re.compile(r"/api/workspace/[0-9a-f]{32}$|/api/match$")   # 작업 하나 열기(도구에서 상세 결과를 다시 읽음) · 할 일 검색(검색어 임베딩 — 최대 MATCH_EMBED_TIMEOUT 초)
 
 

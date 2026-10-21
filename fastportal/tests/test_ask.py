@@ -88,32 +88,41 @@ class AskTest(unittest.TestCase):
 
     # ── 제한 ──
     def test_concurrency_rate_global(self):
-        ask.acquire("alice")
+        a = ask.acquire("alice")
         with self.assertRaises(ask.Refused) as e:
             ask.acquire("alice")
         self.assertEqual(e.exception.code, "busy")
-        ask.release("alice")
+        ask.release("alice", a)
         with patch.object(ask, "RATE_N", 2):
             ask._CALLS.clear()
-            ask.acquire("bob"); ask.release("bob")
-            ask.acquire("bob"); ask.release("bob")
+            ask.release("bob", ask.acquire("bob"))
+            ask.release("bob", ask.acquire("bob"))
             with self.assertRaises(ask.Refused) as e:
                 ask.acquire("bob")
             self.assertEqual((e.exception.code, e.exception.status), ("rate_limited", 429))
         with patch.object(ask, "MAX_GLOBAL", 1):
-            ask.acquire("u1")
+            u1 = ask.acquire("u1")
             with self.assertRaises(ask.Refused) as e:
                 ask.acquire("u2")
             self.assertEqual(e.exception.code, "busy_global")
-            ask.release("u1")
-            ask.acquire("u2"); ask.release("u2")
+            ask.release("u1", u1)
+            ask.release("u2", ask.acquire("u2"))
         self.assertEqual(ask._GLOBAL["n"], 0)
 
+    def test_stale_slot_takeover_does_not_leak_global(self):
+        first = ask.acquire("alice")
+        ask._BUSY["alice"] = (0, ask._BUSY["alice"][1])   # 첫 답이 LLM_TIMEOUT+60 을 넘김
+        second = ask.acquire("alice")   # 새 탭에서 다시 물음 — 자리를 넘겨받음
+        ask.release("alice", first)     # 첫 답이 늦게 끝남: 둘째 자리를 지우지 않음
+        self.assertIn("alice", ask._BUSY)
+        ask.release("alice", second)
+        self.assertEqual((ask._GLOBAL["n"], ask._BUSY), (0, {}), "전체 수가 새지 않음(4번 쌓이면 모두 503)")
+
     def test_send_busy_returns_409_and_releases_after_stream(self):
-        ask.acquire("alice")
+        held = ask.acquire("alice")
         code, body, _ = ask.send_stream(Ctx("alice"), b'{"text":"hi"}')
         self.assertEqual((code, body["code"]), (409, "busy"))
-        ask.release("alice")
+        ask.release("alice", held)
         evs = self.run_send({"text": "안녕?"})
         self.assertTrue(evs[-1].get("done"))
         self.assertNotIn("alice", ask._BUSY, "스트림이 끝나면 자리 돌려줌")
