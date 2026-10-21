@@ -527,6 +527,26 @@
    "x-external-network": false,
    "x-external-network-note": "LLM·임베딩 서버(내부)만 호출",
    "x-response-style": "json"
+  },
+  {
+   "name": "meetplan-local",
+   "description": "회의 안건·결정 추적 — 안건 짜기(시간 배분·목표·사전 자료, LLM 또는 규칙), 메모·회의록(붙여 넣기·파일·meeting-local 가져오기)에서 결정·할 일·미결 뽑기(원문 인용 서버 확인·기한 글 → 한국 날짜), 사용자별 할 일 추적 보드·다음 회의 안건, HWPX·Markdown·XLSX·ICS. 문서: docs/api/meetplan-local.md",
+   "x-tool-id": "meetplan",
+   "x-name": "회의 안건·결정 추적",
+   "x-description": "회의 전 안건 짜기 · 회의 뒤 결정·할 일·미결 정리(인용 확인) · 할 일 추적 보드",
+   "x-kind": "agent",
+   "x-kind-note": "시간 맞추기·인용 확인·날짜 바꾸기·보드·다음 회의 안건·내보내기는 결정론 코드, LLM 은 안건 초안·메모 정리 작업에만",
+   "x-category": "업무지원",
+   "x-category-note": "회의록 만들기(meeting-local)와 같은 분류 — 녹음은 그쪽, 안건·후속 추적은 이쪽",
+   "x-entry": "/t/meetplan-local/",
+   "x-health-path": "/t/meetplan-local/healthz",
+   "x-long-running": true,
+   "x-long-running-note": "AI 안건·메모 정리는 작업으로 받아 …/job 을 2초마다 확인(각 10~60초)",
+   "x-docs-input": "text",
+   "x-docs-input-note": "메모 글 또는 md·txt·docx·hwp·hwpx·pdf 를 base64 JSON 으로, meeting-local 회의록 id",
+   "x-external-network": false,
+   "x-external-network-note": "LLM 서버·meeting-local(내부)만 호출",
+   "x-response-style": "json"
   }
  ],
  "paths": {
@@ -27000,6 +27020,1559 @@
     },
     "x-permission": "editor"
    }
+  },
+  "/t/meetplan-local/api/health": {
+   "get": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanHealth",
+    "summary": "살아 있는지",
+    "description": "가벼운 확인(LLM 연결 여부 포함).",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MeetplanHealth"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/meetplan-local/api/meta": {
+   "get": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanMeta",
+    "summary": "AI·kordoc 상태, 오늘(한국 날짜), 목표·상태 값, 제한",
+    "description": "LLM 확인은 60초 기억. llm.ok 가 거짓이면 화면은 'AI 로 짜기'·'정리하기'를 끄고 규칙 안건·메모 넣기·보드만.",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MeetplanMeta"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/meetplan-local/api/meetings": {
+   "get": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanMeetings",
+    "summary": "회의 목록(회의 날짜 최근 순)",
+    "description": "사용자별(X-Agent-User → WORKSPACE/u/<id>/board/meetings/).",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MeetplanMeetings"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanMeetingCreate",
+    "summary": "회의 만들기",
+    "description": "date 가 없으면 오늘(한국 날짜). 사용자당 300개.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/MeetplanCreate"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "만듦",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MeetplanMeeting"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/meetplan-local/api/meetings/{mid}": {
+   "get": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanMeeting",
+    "summary": "회의 하나(안건·메모·정리 결과·작업)",
+    "description": "job 은 이 서버가 기억하는 마지막 AI 작업(재시작하면 null).",
+    "parameters": [
+     {
+      "name": "mid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "회의 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MeetplanMeeting"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanMeetingUpdate",
+    "summary": "제목·회의 날짜 바꾸기",
+    "description": "회의 날짜는 기한 글을 날짜로 바꾸는 기준(다시 정리하면 반영).",
+    "parameters": [
+     {
+      "name": "mid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "회의 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/MeetplanUpdate"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MeetplanMeeting"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/meetplan-local/api/meetings/{mid}/delete": {
+   "post": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanMeetingDelete",
+    "summary": "회의 지우기",
+    "description": "그 회의에서 나온 할 일·미결 사항도 보드에서 지움. AI 작업 중이면 409.",
+    "parameters": [
+     {
+      "name": "mid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "회의 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ok"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "작업 중(code: busy)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/meetplan-local/api/meetings/{mid}/agenda/draft": {
+   "post": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanAgendaDraft",
+    "summary": "안건 짜기(AI 작업 또는 규칙)",
+    "description": "AI: LLM(JSON 스키마)이 시작·주제마다 안건·마무리 → 서버 검사(목표는 결정·공유·논의, 담당은 입력한 역할 중 하나 아니면 비움, 빠진 주제 덧붙임 added_topics, 분 배분을 회의 시간에 딱 맞춤 — 비율 유지·안건마다 최소 2분). 202 작업 → …/job. ai:false 는 규칙으로 바로 200(주제 글로 목표 추정). 회의의 안건을 덮어씀.",
+    "parameters": [
+     {
+      "name": "mid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "회의 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/MeetplanAgendaRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "202": {
+      "description": "시작함",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MeetplanDraftResult"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "규칙 안건(ai:false)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MeetplanDraftResult"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "이미 AI 작업 중이거나 자리가 없음(code: busy)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "503": {
+      "description": "LLM·kordoc·meeting-local 이 꺼짐(code: unavailable)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-llm": true
+   }
+  },
+  "/t/meetplan-local/api/meetings/{mid}/agenda": {
+   "post": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanAgendaSave",
+    "summary": "고친 안건 저장",
+    "description": "항목 검사(목표·역할), fit 이면 시간 맞추기. 합이 회의 시간과 다르면 diff 로 알림(저장은 함).",
+    "parameters": [
+     {
+      "name": "mid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "회의 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/MeetplanAgendaSave"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MeetplanAgendaSaved"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/meetplan-local/api/meetings/{mid}/notes": {
+   "post": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanNotes",
+    "summary": "메모 넣기(붙여 넣기·파일·meeting-local 회의록)",
+    "description": "upload: md·txt 그대로, docx 표준 라이브러리, hwp·hwpx·pdf 는 kordoc CLI. meeting-local: 그 사용자의 회의록(minutes.md)을 포털 서명(portal_auth.sign(사용자))으로 meeting-local 의 GET /api/runs/{run_id} 에서 가져옴 — 회의 제목('새 회의'일 때)·회의 일시를 함께. 메모는 20만 자까지 저장(정리는 앞 48,000자).",
+    "parameters": [
+     {
+      "name": "mid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "회의 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/MeetplanNotesRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MeetplanMeeting"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "503": {
+      "description": "LLM·kordoc·meeting-local 이 꺼짐(code: unavailable)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "413": {
+      "description": "파일이 너무 큼(code: too_large)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/meetplan-local/api/meetings/{mid}/extract": {
+   "post": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanExtract",
+    "summary": "메모 정리(AI 작업)",
+    "description": "덩어리(12,000자 × 4)마다 LLM(JSON 스키마)이 결정·할 일(task·owner·due_text)·미결 + 원문 인용 → 서버가 인용을 원문에서 확인(정규화 뒤 비슷함 0.85 이상 + 숫자 일치, 못 하면 verified=false·flags — 지우지 않음), 담당·기한 글도 원문에 있는지(없으면 '미정'·빈 기한 + flags), 기한 글은 회의 날짜 기준 한국 날짜(due, 어림이면 due_exact=false). 202 작업 → …/job 을 2초마다.",
+    "parameters": [
+     {
+      "name": "mid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "회의 id"
+     }
+    ],
+    "responses": {
+     "202": {
+      "description": "시작함",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MeetplanJobWrap"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "이미 AI 작업 중이거나 자리가 없음(code: busy)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "503": {
+      "description": "LLM·kordoc·meeting-local 이 꺼짐(code: unavailable)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-llm": true,
+    "x-long-running": true
+   }
+  },
+  "/t/meetplan-local/api/meetings/{mid}/job": {
+   "get": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanJob",
+    "summary": "AI 작업 상태",
+    "description": "kind: agenda·extract. 메모리에만(서버 재시작 시 null).",
+    "parameters": [
+     {
+      "name": "mid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "회의 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MeetplanJobWrap"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/meetplan-local/api/meetings/{mid}/commit": {
+   "post": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanCommit",
+    "summary": "보드에 올리기",
+    "description": "고른 할 일·미결(번호와 고친 담당·기한·내용). 같은 회의·같은 번호는 고쳐 씀(중복 없음). 인용·확인 결과는 서버 값.",
+    "parameters": [
+     {
+      "name": "mid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "회의 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/MeetplanCommitRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MeetplanCommitResult"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/meetplan-local/api/meetings/{mid}/agenda.md": {
+   "get": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanAgendaMd",
+    "summary": "안건 Markdown",
+    "description": "개요 표·진행 순서(시각·분·목표·담당·정할 질문)·사전 자료·진행 팁.",
+    "parameters": [
+     {
+      "name": "mid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "회의 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "파일(Content-Disposition attachment)",
+      "content": {
+       "text/markdown": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/meetplan-local/api/meetings/{mid}/agenda.hwpx": {
+   "get": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanAgendaHwpx",
+    "summary": "안건 HWPX(한 쪽)",
+    "description": "kordoc generate --preset 회의록(표지·목차·쪽번호 없음) + validate.",
+    "parameters": [
+     {
+      "name": "mid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "회의 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "파일(Content-Disposition attachment)",
+      "content": {
+       "application/hwp+zip": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "503": {
+      "description": "kordoc 없음(code: unavailable)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/meetplan-local/api/meetings/{mid}/minutes.md": {
+   "get": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanMinutesMd",
+    "summary": "결정·할 일 정리 Markdown",
+    "description": "결정(✔/⚠ 인용)·할 일(보드에 올렸으면 보드의 지금 값)·미결.",
+    "parameters": [
+     {
+      "name": "mid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "회의 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "파일(Content-Disposition attachment)",
+      "content": {
+       "text/markdown": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/meetplan-local/api/meetings/{mid}/minutes.hwpx": {
+   "get": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanMinutesHwpx",
+    "summary": "결정·할 일 정리 HWPX",
+    "description": "",
+    "parameters": [
+     {
+      "name": "mid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "회의 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "파일(Content-Disposition attachment)",
+      "content": {
+       "application/hwp+zip": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "503": {
+      "description": "kordoc 없음(code: unavailable)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/meetplan-local/api/board": {
+   "get": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanBoard",
+    "summary": "추적 보드(할 일·미결)",
+    "description": "정렬: 안 끝난 것·기한 지난 것·기한 가까운 순. owners = 담당 목록(거르기용), counts 는 거르기 전 전체.",
+    "parameters": [
+     {
+      "name": "owner",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "description": "담당(그대로 같은 것)"
+     },
+     {
+      "name": "status",
+      "in": "query",
+      "schema": {
+       "type": "string",
+       "enum": [
+        "할 일",
+        "진행 중",
+        "완료",
+        "보류",
+        "열림"
+       ]
+      },
+      "description": "상태, '열림' = 완료·보류 아닌 것"
+     },
+     {
+      "name": "overdue",
+      "in": "query",
+      "schema": {
+       "type": "string",
+       "enum": [
+        "1"
+       ]
+      },
+      "description": "1 = 기한 지난 것만(오늘 한국 날짜보다 앞, 완료·보류 아님)"
+     },
+     {
+      "name": "mid",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "description": "그 회의에서 나온 것만"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MeetplanBoard"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/meetplan-local/api/board/actions.xlsx": {
+   "get": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanBoardXlsx",
+    "summary": "할 일 XLSX",
+    "description": "거르기 그대로. 열: 할 일·담당·기한·상태·기한 지남·회의·회의 날짜·기한 원문·근거·인용 확인·메모.",
+    "parameters": [
+     {
+      "name": "owner",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "description": "담당(그대로 같은 것)"
+     },
+     {
+      "name": "status",
+      "in": "query",
+      "schema": {
+       "type": "string",
+       "enum": [
+        "할 일",
+        "진행 중",
+        "완료",
+        "보류",
+        "열림"
+       ]
+      },
+      "description": "상태, '열림' = 완료·보류 아닌 것"
+     },
+     {
+      "name": "overdue",
+      "in": "query",
+      "schema": {
+       "type": "string",
+       "enum": [
+        "1"
+       ]
+      },
+      "description": "1 = 기한 지난 것만(오늘 한국 날짜보다 앞, 완료·보류 아님)"
+     },
+     {
+      "name": "mid",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "description": "그 회의에서 나온 것만"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "파일(Content-Disposition attachment)",
+      "content": {
+       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/meetplan-local/api/board/actions.ics": {
+   "get": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanBoardIcs",
+    "summary": "기한 ICS(달력)",
+    "description": "끝나지 않은 할 일 중 기한 있는 것마다 하루 일정(DTSTART;VALUE=DATE, 한국 날짜). UID = 할 일 id.",
+    "parameters": [
+     {
+      "name": "owner",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "description": "담당(그대로 같은 것)"
+     },
+     {
+      "name": "status",
+      "in": "query",
+      "schema": {
+       "type": "string",
+       "enum": [
+        "할 일",
+        "진행 중",
+        "완료",
+        "보류",
+        "열림"
+       ]
+      },
+      "description": "상태, '열림' = 완료·보류 아닌 것"
+     },
+     {
+      "name": "overdue",
+      "in": "query",
+      "schema": {
+       "type": "string",
+       "enum": [
+        "1"
+       ]
+      },
+      "description": "1 = 기한 지난 것만(오늘 한국 날짜보다 앞, 완료·보류 아님)"
+     },
+     {
+      "name": "mid",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "description": "그 회의에서 나온 것만"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "파일(Content-Disposition attachment)",
+      "content": {
+       "text/calendar": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/meetplan-local/api/board/actions.md": {
+   "get": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanBoardMd",
+    "summary": "할 일 Markdown",
+    "description": "",
+    "parameters": [
+     {
+      "name": "owner",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "description": "담당(그대로 같은 것)"
+     },
+     {
+      "name": "status",
+      "in": "query",
+      "schema": {
+       "type": "string",
+       "enum": [
+        "할 일",
+        "진행 중",
+        "완료",
+        "보류",
+        "열림"
+       ]
+      },
+      "description": "상태, '열림' = 완료·보류 아닌 것"
+     },
+     {
+      "name": "overdue",
+      "in": "query",
+      "schema": {
+       "type": "string",
+       "enum": [
+        "1"
+       ]
+      },
+      "description": "1 = 기한 지난 것만(오늘 한국 날짜보다 앞, 완료·보류 아님)"
+     },
+     {
+      "name": "mid",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "description": "그 회의에서 나온 것만"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "파일(Content-Disposition attachment)",
+      "content": {
+       "text/markdown": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/meetplan-local/api/actions": {
+   "post": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanActionCreate",
+    "summary": "할 일 직접 추가",
+    "description": "인용 없음(verified=false). 응답은 보드 전체.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/MeetplanActionCreate"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "만듦",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MeetplanBoard"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/meetplan-local/api/actions/{aid}": {
+   "post": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanActionEdit",
+    "summary": "할 일 고치기·상태 바꾸기",
+    "description": "기한을 바꾸면 due_note='직접 고침'. 완료로 바꾸면 done_at.",
+    "parameters": [
+     {
+      "name": "aid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^a[0-9a-f]{10}$"
+      },
+      "description": "할 일 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/MeetplanActionEdit"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MeetplanAction"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/meetplan-local/api/actions/{aid}/delete": {
+   "post": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanActionDelete",
+    "summary": "할 일 지우기",
+    "description": "",
+    "parameters": [
+     {
+      "name": "aid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^a[0-9a-f]{10}$"
+      },
+      "description": "할 일 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ok"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/meetplan-local/api/open/{oid}": {
+   "post": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanOpenEdit",
+    "summary": "미결 사항 고치기(내용·상태)",
+    "description": "상태를 '미결'로 되돌리면 carried_to 를 비움.",
+    "parameters": [
+     {
+      "name": "oid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^o[0-9a-f]{10}$"
+      },
+      "description": "미결 사항 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/MeetplanOpenEdit"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MeetplanOpen"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/meetplan-local/api/open/{oid}/delete": {
+   "post": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanOpenDelete",
+    "summary": "미결 사항 지우기",
+    "description": "",
+    "parameters": [
+     {
+      "name": "oid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^o[0-9a-f]{10}$"
+      },
+      "description": "미결 사항 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ok"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/meetplan-local/api/next-agenda": {
+   "post": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanNextAgenda",
+    "summary": "다음 회의 안건 만들기",
+    "description": "미결 사항(open_ids, 없으면 '미결' 전부)·기한 지난 할 일로 새 회의 + 안건: 시작·기한 지난 할 일 점검(없으면 진행 중 확인)·미결마다 하나·마무리, 지난 회의의 역할을 이어받고 시간을 맞춤(LLM 없음). 넘긴 미결은 '안건으로 넘김'·carried_to. 넘길 것이 없으면 400.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/MeetplanNextRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "만듦",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MeetplanMeeting"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/meetplan-local/api/meeting-local/runs": {
+   "get": {
+    "tags": [
+     "meetplan-local"
+    ],
+    "operationId": "meetplanMeetingRuns",
+    "summary": "가져올 수 있는 meeting-local 회의록 목록",
+    "description": "이 사용자의 meeting-local 실행 중 회의록까지 끝난 것(status done). 포털 서명으로 meeting-local GET /api/runs 를 부름. link = 회의록 만들기 화면.",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MeetplanRuns"
+        }
+       }
+      }
+     },
+     "503": {
+      "description": "LLM·kordoc·meeting-local 이 꺼짐(code: unavailable)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
   }
  },
  "components": {
@@ -47223,6 +48796,1536 @@
       "$ref": "#/components/schemas/AbAgent"
      }
     }
+   },
+   "MeetplanHealth": {
+    "type": "object",
+    "properties": {
+     "ok": {
+      "type": "boolean"
+     },
+     "llm": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "ok",
+     "llm"
+    ]
+   },
+   "MeetplanMeta": {
+    "type": "object",
+    "properties": {
+     "llm": {
+      "type": "object",
+      "properties": {
+       "ok": {
+        "type": "boolean"
+       },
+       "model": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "ok",
+       "model"
+      ]
+     },
+     "kordoc": {
+      "type": "boolean",
+      "description": "HWPX 만들기·hwp/hwpx/pdf 읽기 가능"
+     },
+     "notice": {
+      "type": "string",
+      "description": "인용 확인·기한 날짜 안내 — 화면에 늘 보임"
+     },
+     "today": {
+      "type": "string",
+      "description": "오늘(한국 날짜)"
+     },
+     "goals": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "enum": [
+        "결정",
+        "공유",
+        "논의"
+       ]
+      }
+     },
+     "statuses": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "enum": [
+        "할 일",
+        "진행 중",
+        "완료",
+        "보류"
+       ]
+      }
+     },
+     "open_statuses": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "enum": [
+        "미결",
+        "안건으로 넘김",
+        "해결"
+       ]
+      }
+     },
+     "limits": {
+      "type": "object",
+      "properties": {
+       "duration_min": {
+        "type": "integer"
+       },
+       "duration_max": {
+        "type": "integer"
+       },
+       "topics": {
+        "type": "integer"
+       },
+       "roles": {
+        "type": "integer"
+       },
+       "notes_chars": {
+        "type": "integer"
+       },
+       "file_mb": {
+        "type": "integer"
+       },
+       "ai_per_hour": {
+        "type": "integer"
+       },
+       "meetings": {
+        "type": "integer"
+       },
+       "actions": {
+        "type": "integer"
+       },
+       "quote_min": {
+        "type": "number"
+       }
+      },
+      "required": [
+       "duration_min",
+       "duration_max",
+       "topics",
+       "roles",
+       "notes_chars",
+       "file_mb",
+       "ai_per_hour",
+       "meetings",
+       "actions",
+       "quote_min"
+      ]
+     },
+     "accept": {
+      "type": "string",
+      "description": "파일 고르기 accept 값"
+     },
+     "board": {
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string"
+       },
+       "scope": {
+        "type": "string",
+        "enum": [
+         "user"
+        ]
+       }
+      },
+      "required": [
+       "id",
+       "scope"
+      ],
+      "description": "지금 보드(개인 보드만 — 부서 공유 보드는 나중에)"
+     }
+    },
+    "required": [
+     "llm",
+     "kordoc",
+     "notice",
+     "today",
+     "goals",
+     "statuses",
+     "open_statuses",
+     "limits",
+     "accept",
+     "board"
+    ]
+   },
+   "MeetplanMeetingBrief": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "date": {
+      "type": "string",
+      "description": "한국 날짜 YYYY-MM-DD(없으면 빈 글)"
+     },
+     "created": {
+      "type": "string"
+     },
+     "updated": {
+      "type": "string"
+     },
+     "agenda": {
+      "type": "integer",
+      "description": "안건 항목 수"
+     },
+     "notes": {
+      "type": "boolean"
+     },
+     "extracted": {
+      "type": "string",
+      "description": "정리 시각(UTC ISO, 없으면 빈 글)"
+     },
+     "decisions": {
+      "type": "integer"
+     },
+     "actions": {
+      "type": "integer"
+     },
+     "open": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "date",
+     "created",
+     "updated",
+     "agenda",
+     "notes",
+     "extracted",
+     "decisions",
+     "actions",
+     "open"
+    ]
+   },
+   "MeetplanMeetings": {
+    "type": "object",
+    "properties": {
+     "items": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/MeetplanMeetingBrief"
+      }
+     }
+    },
+    "required": [
+     "items"
+    ]
+   },
+   "MeetplanCreate": {
+    "type": "object",
+    "properties": {
+     "title": {
+      "type": "string",
+      "maxLength": 80
+     },
+     "date": {
+      "type": "string",
+      "description": "한국 날짜 YYYY-MM-DD(없으면 빈 글)"
+     }
+    },
+    "required": []
+   },
+   "MeetplanUpdate": {
+    "type": "object",
+    "properties": {
+     "title": {
+      "type": "string",
+      "maxLength": 80
+     },
+     "date": {
+      "type": "string",
+      "description": "한국 날짜 YYYY-MM-DD(없으면 빈 글)"
+     }
+    },
+    "required": []
+   },
+   "MeetplanAgendaItem": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "goal": {
+      "type": "string",
+      "enum": [
+       "결정",
+       "공유",
+       "논의"
+      ]
+     },
+     "minutes": {
+      "type": "integer"
+     },
+     "owner": {
+      "type": "string",
+      "description": "참석 역할 중 하나(아니면 빈 글)"
+     },
+     "question": {
+      "type": "string",
+      "description": "정할 질문"
+     },
+     "prereading": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "note": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "goal",
+     "minutes",
+     "owner",
+     "question",
+     "prereading",
+     "note"
+    ]
+   },
+   "MeetplanAgenda": {
+    "type": "object",
+    "properties": {
+     "purpose": {
+      "type": "string"
+     },
+     "duration": {
+      "type": "integer"
+     },
+     "roles": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "topics": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "items": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/MeetplanAgendaItem"
+      }
+     },
+     "prereading": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "tips": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "by": {
+      "type": "string",
+      "description": "ai·rule·edit·next(다음 회의 안건)"
+     },
+     "added_topics": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "AI 가 빠뜨려 서버가 덧붙인 주제"
+     }
+    },
+    "required": [
+     "purpose",
+     "duration",
+     "roles",
+     "topics",
+     "items",
+     "prereading",
+     "tips",
+     "by",
+     "added_topics"
+    ]
+   },
+   "MeetplanAgendaRequest": {
+    "type": "object",
+    "properties": {
+     "purpose": {
+      "type": "string",
+      "maxLength": 300
+     },
+     "duration": {
+      "type": "integer",
+      "minimum": 10,
+      "maximum": 480
+     },
+     "roles": {
+      "anyOf": [
+       {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       {
+        "type": "string"
+       }
+      ],
+      "description": "배열 또는 줄바꿈·쉼표로 나눈 글"
+     },
+     "topics": {
+      "anyOf": [
+       {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       {
+        "type": "string"
+       }
+      ],
+      "description": "배열 또는 줄바꿈·쉼표로 나눈 글"
+     },
+     "ai": {
+      "type": "boolean",
+      "description": "기본 참. 거짓이면 규칙으로 바로(LLM 없음)"
+     }
+    },
+    "required": [
+     "duration",
+     "topics"
+    ],
+    "description": "참석자는 이름이 아니라 역할로(최대 12, 각 30자). 주제 최대 12"
+   },
+   "MeetplanAgendaSave": {
+    "type": "object",
+    "properties": {
+     "purpose": {
+      "type": "string"
+     },
+     "duration": {
+      "type": "integer"
+     },
+     "roles": {
+      "anyOf": [
+       {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       {
+        "type": "string"
+       }
+      ],
+      "description": "배열 또는 줄바꿈·쉼표로 나눈 글"
+     },
+     "topics": {
+      "anyOf": [
+       {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       {
+        "type": "string"
+       }
+      ],
+      "description": "배열 또는 줄바꿈·쉼표로 나눈 글"
+     },
+     "items": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/MeetplanAgendaItem"
+      }
+     },
+     "prereading": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "tips": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "by": {
+      "type": "string"
+     },
+     "fit": {
+      "type": "boolean",
+      "description": "참이면 분 배분을 회의 시간에 맞춤(비율 유지·최소 2분)"
+     }
+    },
+    "required": [
+     "duration",
+     "items"
+    ]
+   },
+   "MeetplanAgendaSaved": {
+    "type": "object",
+    "properties": {
+     "meeting": {
+      "$ref": "#/components/schemas/MeetplanMeeting"
+     },
+     "total": {
+      "type": "integer"
+     },
+     "diff": {
+      "type": "integer",
+      "description": "합 - 회의 시간(0 이면 맞음)"
+     }
+    },
+    "required": [
+     "meeting",
+     "total",
+     "diff"
+    ]
+   },
+   "MeetplanDraftResult": {
+    "type": "object",
+    "properties": {
+     "meeting": {
+      "$ref": "#/components/schemas/MeetplanMeeting"
+     },
+     "job": {
+      "$ref": "#/components/schemas/MeetplanJob"
+     }
+    },
+    "required": [],
+    "description": "ai:false → meeting(200), AI → job(202)"
+   },
+   "MeetplanNotes": {
+    "type": "object",
+    "properties": {
+     "source": {
+      "type": "string",
+      "enum": [
+       "paste",
+       "upload",
+       "meeting-local"
+      ]
+     },
+     "name": {
+      "type": "string"
+     },
+     "run_id": {
+      "type": "string",
+      "description": "meeting-local 실행 id(가져온 경우)"
+     },
+     "text": {
+      "type": "string"
+     },
+     "chars": {
+      "type": "integer"
+     },
+     "added": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "source",
+     "name",
+     "run_id",
+     "text",
+     "chars",
+     "added"
+    ]
+   },
+   "MeetplanNotesRequest": {
+    "type": "object",
+    "properties": {
+     "source": {
+      "type": "string",
+      "enum": [
+       "paste",
+       "upload",
+       "meeting-local"
+      ]
+     },
+     "text": {
+      "type": "string",
+      "description": "paste"
+     },
+     "name": {
+      "type": "string",
+      "maxLength": 120
+     },
+     "b64": {
+      "type": "string",
+      "description": "upload: 파일 base64(md·txt·docx·hwp·hwpx·pdf, 최대 20MB)"
+     },
+     "run_id": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4}$",
+      "description": "meeting-local: 회의록 실행 id"
+     },
+     "use_date": {
+      "type": "boolean",
+      "description": "기본 참 — meeting-local 회의 일시로 회의 날짜 바꾸기"
+     }
+    },
+    "required": [
+     "source"
+    ]
+   },
+   "MeetplanDecision": {
+    "type": "object",
+    "properties": {
+     "key": {
+      "type": "string",
+      "pattern": "^D\\d+$"
+     },
+     "text": {
+      "type": "string"
+     },
+     "quote": {
+      "type": "string"
+     },
+     "verified": {
+      "type": "boolean"
+     },
+     "score": {
+      "type": "number"
+     },
+     "flags": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "확인 못 한 이유·고친 점(원문에서 찾지 못함·담당/기한이 원문에 없어 비움·기한 어림 …)"
+     }
+    },
+    "required": [
+     "key",
+     "text",
+     "quote",
+     "verified",
+     "score",
+     "flags"
+    ]
+   },
+   "MeetplanExtractAction": {
+    "type": "object",
+    "properties": {
+     "key": {
+      "type": "string",
+      "pattern": "^A\\d+$"
+     },
+     "task": {
+      "type": "string"
+     },
+     "owner": {
+      "type": "string",
+      "description": "원문에 있는 말만(없으면 '미정')"
+     },
+     "due": {
+      "type": "string",
+      "description": "한국 날짜 YYYY-MM-DD(없으면 빈 글)"
+     },
+     "due_text": {
+      "type": "string",
+      "description": "원문의 기한 글(원문에 없으면 비움)"
+     },
+     "due_note": {
+      "type": "string",
+      "description": "날짜로 바꾼 설명(회의일 기준)"
+     },
+     "due_exact": {
+      "type": "boolean",
+      "description": "거짓 = 어림"
+     },
+     "quote": {
+      "type": "string"
+     },
+     "verified": {
+      "type": "boolean"
+     },
+     "score": {
+      "type": "number"
+     },
+     "flags": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "확인 못 한 이유·고친 점(원문에서 찾지 못함·담당/기한이 원문에 없어 비움·기한 어림 …)"
+     }
+    },
+    "required": [
+     "key",
+     "task",
+     "owner",
+     "due",
+     "due_text",
+     "due_note",
+     "due_exact",
+     "quote",
+     "verified",
+     "score",
+     "flags"
+    ]
+   },
+   "MeetplanOpenItem": {
+    "type": "object",
+    "properties": {
+     "key": {
+      "type": "string",
+      "pattern": "^O\\d+$"
+     },
+     "topic": {
+      "type": "string"
+     },
+     "quote": {
+      "type": "string"
+     },
+     "verified": {
+      "type": "boolean"
+     },
+     "score": {
+      "type": "number"
+     },
+     "flags": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "확인 못 한 이유·고친 점(원문에서 찾지 못함·담당/기한이 원문에 없어 비움·기한 어림 …)"
+     }
+    },
+    "required": [
+     "key",
+     "topic",
+     "quote",
+     "verified",
+     "score",
+     "flags"
+    ]
+   },
+   "MeetplanExtract": {
+    "type": "object",
+    "properties": {
+     "decisions": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/MeetplanDecision"
+      }
+     },
+     "actions": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/MeetplanExtractAction"
+      }
+     },
+     "open": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/MeetplanOpenItem"
+      }
+     },
+     "stats": {
+      "type": "object",
+      "properties": {
+       "items": {
+        "type": "integer"
+       },
+       "verified": {
+        "type": "integer"
+       },
+       "unverified": {
+        "type": "integer"
+       },
+       "flagged": {
+        "type": "integer"
+       },
+       "base_date": {
+        "type": "string",
+        "description": "한국 날짜 YYYY-MM-DD(없으면 빈 글)"
+       },
+       "chunks": {
+        "type": "integer"
+       },
+       "skipped_chunks": {
+        "type": "integer",
+        "description": "덩어리 상한을 넘어 읽지 않은 수"
+       }
+      },
+      "required": [
+       "items",
+       "verified",
+       "unverified",
+       "flagged",
+       "base_date",
+       "chunks",
+       "skipped_chunks"
+      ]
+     },
+     "at": {
+      "type": "string"
+     },
+     "model": {
+      "type": "string"
+     },
+     "committed": {
+      "type": "string",
+      "description": "보드에 올린 시각"
+     }
+    },
+    "required": [
+     "decisions",
+     "actions",
+     "open",
+     "stats",
+     "at",
+     "model"
+    ]
+   },
+   "MeetplanJob": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "agenda",
+       "extract"
+      ]
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "running",
+       "done",
+       "failed"
+      ]
+     },
+     "done": {
+      "type": "integer"
+     },
+     "total": {
+      "type": "integer"
+     },
+     "msg": {
+      "type": "string"
+     },
+     "started": {
+      "type": "string"
+     },
+     "finished": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "elapsed": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "id",
+     "kind",
+     "status",
+     "done",
+     "total",
+     "msg",
+     "started",
+     "finished",
+     "error",
+     "elapsed"
+    ]
+   },
+   "MeetplanJobWrap": {
+    "type": "object",
+    "properties": {
+     "job": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/MeetplanJob"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "job"
+    ]
+   },
+   "MeetplanMeeting": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "board": {
+      "type": "string",
+      "description": "보드 id(지금은 me)"
+     },
+     "by": {
+      "type": "string",
+      "description": "만든 사용자"
+     },
+     "title": {
+      "type": "string"
+     },
+     "date": {
+      "type": "string",
+      "description": "한국 날짜 YYYY-MM-DD(없으면 빈 글)"
+     },
+     "created": {
+      "type": "string"
+     },
+     "updated": {
+      "type": "string"
+     },
+     "agenda": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/MeetplanAgenda"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "notes": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/MeetplanNotes"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "extract": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/MeetplanExtract"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "seeded": {
+      "anyOf": [
+       {
+        "type": "object",
+        "properties": {
+         "open": {
+          "type": "array",
+          "items": {
+           "type": "string"
+          }
+         },
+         "overdue": {
+          "type": "array",
+          "items": {
+           "type": "string"
+          }
+         },
+         "at": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "open",
+         "overdue",
+         "at"
+        ],
+        "description": "다음 회의 안건으로 만든 회의면 넘겨받은 것"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "job": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/MeetplanJob"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "id",
+     "board",
+     "by",
+     "title",
+     "date",
+     "created",
+     "updated",
+     "agenda",
+     "notes",
+     "extract"
+    ]
+   },
+   "MeetplanCommitRequest": {
+    "type": "object",
+    "properties": {
+     "actions": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "key": {
+         "type": "string"
+        },
+        "task": {
+         "type": "string"
+        },
+        "owner": {
+         "type": "string"
+        },
+        "due": {
+         "type": "string",
+         "description": "한국 날짜 YYYY-MM-DD(없으면 빈 글)"
+        },
+        "status": {
+         "type": "string",
+         "enum": [
+          "할 일",
+          "진행 중",
+          "완료",
+          "보류"
+         ]
+        }
+       },
+       "required": [
+        "key"
+       ]
+      }
+     },
+     "open": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "key": {
+         "type": "string"
+        },
+        "topic": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "key"
+       ]
+      }
+     }
+    },
+    "required": [],
+    "description": "뽑은 번호(key)와 고친 값. 인용·확인 결과는 서버가 가진 값을 씀"
+   },
+   "MeetplanCommitResult": {
+    "type": "object",
+    "properties": {
+     "actions": {
+      "type": "object",
+      "properties": {
+       "added": {
+        "type": "integer"
+       },
+       "updated": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "added",
+       "updated"
+      ]
+     },
+     "open": {
+      "type": "object",
+      "properties": {
+       "added": {
+        "type": "integer"
+       },
+       "updated": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "added",
+       "updated"
+      ]
+     }
+    },
+    "required": [
+     "actions",
+     "open"
+    ]
+   },
+   "MeetplanAction": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "board": {
+      "type": "string"
+     },
+     "by": {
+      "type": "string"
+     },
+     "mid": {
+      "type": "string",
+      "description": "출처 회의(직접 적은 것은 빈 글)"
+     },
+     "key": {
+      "type": "string"
+     },
+     "task": {
+      "type": "string"
+     },
+     "owner": {
+      "type": "string"
+     },
+     "due": {
+      "type": "string",
+      "description": "한국 날짜 YYYY-MM-DD(없으면 빈 글)"
+     },
+     "due_text": {
+      "type": "string"
+     },
+     "due_note": {
+      "type": "string"
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "할 일",
+       "진행 중",
+       "완료",
+       "보류"
+      ]
+     },
+     "quote": {
+      "type": "string"
+     },
+     "verified": {
+      "type": "boolean"
+     },
+     "score": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "flags": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "note": {
+      "type": "string"
+     },
+     "created": {
+      "type": "string"
+     },
+     "updated": {
+      "type": "string"
+     },
+     "done_at": {
+      "type": "string"
+     },
+     "overdue": {
+      "type": "boolean"
+     },
+     "mtitle": {
+      "type": "string"
+     },
+     "mdate": {
+      "type": "string",
+      "description": "한국 날짜 YYYY-MM-DD(없으면 빈 글)"
+     }
+    },
+    "required": [
+     "id",
+     "board",
+     "by",
+     "mid",
+     "task",
+     "owner",
+     "due",
+     "status",
+     "quote",
+     "verified",
+     "created",
+     "updated"
+    ]
+   },
+   "MeetplanOpen": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "board": {
+      "type": "string"
+     },
+     "by": {
+      "type": "string"
+     },
+     "mid": {
+      "type": "string"
+     },
+     "key": {
+      "type": "string"
+     },
+     "topic": {
+      "type": "string"
+     },
+     "quote": {
+      "type": "string"
+     },
+     "verified": {
+      "type": "boolean"
+     },
+     "score": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "미결",
+       "안건으로 넘김",
+       "해결"
+      ]
+     },
+     "carried_to": {
+      "type": "string",
+      "description": "넘긴 다음 회의 id"
+     },
+     "created": {
+      "type": "string"
+     },
+     "updated": {
+      "type": "string"
+     },
+     "mtitle": {
+      "type": "string"
+     },
+     "mdate": {
+      "type": "string",
+      "description": "한국 날짜 YYYY-MM-DD(없으면 빈 글)"
+     },
+     "carried_title": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "mid",
+     "topic",
+     "quote",
+     "verified",
+     "status",
+     "carried_to",
+     "created",
+     "updated"
+    ]
+   },
+   "MeetplanBoard": {
+    "type": "object",
+    "properties": {
+     "today": {
+      "type": "string",
+      "description": "한국 날짜 YYYY-MM-DD(없으면 빈 글)"
+     },
+     "actions": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/MeetplanAction"
+      }
+     },
+     "open": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/MeetplanOpen"
+      }
+     },
+     "owners": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "counts": {
+      "type": "object",
+      "properties": {
+       "all": {
+        "type": "integer"
+       },
+       "open": {
+        "type": "integer"
+       },
+       "overdue": {
+        "type": "integer"
+       },
+       "done": {
+        "type": "integer"
+       },
+       "pending_topics": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "all",
+       "open",
+       "overdue",
+       "done",
+       "pending_topics"
+      ]
+     },
+     "filters": {
+      "type": "object",
+      "properties": {
+       "owner": {
+        "type": "string"
+       },
+       "status": {
+        "type": "string"
+       },
+       "overdue": {
+        "type": "boolean"
+       },
+       "mid": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "owner",
+       "status",
+       "overdue",
+       "mid"
+      ]
+     }
+    },
+    "required": [
+     "today",
+     "actions",
+     "open",
+     "owners",
+     "counts",
+     "filters"
+    ]
+   },
+   "MeetplanActionCreate": {
+    "type": "object",
+    "properties": {
+     "task": {
+      "type": "string",
+      "maxLength": 300
+     },
+     "owner": {
+      "type": "string"
+     },
+     "due": {
+      "type": "string",
+      "description": "한국 날짜 YYYY-MM-DD(없으면 빈 글)"
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "할 일",
+       "진행 중",
+       "완료",
+       "보류"
+      ]
+     },
+     "mid": {
+      "type": "string"
+     },
+     "note": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "task"
+    ]
+   },
+   "MeetplanActionEdit": {
+    "type": "object",
+    "properties": {
+     "task": {
+      "type": "string",
+      "maxLength": 300
+     },
+     "owner": {
+      "type": "string"
+     },
+     "due": {
+      "type": "string",
+      "description": "한국 날짜 YYYY-MM-DD(없으면 빈 글)"
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "할 일",
+       "진행 중",
+       "완료",
+       "보류"
+      ]
+     },
+     "note": {
+      "type": "string"
+     }
+    },
+    "required": []
+   },
+   "MeetplanOpenEdit": {
+    "type": "object",
+    "properties": {
+     "topic": {
+      "type": "string",
+      "maxLength": 300
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "미결",
+       "안건으로 넘김",
+       "해결"
+      ]
+     }
+    },
+    "required": []
+   },
+   "MeetplanNextRequest": {
+    "type": "object",
+    "properties": {
+     "open_ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "넘길 미결 사항(없으면 '미결' 전부)"
+     },
+     "include_overdue": {
+      "type": "boolean",
+      "description": "기본 참"
+     },
+     "duration": {
+      "type": "integer",
+      "minimum": 10,
+      "maximum": 480,
+      "description": "기본 60"
+     },
+     "title": {
+      "type": "string"
+     },
+     "date": {
+      "type": "string",
+      "description": "한국 날짜 YYYY-MM-DD(없으면 빈 글)"
+     }
+    },
+    "required": []
+   },
+   "MeetplanRuns": {
+    "type": "object",
+    "properties": {
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "run_id": {
+         "type": "string"
+        },
+        "file": {
+         "type": "string"
+        },
+        "duration": {
+         "anyOf": [
+          {
+           "type": "number"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "ts": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "run_id",
+        "file",
+        "duration",
+        "ts"
+       ]
+      }
+     },
+     "link": {
+      "type": "string",
+      "description": "회의록 만들기 화면"
+     }
+    },
+    "required": [
+     "items",
+     "link"
+    ]
    }
   },
   "responses": {
@@ -47402,7 +50505,8 @@
     "agent-builder-local",
     "codingtest-local",
     "promptlab-local",
-    "yield-local"
+    "yield-local",
+    "meetplan-local"
    ]
   }
  ]

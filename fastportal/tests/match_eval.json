@@ -435,6 +435,36 @@
    "expect": [
     "yield-local"
    ]
+  },
+  {
+   "q": "다음 주 회의 아젠다 준비",
+   "expect": [
+    "meetplan-local"
+   ]
+  },
+  {
+   "q": "회의 메모에서 액션 아이템",
+   "expect": [
+    "meetplan-local"
+   ]
+  },
+  {
+   "q": "결정된 것과 담당자 기한 표로",
+   "expect": [
+    "meetplan-local"
+   ]
+  },
+  {
+   "q": "지난 회의 할 일 진행 상황",
+   "expect": [
+    "meetplan-local"
+   ]
+  },
+  {
+   "q": "1시간 회의 시간 배분",
+   "expect": [
+    "meetplan-local"
+   ]
   }
  ],
  "hard": [
@@ -625,6 +655,12 @@
    "q": "예전에 해 둔 실험 중에 아직 발표 안 한 것",
    "expect": [
     "yield-local"
+   ]
+  },
+  {
+   "q": "회의에서 누가 뭘 하기로 했는지 놓치지 않게",
+   "expect": [
+    "meetplan-local"
    ]
   }
  ],
