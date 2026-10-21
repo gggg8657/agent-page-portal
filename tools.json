@@ -594,5 +594,25 @@
     "title": "KAERI UI 시안",
     "added": "2026-10-21",
     "author": "dongju"
+  },
+  {
+    "dir": "atomslide-local",
+    "port": 8817,
+    "name": "AtomSlide 발표자료",
+    "desc": "주제·문서로 발표 슬라이드 초안을 만들고 PPTX·PDF로 내보내기",
+    "group": "문서",
+    "title": "AtomSlide 발표자료 — 주제·문서 → 슬라이드 초안 · PPTX·PDF",
+    "tags": [
+      "#발표자료",
+      "#PPT",
+      "#슬라이드",
+      "#프레젠테이션"
+    ],
+    "added": "2026-10-21",
+    "dept": "",
+    "author": "",
+    "cat": "업무지원",
+    "icon": "Presentation",
+    "start_s": 300
   }
 ]

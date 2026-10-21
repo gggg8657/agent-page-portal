@@ -651,6 +651,24 @@
    "expect": [
     "shapes-local"
    ]
+  },
+  {
+   "q": "발표자료 만들어줘",
+   "expect": [
+    "atomslide-local"
+   ]
+  },
+  {
+   "q": "PPT 초안",
+   "expect": [
+    "atomslide-local"
+   ]
+  },
+  {
+   "q": "슬라이드",
+   "expect": [
+    "atomslide-local"
+   ]
   }
  ],
  "hard": [
