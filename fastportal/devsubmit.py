@@ -356,11 +356,13 @@ def submit(ctx, data):
         with db() as c:
             chk = check_tree(c, sid, top, path, files)
             st = "failed" if chk["errors"] else "sandbox"
-            c.execute("UPDATE dev_submissions SET checks=?, title=?, status=? WHERE id=?", (json.dumps(chk, ensure_ascii=False), chk["meta"]["title"], st, sid))
+            if not c.execute("UPDATE dev_submissions SET checks=?, title=?, status=? WHERE id=? AND status='checking'",   # 검사 중에 관리자가 거절했으면 그대로
+                             (json.dumps(chk, ensure_ascii=False), chk["meta"]["title"], st, sid)).rowcount:
+                st = None
             accounts.audit(c, ctx.uid, "dev_submit", top, f"#{sid} {len(data) // 1024}KB 파일 {len(files)}개")
     except Exception:
         with db() as c:   # 'checking' 으로 남으면 그 개발자는 다시 못 올림(예전 한 트랜잭션일 때의 rollback 과 같게)
-            c.execute("DELETE FROM dev_submissions WHERE id=?", (sid,))
+            c.execute("DELETE FROM dev_submissions WHERE id=? AND status='checking'", (sid,))
         raise
     if st == "sandbox":
         threading.Thread(target=_pipeline, args=(sid, ctx.agent_user, top, os.path.join(base, "src")), daemon=True, name=f"devcheck-{sid}").start()

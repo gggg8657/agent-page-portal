@@ -26,8 +26,11 @@ def add_user(argv):
         else:
             b.create_user(c, uid, o.name or uid, pin, o.dept or "")
         sessions.drop_user_sessions(c, uid)
+        sessions.clear_fails(c, uid)   # 잠겨서 복구하는 경우가 많음 — 새 PIN 이 바로 되게
         accounts.audit(c, "cli", "pin_reset", uid)
-    print(f"{uid} 계정 저장 (관리자: {uid in OWNERS})" + ("" if o.pin or o.password else f"  PIN {pin}"))
+        off = c.execute("SELECT disabled FROM users WHERE id=?", (uid,)).fetchone()[0]
+    print(f"{uid} 계정 저장 (관리자: {uid in OWNERS})" + ("" if o.pin or o.password else f"  PIN {pin}")
+          + ("  — 정지·비활성 계정이라 로그인은 안 됨(관리 화면에서 해제)" if off else ""))
 
 
 if __name__ == "__main__":

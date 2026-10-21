@@ -27,6 +27,7 @@ class AddUserTest(unittest.TestCase):
         db = os.path.join(self.data, "portal.db")
         with sqlite3.connect(db) as c:
             c.execute("INSERT INTO sessions(token, uid, exp) VALUES('x', 'kim', 9e12)")
+            c.execute("INSERT INTO login_fails(uid, ts) VALUES('kim', 9e12)")
         r = self.cli("kim")   # PIN 없이 = 무작위 6자리를 화면에
         self.assertEqual(r.returncode, 0, r.stderr)
         pin = r.stdout.split("PIN ")[1].strip()
@@ -35,6 +36,7 @@ class AddUserTest(unittest.TestCase):
         with sqlite3.connect(db) as c:
             self.assertEqual(c.execute("SELECT name, dept FROM users WHERE id='kim'").fetchone(), ("김", "연구"), "안 준 값은 그대로")
             self.assertEqual(c.execute("SELECT COUNT(*) FROM sessions WHERE uid='kim'").fetchone()[0], 0, "초기화하면 세션 끊김")
+            self.assertEqual(c.execute("SELECT COUNT(*) FROM login_fails WHERE uid='kim'").fetchone()[0], 0, "잠금도 풀림")
 
     def test_fresh_db(self):
         self.env["AGENT_DATA"] = tempfile.mkdtemp(prefix="fastportal-cli-")   # 표 없는 새 폴더

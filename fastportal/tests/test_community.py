@@ -139,13 +139,13 @@ class BuilderDownTest(unittest.TestCase):
     def test_no_answer_skips_next_calls(self):
         calls = []
         def fail(*a, **k):
-            calls.append(1); raise OSError("timed out")
+            calls.append(1); raise (ConnectionRefusedError("refused") if len(calls) == 1 else TimeoutError("timed out"))
         with patch.object(community.tools, "tool", return_value={"dir": community.BUILDER, "port": 1}), \
              patch.object(community.tools, "tool_host", return_value="127.0.0.1"), \
              patch.object(community.jobs.TOOL_OPENER, "open", fail), patch.object(community, "_DOWN", [0.0]):
-            self.assertEqual(community._builder("owner", "/api/agents/abc123"), (502, None))
-            self.assertEqual(community._builder("owner", "/api/agents/def456"), (502, None))
-        self.assertEqual(len(calls), 1, "응답 없던 빌더는 30초 동안 다시 부르지 않음(목록 행마다 5초씩 막히지 않게)")
+            for aid in ("abc123", "def456", "ghi789"):
+                self.assertEqual(community._builder("owner", f"/api/agents/{aid}"), (502, None))
+        self.assertEqual(len(calls), 2, "연결 거절은 다음에 다시 부르고, 시간 초과 뒤에는 30초 동안 안 부름")
 
 
 if __name__ == "__main__":

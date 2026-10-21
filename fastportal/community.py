@@ -78,8 +78,9 @@ def _builder(user, path):
             return r.status, json.loads(r.read(4 * 1024 * 1024) or b"{}")
     except urllib.error.HTTPError as e:
         return e.code, None
-    except (urllib.error.URLError, OSError):
-        _DOWN[0] = time.time() + 30   # 응답 없음 — 30초 동안은 바로 502(목록 행마다 5초씩 기다리며 스레드를 잡지 않게)
+    except (urllib.error.URLError, OSError) as e:
+        if isinstance(getattr(e, "reason", e), TimeoutError):   # 느린 응답만 — 연결 거절(재시작 중)은 원래 바로 실패하니 막지 않음
+            _DOWN[0] = time.time() + 30   # 30초 동안은 바로 502(목록 행마다 5초씩 기다리며 스레드를 잡지 않게)
         return 502, None
     except ValueError:
         return 502, None

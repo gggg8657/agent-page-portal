@@ -143,6 +143,16 @@ class DevSubmitTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             devsubmit.submit(self.ctx("dev"), bytes(z))
 
+    def test_reject_while_checking_stays_rejected(self):
+        real = devsubmit.check_tree
+        def check_then_admin_rejects(c, sid, *a):
+            out = real(c, sid, *a)
+            devsubmit.decide(self.ctx("owner", True), {"id": sid, "ok": False, "note": "검사 중 거절"})
+            return out
+        with patch.object(devsubmit, "check_tree", check_then_admin_rejects):
+            s = devsubmit.submit(self.ctx("dev"), mkzip(GOOD))
+        self.assertEqual(s["status"], "rejected", "검사가 끝나도 sandbox·review 로 바뀌지 않음")
+
     def test_check_error_does_not_block_next_upload(self):
         with patch.object(devsubmit, "check_tree", side_effect=RuntimeError("boom")):
             with self.assertRaises(RuntimeError):
