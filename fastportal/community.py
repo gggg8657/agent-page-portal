@@ -11,7 +11,7 @@ API: GET /api/community/summary?t=agent:<id>,tool:<dir>,… · /api/community/re
           /api/community/request {kind,id,type,title,body} · /request/status {id,status,note} · /request/vote {id,on} · /request/delete {id} · /request/hide {id,hidden}(관리자)"""
 import json, os, re, secrets, threading, time, urllib.error, urllib.request, urllib.parse
 
-from . import accounts, config, jobs, tools, toolstate
+from . import accounts, jobs, tools, toolstate
 from .db import db, now, own_row
 
 KINDS = ("agent", "flow", "tool")
@@ -67,24 +67,14 @@ def _text(v, n, label, required=False):
 
 
 # ── 대상: 볼 수 있는지·주인 ──────────────────────────────────────────────
-class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, *a, **k):
-        return None
-
-
-_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
-
-
 def _builder(user, path):
     """빌더에 그 사람 이름 + 포털 서명으로 GET → (상태, JSON). 꺼져 있으면 (502, None)"""
     t = tools.tool(BUILDER)
     if not t or not tools.tool_host(t):
         return 502, None
-    hd = {"X-Agent-User": user, "Accept": "application/json"}
-    if config.TOOL_AUTH:
-        hd["X-Agent-Auth"] = jobs.sign(user)
+    hd = {**jobs.tool_headers(user), "Accept": "application/json"}
     try:
-        with _OPENER.open(urllib.request.Request(f"http://{tools.tool_host(t)}:{int(t['port'])}{path}", headers=hd), timeout=5) as r:
+        with jobs.TOOL_OPENER.open(urllib.request.Request(f"http://{tools.tool_host(t)}:{int(t['port'])}{path}", headers=hd), timeout=5) as r:
             return r.status, json.loads(r.read(4 * 1024 * 1024) or b"{}")
     except urllib.error.HTTPError as e:
         return e.code, None

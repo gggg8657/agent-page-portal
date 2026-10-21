@@ -39,14 +39,6 @@ class StepError(Exception):
     pass
 
 
-class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, *a, **k):
-        return None
-
-
-_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
-
-
 def _tool_url(d, path):
     t = tools.tool(d)
     if not t or (t.get("hidden") and not config.SHOW_HIDDEN):
@@ -64,14 +56,12 @@ def _tool_url(d, path):
 def _req(user, d, path, body, deadline):
     url = _tool_url(d, path)
     data = json.dumps(body, ensure_ascii=False).encode()
-    hd = {"Content-Type": "application/json", "X-Agent-User": user, "Accept-Encoding": "identity"}
-    if config.TOOL_AUTH:
-        hd["X-Agent-Auth"] = jobs.sign(user)
+    hd = {**jobs.tool_headers(user), "Content-Type": "application/json", "Accept-Encoding": "identity"}
     left = deadline - time.time()
     if left <= 0:
         raise StepError("단계 시간 제한을 넘었습니다")
     try:
-        return _OPENER.open(urllib.request.Request(url, data=data, headers=hd, method="POST"), timeout=min(left, 600))
+        return jobs.TOOL_OPENER.open(urllib.request.Request(url, data=data, headers=hd, method="POST"), timeout=min(left, 600))
     except urllib.error.HTTPError as e:
         try:
             msg = json.loads(e.read(65536) or b"{}").get("error") or ""

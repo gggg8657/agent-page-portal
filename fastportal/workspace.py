@@ -1,7 +1,7 @@
 """계정별 작업 보관함. 로그인 uid로 DB를 분리하고 기존 도구의 이력을 서명된 읽기 요청으로 가져온다.
 큰 파일은 도구 저장소에 그대로 두며, 작업 내용의 JSON 사본은 portal.db에 저장한다.
 """
-import concurrent.futures, hashlib, json, re, secrets, time, urllib.error, urllib.parse, urllib.request
+import concurrent.futures, hashlib, json, re, secrets, urllib.error, urllib.parse, urllib.request
 
 from . import config, jobs, tools, toolstate
 from .db import db, now
@@ -64,14 +64,8 @@ def _read(t, path, user):
     if not host:
         raise ValueError("도구 주소 설정을 확인하세요")
     host = f"[{host}]" if ":" in host else host
-    req = urllib.request.Request(f"http://{host}:{int(t['port'])}{path}", headers={
-        "X-Agent-User": user, "X-Agent-Auth": jobs.sign(user), "Accept": "application/json"})
-    # 등록된 주소로만 요청하고 리디렉션은 따르지 않는다(사용자 서명 헤더 유출 방지).
-    class NoRedirect(urllib.request.HTTPRedirectHandler):
-        def redirect_request(self, *args, **kwargs):
-            return None
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
-    with opener.open(req, timeout=5) as r:
+    req = urllib.request.Request(f"http://{host}:{int(t['port'])}{path}", headers={**jobs.tool_headers(user), "Accept": "application/json"})
+    with jobs.TOOL_OPENER.open(req, timeout=5) as r:
         if "application/json" not in r.headers.get("Content-Type", ""):
             raise ValueError("도구가 JSON 이력을 반환하지 않습니다")
         raw = r.read(MAX_PAYLOAD + 1)

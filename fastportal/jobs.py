@@ -10,7 +10,7 @@
        받는 곳: 127.0.0.1/::1, tools.json 의 host 주소(다른 컨테이너 도구), PORTAL_JOBS_ALLOW(쉼표 IP) — 그 밖은 403
   전달: 프로세스 안 asyncio 큐 구독(연결마다 큐 하나, 스레드 없음). 쓰기는 스레드 풀에서 하고 call_soon_threadsafe 로 루프에 넘김.
   보기 규칙: /api/events 와 같음 — 본인 작업만, 주인(owner)은 전부. 읽음은 보는 사람마다(job_reads)."""
-import asyncio, hashlib, hmac, json, os, re, secrets, socket, time, urllib.parse
+import asyncio, hashlib, hmac, json, os, re, secrets, socket, time, urllib.parse, urllib.request
 
 import anyio
 from starlette.concurrency import run_in_threadpool
@@ -63,6 +63,19 @@ def sign(user, now=None):
     """도구로 가는 요청에 붙일 X-Agent-Auth 값: v1.<초>.HMAC(TOOL_KEY, "v1|<초>|<user>") — portal_auth.verify 와 같은 규칙"""
     ts = str(int(now if now is not None else time.time()))
     return f"v1.{ts}." + hmac.new(TOOL_KEY.encode(), f"v1|{ts}|{user}".encode(), hashlib.sha256).hexdigest()
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **k):
+        return None
+
+
+TOOL_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())   # 포털이 도구를 직접 부를 때 — 프록시 안 거치고, 리디렉트를 안 따름(서명 헤더가 다른 주소로 새지 않게)
+
+
+def tool_headers(user):
+    """포털이 도구를 직접 부를 때의 사용자 헤더 + 서명(TOOL_AUTH 일 때 — 도구도 그때만 확인함)"""
+    return {"X-Agent-User": user, **({"X-Agent-Auth": sign(user)} if config.TOOL_AUTH else {})}
 
 
 def tool_env(t, port=None):

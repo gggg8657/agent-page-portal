@@ -82,12 +82,10 @@ def _builder_post(path, body):
     t = tools.tool(community.BUILDER)
     if not t or not tools.tool_host(t):
         return 502, None
-    hd = {"X-Agent-User": "owner", "Accept": "application/json", "Content-Type": "application/json"}
-    if config.TOOL_AUTH:
-        hd["X-Agent-Auth"] = jobs.sign("owner")
+    hd = {**jobs.tool_headers("owner"), "Accept": "application/json", "Content-Type": "application/json"}
     rq = urllib.request.Request(f"http://{tools.tool_host(t)}:{int(t['port'])}{path}", data=json.dumps(body).encode(), headers=hd, method="POST")
     try:
-        with community._OPENER.open(rq, timeout=10) as r:
+        with jobs.TOOL_OPENER.open(rq, timeout=10) as r:
             return r.status, json.loads(r.read(4 * 1024 * 1024) or b"{}")
     except urllib.error.HTTPError as e:
         try:
