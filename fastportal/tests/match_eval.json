@@ -465,6 +465,36 @@
    "expect": [
     "meetplan-local"
    ]
+  },
+  {
+   "q": "실험 노트 정리",
+   "expect": [
+    "labnote-local"
+   ]
+  },
+  {
+   "q": "실험 메모 정리",
+   "expect": [
+    "labnote-local"
+   ]
+  },
+  {
+   "q": "측정값 평균 표준편차",
+   "expect": [
+    "labnote-local"
+   ]
+  },
+  {
+   "q": "손글씨 실험 노트 사진",
+   "expect": [
+    "labnote-local"
+   ]
+  },
+  {
+   "q": "실험 조건 비교",
+   "expect": [
+    "labnote-local"
+   ]
   }
  ],
  "hard": [
@@ -661,6 +691,18 @@
    "q": "회의에서 누가 뭘 하기로 했는지 놓치지 않게",
    "expect": [
     "meetplan-local"
+   ]
+  },
+  {
+   "q": "어제 대충 적어 둔 실험 메모 깔끔하게",
+   "expect": [
+    "labnote-local"
+   ]
+  },
+  {
+   "q": "지난번 실험이랑 조건이 뭐가 달라졌는지",
+   "expect": [
+    "labnote-local"
    ]
   }
  ],

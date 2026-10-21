@@ -567,6 +567,26 @@
    "x-external-network": false,
    "x-external-network-note": "LLM 서버·meeting-local(내부)만 호출",
    "x-response-style": "json"
+  },
+  {
+   "name": "labnote-local",
+   "description": "실험 노트 정리 — 메모·로그 + CSV·XLSX 측정 파일 + 손글씨 사진(그림 입력 LLM) → 실험 노트 양식(LLM 은 칸 나누기만). 서버가 숫자 출처 확인·평균·표준편차·n·미기재 규칙, 노트 찾기·조건 비교, HWPX(kordoc)·Markdown·XLSX, 연구일지 넘기기. 문서: docs/api/labnote-local.md",
+   "x-tool-id": "labnote",
+   "x-name": "실험 노트 정리",
+   "x-description": "흩어진 실험 메모·측정 파일·손글씨 사진 → 재현 가능한 실험 노트(숫자는 입력 그대로, 통계는 서버 계산)",
+   "x-kind": "agent",
+   "x-kind-note": "첨부 읽기·수치 확인·통계·미기재 규칙·비교·내보내기는 결정론 코드, LLM 은 사진 글 옮기기·양식 칸 나누기(build 작업)에만",
+   "x-category": "연구/실험",
+   "x-category-note": "실험 기록을 재현 가능한 노트로 정리",
+   "x-entry": "/t/labnote-local/",
+   "x-health-path": "/t/labnote-local/healthz",
+   "x-long-running": true,
+   "x-long-running-note": "정리는 작업으로 받아 …/job 을 2초마다 확인(약 15–30초, 사진 장마다 더)",
+   "x-docs-input": "files",
+   "x-docs-input-note": "CSV·XLSX·PNG·JPG·WebP 를 base64 JSON 으로, 메모는 글",
+   "x-external-network": false,
+   "x-external-network-note": "LLM 서버(내부)만 호출, HWPX 는 같은 서버의 kordoc CLI",
+   "x-response-style": "json"
   }
  ],
  "paths": {
@@ -28241,6 +28261,939 @@
      }
     }
    }
+  },
+  "/t/labnote-local/api/health": {
+   "get": {
+    "tags": [
+     "labnote-local"
+    ],
+    "operationId": "labnoteHealth",
+    "summary": "살아 있는지",
+    "description": "가벼운 확인(LLM 연결 여부 포함).",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LabnoteHealth"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/labnote-local/api/meta": {
+   "get": {
+    "tags": [
+     "labnote-local"
+    ],
+    "operationId": "labnoteMeta",
+    "summary": "LLM·그림 입력·kordoc 상태, 안내 문구, 제한",
+    "description": "LLM 확인은 60초 기억. vision 은 처음 부를 때 뒤에서 1×1 그림을 보내 확인(그동안 null). llm.ok 가 거짓이면 '정리하기'를 끄고 직접 쓰기·확인·내보내기만.",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LabnoteMeta"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/labnote-local/api/notes": {
+   "get": {
+    "tags": [
+     "labnote-local"
+    ],
+    "operationId": "labnoteNotes",
+    "summary": "노트 목록·찾기",
+    "description": "사용자별(X-Agent-User → WORKSPACE/u/<id>/notes/). 실험 날짜(없으면 만든 날) 최근 순. q 는 제목·태그·메모·시료 이름(낱말 모두), tag 는 태그 하나(정확히).",
+    "parameters": [
+     {
+      "name": "q",
+      "in": "query",
+      "schema": {
+       "type": "string",
+       "maxLength": 100
+      },
+      "description": "찾을 말"
+     },
+     {
+      "name": "from",
+      "in": "query",
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+      },
+      "description": "실험 날짜 시작 YYYY-MM-DD"
+     },
+     {
+      "name": "to",
+      "in": "query",
+      "schema": {
+       "type": "string",
+       "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+      },
+      "description": "실험 날짜 끝 YYYY-MM-DD"
+     },
+     {
+      "name": "tag",
+      "in": "query",
+      "schema": {
+       "type": "string",
+       "maxLength": 100
+      },
+      "description": "태그(# 없이)"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LabnoteList"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "labnote-local"
+    ],
+    "operationId": "labnoteCreate",
+    "summary": "노트 만들기 · 연습 노트",
+    "description": "sample: true 면 연습 노트 2개(가상 열처리 1차 — 정리된 노트, 2차 — 메모 + 경도 CSV). 사용자당 노트 300개.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LabnoteCreate"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "만듦",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LabnoteNote"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/labnote-local/api/notes/{nid}": {
+   "get": {
+    "tags": [
+     "labnote-local"
+    ],
+    "operationId": "labnoteNote",
+    "summary": "노트 하나(양식·첨부·서버 확인·작업)",
+    "description": "derived 는 볼 때마다 서버가 다시 셈(수치 출처·통계·미기재 체크). job 은 이 서버가 기억하는 마지막 정리(재시작하면 null).",
+    "parameters": [
+     {
+      "name": "nid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "노트 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LabnoteNote"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "labnote-local"
+    ],
+    "operationId": "labnoteSave",
+    "summary": "노트 고치기",
+    "description": "보낸 칸만 바꿈. form 은 서버가 검사·자름(빈 행 버림, 날짜 정리) 뒤 저장하고 derived 를 다시 셈. 정리 중이면 409.",
+    "parameters": [
+     {
+      "name": "nid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "노트 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LabnoteSave"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LabnoteNote"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "정리 중(code: busy)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/labnote-local/api/notes/{nid}/delete": {
+   "post": {
+    "tags": [
+     "labnote-local"
+    ],
+    "operationId": "labnoteDelete",
+    "summary": "노트 지우기",
+    "description": "첨부까지 모두. 정리 중이면 409.",
+    "parameters": [
+     {
+      "name": "nid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "노트 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ok"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "정리 중(code: busy)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/labnote-local/api/notes/{nid}/files": {
+   "post": {
+    "tags": [
+     "labnote-local"
+    ],
+    "operationId": "labnoteFileAdd",
+    "summary": "첨부 올리기(CSV·XLSX 측정 파일·사진)",
+    "description": "맨 앞 바이트로 판별 — PNG·JPEG·WebP 는 사진(8MB, 노트당 4장), XLSX(zip)·CSV(utf-8·cp949) 는 측정 파일(10MB, 시트 5개 × 2,000줄). 측정 파일은 올릴 때 표로 읽어 summary(숫자 값 수)를 돌려줌. 같은 이름은 ' (2)'. 노트당 첨부 10개.",
+    "parameters": [
+     {
+      "name": "nid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "노트 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LabnoteUpload"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "만듦",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LabnoteFile"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "정리 중(code: busy)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "413": {
+      "description": "파일이 너무 큼(code: too_large)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/labnote-local/api/notes/{nid}/files/{fid}": {
+   "get": {
+    "tags": [
+     "labnote-local"
+    ],
+    "operationId": "labnoteFile",
+    "summary": "첨부 원본",
+    "description": "사진은 그림(Content-Security-Policy: sandbox), 측정 파일은 attachment.",
+    "parameters": [
+     {
+      "name": "nid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "노트 id"
+     },
+     {
+      "name": "fid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{8}$"
+      },
+      "description": "첨부 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "파일",
+      "content": {
+       "application/octet-stream": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/labnote-local/api/notes/{nid}/files/{fid}/delete": {
+   "post": {
+    "tags": [
+     "labnote-local"
+    ],
+    "operationId": "labnoteFileDelete",
+    "summary": "첨부 빼기",
+    "description": "측정 파일이면 그 파일에서 온 결과 행(src file:<fid>)도 뺌.",
+    "parameters": [
+     {
+      "name": "nid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "노트 id"
+     },
+     {
+      "name": "fid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{8}$"
+      },
+      "description": "첨부 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LabnoteNote"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "정리 중(code: busy)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/labnote-local/api/notes/{nid}/build": {
+   "post": {
+    "tags": [
+     "labnote-local"
+    ],
+    "operationId": "labnoteBuild",
+    "summary": "정리 시작(작업)",
+    "description": "① 사진(그림 입력을 받는 LLM 이면) 장마다 글로 옮기기 ② 메모·사진 글·측정 파일 머리를 구분자 안 데이터로 LLM 에 — 양식 JSON(스키마 안내 디코딩, 서버 검사·한 번 더) ③ 측정 파일 숫자 칸은 서버가 결과표에 그대로, 날짜 정리(연도 없으면 만든 해 + 알림). 202 로 작업을 돌려주고 …/job 을 2초마다 확인. 양식이 이미 있으면 overwrite: true 가 없을 때 409 confirm. 사용자당 동시 1·1시간 20번, 도구 전체 동시 2.",
+    "parameters": [
+     {
+      "name": "nid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "노트 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LabnoteBuildRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "202": {
+      "description": "시작함",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LabnoteJobWrap"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "이미 정리 중·자리 없음(code: busy) 또는 양식을 덮을지 확인(code: confirm)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "503": {
+      "description": "LLM 이 연결되지 않음(code: unavailable)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-llm": true,
+    "x-long-running": true
+   }
+  },
+  "/t/labnote-local/api/notes/{nid}/job": {
+   "get": {
+    "tags": [
+     "labnote-local"
+    ],
+    "operationId": "labnoteJob",
+    "summary": "정리 작업 상태",
+    "description": "stage: photo(사진 i/N)·extract·done. 메모리에만(서버 재시작 시 null).",
+    "parameters": [
+     {
+      "name": "nid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "노트 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LabnoteJobWrap"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/labnote-local/api/compare": {
+   "get": {
+    "tags": [
+     "labnote-local"
+    ],
+    "operationId": "labnoteCompare",
+    "summary": "두 노트 비교(조건 차이)",
+    "description": "조건은 항목, 시료는 이름으로 짝(공백·기호 무시), 값은 숫자면 십진수로 → same·changed·only_a·only_b. 통계(n·평균·표준편차)를 나란히.",
+    "parameters": [
+     {
+      "name": "a",
+      "in": "query",
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "노트 id",
+      "required": true
+     },
+     {
+      "name": "b",
+      "in": "query",
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "노트 id",
+      "required": true
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LabnoteCompare"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/labnote-local/api/notes/{nid}/export.md": {
+   "get": {
+    "tags": [
+     "labnote-local"
+    ],
+    "operationId": "labnoteExportMd",
+    "summary": "Markdown 내려받기",
+    "description": "실험 노트 양식(통계는 서버 계산값과 식, 미기재 체크). attachment.",
+    "parameters": [
+     {
+      "name": "nid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "노트 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "파일",
+      "content": {
+       "text/markdown": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/labnote-local/api/notes/{nid}/export.xlsx": {
+   "get": {
+    "tags": [
+     "labnote-local"
+    ],
+    "operationId": "labnoteExportXlsx",
+    "summary": "XLSX 내려받기",
+    "description": "개요·시료·재료·장비·조건·측정 결과(출처·수치 확인)·통계·미기재 체크·원본 측정 표. 끝 0 소수·앞 0 은 글 칸(유효숫자).",
+    "parameters": [
+     {
+      "name": "nid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "노트 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "파일",
+      "content": {
+       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/labnote-local/api/notes/{nid}/export.hwpx": {
+   "get": {
+    "tags": [
+     "labnote-local"
+    ],
+    "operationId": "labnoteExportHwpx",
+    "summary": "HWPX 내려받기(kordoc)",
+    "description": "Markdown(절차는 번호 표) → kordoc generate --preset 보고서 → validate. 응답 머리 X-Hwpx-Valid: 1|0. kordoc 이 없으면 503.",
+    "parameters": [
+     {
+      "name": "nid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "노트 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "파일",
+      "content": {
+       "application/hwp+zip": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "503": {
+      "description": "kordoc 없음(code: unavailable)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/labnote-local/api/notes/{nid}/handoff": {
+   "post": {
+    "tags": [
+     "labnote-local"
+    ],
+    "operationId": "labnoteHandoff",
+    "summary": "연구일지(yield-local)로 넘길 자료",
+    "description": "yield '연구일지·노트' 자료로 넣을 Markdown(첫 줄 '## YYYY-MM-DD 제목'). 자료만 만들고 yield 를 부르지 않음 — 포털 화면이 넘기고(lib/handoff), 과제를 골라 넣는 것은 사용자.",
+    "parameters": [
+     {
+      "name": "nid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "노트 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LabnoteHandoff"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
   }
  },
  "components": {
@@ -49892,6 +50845,1267 @@
      "items",
      "link"
     ]
+   },
+   "LabnoteHealth": {
+    "type": "object",
+    "properties": {
+     "ok": {
+      "type": "boolean"
+     },
+     "llm": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "ok",
+     "llm"
+    ]
+   },
+   "LabnoteMeta": {
+    "type": "object",
+    "properties": {
+     "llm": {
+      "type": "object",
+      "properties": {
+       "ok": {
+        "type": "boolean"
+       },
+       "model": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "ok",
+       "model"
+      ]
+     },
+     "vision": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "LLM 서버가 그림 입력(image_url)을 받는지 — null 은 아직 확인 중이거나 LLM 꺼짐. false 면 사진은 정리 때 건너뜀"
+     },
+     "kordoc": {
+      "type": "boolean",
+      "description": "HWPX 내보내기 가능(kordoc CLI)"
+     },
+     "notice": {
+      "type": "string",
+      "description": "숫자 출처·서버 계산 안내 — 화면에 늘 보임"
+     },
+     "handoff": {
+      "type": "object",
+      "properties": {
+       "to": {
+        "type": "string",
+        "const": "yield-local"
+       }
+      },
+      "required": [
+       "to"
+      ]
+     },
+     "limits": {
+      "type": "object",
+      "properties": {
+       "data_mb": {
+        "type": "integer"
+       },
+       "image_mb": {
+        "type": "integer"
+       },
+       "files": {
+        "type": "integer"
+       },
+       "photos": {
+        "type": "integer"
+       },
+       "notes": {
+        "type": "integer"
+       },
+       "memo_chars": {
+        "type": "integer"
+       },
+       "builds_per_hour": {
+        "type": "integer"
+       },
+       "results_rows": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "data_mb",
+       "image_mb",
+       "files",
+       "photos",
+       "notes",
+       "memo_chars",
+       "builds_per_hour",
+       "results_rows"
+      ]
+     },
+     "accept": {
+      "type": "object",
+      "properties": {
+       "data": {
+        "type": "string"
+       },
+       "image": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "data",
+       "image"
+      ],
+      "description": "파일 고르기 accept 값"
+     }
+    },
+    "required": [
+     "llm",
+     "vision",
+     "kordoc",
+     "notice",
+     "handoff",
+     "limits",
+     "accept"
+    ]
+   },
+   "LabnoteBrief": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "date": {
+      "type": "string",
+      "description": "실험 날짜 YYYY-MM-DD(없으면 빈 글)"
+     },
+     "tags": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "created": {
+      "type": "string"
+     },
+     "updated": {
+      "type": "string"
+     },
+     "built": {
+      "type": "string",
+      "description": "마지막 정리 시각(UTC ISO, 없으면 빈 글)"
+     },
+     "files": {
+      "type": "integer"
+     },
+     "results": {
+      "type": "integer"
+     },
+     "conditions": {
+      "type": "integer"
+     },
+     "practice": {
+      "type": "boolean",
+      "description": "연습 노트"
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "date",
+     "tags",
+     "created",
+     "updated",
+     "built",
+     "files",
+     "results",
+     "conditions",
+     "practice"
+    ]
+   },
+   "LabnoteList": {
+    "type": "object",
+    "properties": {
+     "items": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/LabnoteBrief"
+      }
+     },
+     "tags": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "tag": {
+         "type": "string"
+        },
+        "n": {
+         "type": "integer"
+        }
+       },
+       "required": [
+        "tag",
+        "n"
+       ]
+      }
+     }
+    },
+    "required": [
+     "items",
+     "tags"
+    ]
+   },
+   "LabnoteCreate": {
+    "type": "object",
+    "properties": {
+     "title": {
+      "type": "string",
+      "maxLength": 80
+     },
+     "memo": {
+      "type": "string",
+      "maxLength": 60000
+     },
+     "sample": {
+      "type": "boolean",
+      "description": "참이면 연습 노트 2개(1차 노트 — 이미 정리됨, 2차 메모 + 경도 CSV)를 만들고 2차를 돌려줌"
+     }
+    },
+    "required": []
+   },
+   "LabnoteMaterial": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "spec": {
+      "type": "string",
+      "description": "규격·조성·크기"
+     },
+     "amount": {
+      "type": "string"
+     },
+     "note": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "spec",
+     "amount",
+     "note"
+    ]
+   },
+   "LabnoteCondition": {
+    "type": "object",
+    "properties": {
+     "item": {
+      "type": "string"
+     },
+     "value": {
+      "type": "string"
+     },
+     "unit": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "item",
+     "value",
+     "unit"
+    ]
+   },
+   "LabnoteResult": {
+    "type": "object",
+    "properties": {
+     "sample": {
+      "type": "string"
+     },
+     "item": {
+      "type": "string"
+     },
+     "value": {
+      "type": "string",
+      "description": "값(글 그대로 — 유효숫자 유지)"
+     },
+     "unit": {
+      "type": "string"
+     },
+     "note": {
+      "type": "string"
+     },
+     "src": {
+      "type": "string",
+      "pattern": "^(memo|user|file:[0-9a-f]{8})$",
+      "description": "memo = 메모·사진 글에서(LLM), user = 직접 씀, file:<fid> = 측정 파일 칸 그대로(서버)"
+     },
+     "ref": {
+      "type": "string",
+      "description": "측정 파일 행(예: '경도.csv 3행')"
+     }
+    },
+    "required": [
+     "sample",
+     "item",
+     "value",
+     "unit",
+     "note"
+    ]
+   },
+   "LabnoteForm": {
+    "type": "object",
+    "properties": {
+     "date": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "purpose": {
+      "type": "string"
+     },
+     "materials": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/LabnoteMaterial"
+      }
+     },
+     "conditions": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/LabnoteCondition"
+      }
+     },
+     "procedure": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "results": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/LabnoteResult"
+      }
+     },
+     "observations": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "next_steps": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    },
+    "required": [
+     "date",
+     "title",
+     "purpose",
+     "materials",
+     "conditions",
+     "procedure",
+     "results",
+     "observations",
+     "next_steps"
+    ],
+    "description": "실험 노트 양식. 저장할 때 빠진 칸은 이전 값 그대로, 빈 행은 버림, 길이·행 수는 서버가 자름"
+   },
+   "LabnotePreview": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "header": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "rows": {
+      "type": "array",
+      "items": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      }
+     },
+     "total": {
+      "type": "integer"
+     },
+     "truncated": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "name",
+     "header",
+     "rows",
+     "total",
+     "truncated"
+    ]
+   },
+   "LabnoteFile": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "data",
+       "image"
+      ]
+     },
+     "size": {
+      "type": "integer"
+     },
+     "added": {
+      "type": "string"
+     },
+     "mime": {
+      "type": "string"
+     },
+     "summary": {
+      "type": "object",
+      "properties": {
+       "sheets": {
+        "type": "integer"
+       },
+       "rows": {
+        "type": "integer"
+       },
+       "values": {
+        "type": "integer"
+       },
+       "truncated": {
+        "type": "boolean"
+       }
+      },
+      "required": [],
+      "description": "측정 파일: 시트·줄·숫자 값 수"
+     },
+     "text": {
+      "type": "string",
+      "description": "사진에서 옮긴 글(정리 전이면 빈 글)"
+     },
+     "text_at": {
+      "type": "string"
+     },
+     "text_model": {
+      "type": "string"
+     },
+     "preview": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/LabnotePreview"
+      }
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "kind",
+     "size",
+     "added",
+     "mime",
+     "summary"
+    ]
+   },
+   "LabnoteUpload": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "maxLength": 120
+     },
+     "b64": {
+      "type": "string",
+      "description": "파일 base64 — CSV·XLSX(10MB)·PNG·JPG·WebP(8MB)"
+     }
+    },
+    "required": [
+     "name",
+     "b64"
+    ]
+   },
+   "LabnoteBuilt": {
+    "type": "object",
+    "properties": {
+     "at": {
+      "type": "string"
+     },
+     "model": {
+      "type": "string"
+     },
+     "warnings": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "memo_rows": {
+      "type": "integer"
+     },
+     "file_rows": {
+      "type": "integer"
+     },
+     "file_values": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "at",
+     "model",
+     "warnings",
+     "memo_rows",
+     "file_rows",
+     "file_values"
+    ]
+   },
+   "LabnoteCheck": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "description": "rule:… 또는 ai:<n>"
+     },
+     "field": {
+      "type": "string"
+     },
+     "msg": {
+      "type": "string"
+     },
+     "by": {
+      "type": "string",
+      "enum": [
+       "rule",
+       "ai"
+      ]
+     },
+     "level": {
+      "type": "string",
+      "enum": [
+       "warn",
+       "info"
+      ]
+     },
+     "dismissed": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "id",
+     "field",
+     "msg",
+     "by",
+     "level"
+    ]
+   },
+   "LabnoteNum": {
+    "type": "object",
+    "properties": {
+     "num": {
+      "type": "string"
+     },
+     "ok": {
+      "type": "boolean"
+     },
+     "src": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    },
+    "required": [
+     "num",
+     "ok",
+     "src"
+    ]
+   },
+   "LabnotePathNum": {
+    "type": "object",
+    "properties": {
+     "path": {
+      "type": "string",
+      "description": "칸 경로(예: results.3.value, conditions.0.value, procedure.2, purpose)"
+     },
+     "num": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "path",
+     "num"
+    ]
+   },
+   "LabnoteVerify": {
+    "type": "object",
+    "properties": {
+     "cells": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "array",
+       "items": {
+        "$ref": "#/components/schemas/LabnoteNum"
+       }
+      },
+      "description": "칸 경로 → 그 칸의 숫자별 확인"
+     },
+     "total": {
+      "type": "integer"
+     },
+     "ok": {
+      "type": "integer"
+     },
+     "bad": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/LabnotePathNum"
+      }
+     },
+     "photo_only": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/LabnotePathNum"
+      }
+     }
+    },
+    "required": [
+     "cells",
+     "total",
+     "ok",
+     "bad",
+     "photo_only"
+    ]
+   },
+   "LabnoteStat": {
+    "type": "object",
+    "properties": {
+     "sample": {
+      "type": "string"
+     },
+     "item": {
+      "type": "string"
+     },
+     "unit": {
+      "type": "string"
+     },
+     "n": {
+      "type": "integer"
+     },
+     "mean": {
+      "type": "string"
+     },
+     "sd": {
+      "type": "string",
+      "description": "표본 표준편차(n−1)"
+     },
+     "min": {
+      "type": "string"
+     },
+     "max": {
+      "type": "string"
+     },
+     "values": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "places": {
+      "type": "integer"
+     },
+     "src": {
+      "type": "string",
+      "description": "file:<fid> 또는 빈 글(메모·직접 쓴 값)"
+     },
+     "formula": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "sample",
+     "item",
+     "unit",
+     "n",
+     "mean",
+     "sd",
+     "min",
+     "max",
+     "values",
+     "places",
+     "src",
+     "formula"
+    ]
+   },
+   "LabnoteDerived": {
+    "type": "object",
+    "properties": {
+     "verify": {
+      "$ref": "#/components/schemas/LabnoteVerify"
+     },
+     "stats": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/LabnoteStat"
+      }
+     },
+     "checks": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/LabnoteCheck"
+      }
+     }
+    },
+    "required": [
+     "verify",
+     "stats",
+     "checks"
+    ],
+    "description": "서버 확인(볼 때마다 다시 셈)"
+   },
+   "LabnoteJob": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "nid": {
+      "type": "string"
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "running",
+       "done",
+       "failed"
+      ]
+     },
+     "stage": {
+      "type": "string",
+      "enum": [
+       "start",
+       "photo",
+       "extract",
+       "done"
+      ]
+     },
+     "done": {
+      "type": "integer"
+     },
+     "total": {
+      "type": "integer"
+     },
+     "msg": {
+      "type": "string"
+     },
+     "started": {
+      "type": "string"
+     },
+     "finished": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "elapsed": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "id",
+     "nid",
+     "status",
+     "stage",
+     "done",
+     "total",
+     "msg",
+     "started",
+     "finished",
+     "error",
+     "elapsed"
+    ]
+   },
+   "LabnoteJobWrap": {
+    "type": "object",
+    "properties": {
+     "job": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/LabnoteJob"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "job"
+    ]
+   },
+   "LabnoteNote": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "date": {
+      "type": "string"
+     },
+     "tags": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "created": {
+      "type": "string"
+     },
+     "updated": {
+      "type": "string"
+     },
+     "memo": {
+      "type": "string"
+     },
+     "files": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/LabnoteFile"
+      }
+     },
+     "form": {
+      "$ref": "#/components/schemas/LabnoteForm"
+     },
+     "built": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/LabnoteBuilt"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "ai_checks": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/LabnoteCheck"
+      }
+     },
+     "dismissed": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "practice": {
+      "type": "boolean"
+     },
+     "edited": {
+      "type": "string",
+      "description": "사용자가 양식을 마지막으로 고친 시각"
+     },
+     "derived": {
+      "$ref": "#/components/schemas/LabnoteDerived"
+     },
+     "job": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/LabnoteJob"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "date",
+     "tags",
+     "created",
+     "updated",
+     "memo",
+     "files",
+     "form",
+     "built",
+     "ai_checks",
+     "dismissed",
+     "derived",
+     "job"
+    ]
+   },
+   "LabnoteSave": {
+    "type": "object",
+    "properties": {
+     "memo": {
+      "type": "string",
+      "maxLength": 60000
+     },
+     "title": {
+      "type": "string",
+      "maxLength": 80
+     },
+     "tags": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 10
+     },
+     "form": {
+      "$ref": "#/components/schemas/LabnoteForm"
+     },
+     "photo_text": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "첨부 id → 고친 사진 글"
+     },
+     "dismissed": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "확인함 처리한 체크 id"
+     }
+    },
+    "required": []
+   },
+   "LabnoteBuildRequest": {
+    "type": "object",
+    "properties": {
+     "overwrite": {
+      "type": "boolean",
+      "description": "양식이 이미 있으면 참이어야 새로 채움(아니면 409 confirm)"
+     }
+    },
+    "required": []
+   },
+   "LabnoteDiff": {
+    "type": "object",
+    "properties": {
+     "key": {
+      "type": "string"
+     },
+     "a": {
+      "anyOf": [
+       {
+        "type": "object",
+        "additionalProperties": {
+         "type": "string"
+        }
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "b": {
+      "anyOf": [
+       {
+        "type": "object",
+        "additionalProperties": {
+         "type": "string"
+        }
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "same",
+       "changed",
+       "only_a",
+       "only_b"
+      ]
+     }
+    },
+    "required": [
+     "key",
+     "a",
+     "b",
+     "status"
+    ]
+   },
+   "LabnoteStatPair": {
+    "type": "object",
+    "properties": {
+     "key": {
+      "type": "string"
+     },
+     "a": {
+      "anyOf": [
+       {
+        "type": "object",
+        "properties": {
+         "n": {
+          "type": "integer"
+         },
+         "mean": {
+          "type": "string"
+         },
+         "sd": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "n",
+         "mean",
+         "sd"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "b": {
+      "anyOf": [
+       {
+        "type": "object",
+        "properties": {
+         "n": {
+          "type": "integer"
+         },
+         "mean": {
+          "type": "string"
+         },
+         "sd": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "n",
+         "mean",
+         "sd"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "key",
+     "a",
+     "b"
+    ]
+   },
+   "LabnoteCompare": {
+    "type": "object",
+    "properties": {
+     "a": {
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string"
+       },
+       "title": {
+        "type": "string"
+       },
+       "date": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "id",
+       "title",
+       "date"
+      ]
+     },
+     "b": {
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string"
+       },
+       "title": {
+        "type": "string"
+       },
+       "date": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "id",
+       "title",
+       "date"
+      ]
+     },
+     "conditions": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/LabnoteDiff"
+      }
+     },
+     "materials": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/LabnoteDiff"
+      }
+     },
+     "stats": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/LabnoteStatPair"
+      }
+     },
+     "summary": {
+      "type": "object",
+      "properties": {
+       "changed": {
+        "type": "integer"
+       },
+       "only_a": {
+        "type": "integer"
+       },
+       "only_b": {
+        "type": "integer"
+       },
+       "same": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "changed",
+       "only_a",
+       "only_b",
+       "same"
+      ]
+     },
+     "procedure": {
+      "type": "object",
+      "properties": {
+       "a": {
+        "type": "integer"
+       },
+       "b": {
+        "type": "integer"
+       },
+       "same": {
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "a",
+       "b",
+       "same"
+      ]
+     }
+    },
+    "required": [
+     "a",
+     "b",
+     "conditions",
+     "materials",
+     "stats",
+     "summary",
+     "procedure"
+    ]
+   },
+   "LabnoteHandoff": {
+    "type": "object",
+    "properties": {
+     "to": {
+      "type": "string",
+      "const": "yield-local"
+     },
+     "path": {
+      "type": "string",
+      "description": "받는 화면(라우터 경로)"
+     },
+     "params": {
+      "type": "object",
+      "properties": {
+       "kind": {
+        "type": "string",
+        "const": "log"
+       }
+      },
+      "required": [
+       "kind"
+      ]
+     },
+     "title": {
+      "type": "string"
+     },
+     "file": {
+      "type": "object",
+      "properties": {
+       "name": {
+        "type": "string"
+       },
+       "text": {
+        "type": "string",
+        "description": "연구일지 Markdown(첫 줄 '## YYYY-MM-DD 제목')"
+       }
+      },
+      "required": [
+       "name",
+       "text"
+      ]
+     },
+     "warning": {
+      "type": "string",
+      "description": "날짜가 없을 때 등(없으면 빈 글)"
+     }
+    },
+    "required": [
+     "to",
+     "path",
+     "params",
+     "title",
+     "file",
+     "warning"
+    ]
    }
   },
   "responses": {
@@ -50073,7 +52287,8 @@
     "codingtest-local",
     "promptlab-local",
     "yield-local",
-    "meetplan-local"
+    "meetplan-local",
+    "labnote-local"
    ]
   }
  ]
