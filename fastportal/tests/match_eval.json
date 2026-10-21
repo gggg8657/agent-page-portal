@@ -525,6 +525,36 @@
    "expect": [
     "proposal-local"
    ]
+  },
+  {
+   "q": "성과지표 설계",
+   "expect": [
+    "kpi-local"
+   ]
+  },
+  {
+   "q": "KPI 만들기",
+   "expect": [
+    "kpi-local"
+   ]
+  },
+  {
+   "q": "SMART 점검",
+   "expect": [
+    "kpi-local"
+   ]
+  },
+  {
+   "q": "기존 KPI 점검",
+   "expect": [
+    "kpi-local"
+   ]
+  },
+  {
+   "q": "연차별 목표값",
+   "expect": [
+    "kpi-local"
+   ]
   }
  ],
  "hard": [
@@ -739,6 +769,12 @@
    "q": "공모에 낼 연구 내용을 그럴듯하게 정리",
    "expect": [
     "proposal-local"
+   ]
+  },
+  {
+   "q": "교육 만족도 말고 어떤 지표를 더 봐야 할까",
+   "expect": [
+    "kpi-local"
    ]
   }
  ],

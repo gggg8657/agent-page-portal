@@ -525,5 +525,24 @@
     "author": "dongju",
     "cat": "기획/전략",
     "icon": "ClipboardList"
+  },
+  {
+    "dir": "kpi-local",
+    "port": 8811,
+    "name": "성과지표(KPI) 설계",
+    "desc": "사업 목표·현황으로 측정 가능한 성과지표 표(정의·산식·기준값·연차별 목표·주기·출처)를 만들고 지표마다 SMART 점검, 기존 지표 점검·보완, 엑셀 수식으로 내보내기",
+    "group": "기획",
+    "title": "성과지표(KPI) 설계 — 목표·현황 → 지표 표 · SMART 점검 · 엑셀",
+    "tags": [
+      "#KPI",
+      "#성과지표",
+      "#SMART",
+      "#성과관리"
+    ],
+    "added": "2026-10-21",
+    "dept": "인공지능응용연구실",
+    "author": "dongju",
+    "cat": "기획/전략",
+    "icon": "Target"
   }
 ]
