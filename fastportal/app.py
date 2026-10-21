@@ -330,10 +330,12 @@ def tool_action(ctx, c, path, req):
         return ctx.send({"error": "unknown tool"}, code=404)
     if toolstate.is_off(t["dir"]) and not ctx.is_owner and path in ("/api/open", "/api/like", "/api/start"):   # 관리자가 끈 도구
         return ctx.send({"error": toolstate.MSG, "code": toolstate.CODE}, code=403)
-    if path == "/api/like" and c.execute("SELECT 1 FROM events WHERE kind='like' AND dir=? AND user=?", (t["dir"], ctx.uid)).fetchone():
-        return ctx.send({"ok": True, "liked": True, "already": True})   # 좋아요는 1인 1회(예전엔 누를 때마다 쌓였음)
-    if path in ("/api/open", "/api/like"):
-        c.execute("INSERT INTO events VALUES(?,?,?,?)", (path[5:], t["dir"], db.now(), ctx.uid))
+    if path == "/api/like":   # 1인 1회 — 확인과 넣기를 한 문장으로(따로 하면 빠른 두 번 클릭이 둘 다 들어감)
+        if not c.execute("INSERT INTO events SELECT 'like',?,?,? WHERE NOT EXISTS (SELECT 1 FROM events WHERE kind='like' AND dir=? AND user=?)",
+                         (t["dir"], db.now(), ctx.uid, t["dir"], ctx.uid)).rowcount:
+            return ctx.send({"ok": True, "liked": True, "already": True})
+    elif path == "/api/open":
+        c.execute("INSERT INTO events VALUES(?,?,?,?)", ("open", t["dir"], db.now(), ctx.uid))
     elif path in ("/api/start", "/api/stop") and tools.is_remote(t):
         return ctx.send({"error": "다른 컨테이너에서 항상 켜져 있는 도구입니다"}, code=409)
     elif path == "/api/start":

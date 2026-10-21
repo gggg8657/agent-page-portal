@@ -86,6 +86,7 @@ def report(ctx):
         base = "ts>=?" + (" AND user=?" if uid_clause else "") + (" AND dir=?" if tool_clause else "")
         base_args = [cut, *uid_args, *tool_args]
         opened = c.execute("SELECT COUNT(*) FROM events WHERE kind='open' AND " + base, base_args).fetchone()[0]
+        # shortcut: 관리자 작업은 jobs.user='owner'(관리자 여럿이 한 줄, 관리자 아이디로 거르면 0) — 관리자별로 보려면 jobs 에 실제 아이디 열
         runtime = c.execute("SELECT COUNT(*),COALESCE(SUM(MAX(0,finished-started)),0) FROM jobs "
                             "WHERE finished IS NOT NULL AND started>=?" +
                             (" AND user=?" if uid_clause else "") + (" AND tool=?" if tool_clause else ""),

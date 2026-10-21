@@ -98,6 +98,13 @@ class HTTP(unittest.TestCase):
         except ValueError:
             return st, b
 
+    def test_like_once_under_double_click(self):
+        res = []
+        ths = [threading.Thread(target=lambda: res.append(self.j("POST", "/api/like", self.alice, {"dir": "other-local"}))) for _ in range(8)]
+        [h.start() for h in ths]; [h.join() for h in ths]
+        self.assertTrue(all(st == 200 for st, _ in res), res)
+        self.assertEqual(sum(1 for _, b in res if not b.get("already")), 1, "좋아요는 한 번만 들어감")
+
     def test_admin_reset_needs_my_pin(self):
         self.P.login("carol", signup=True)
         self.assertEqual(self.j("POST", "/api/admin/reset", self.boss, {"uid": "carol"})[0], 400, "내 PIN 없이는 거절")

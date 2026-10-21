@@ -441,6 +441,7 @@ def decide(ctx, req):
                 accounts.audit(c, ctx.uid, "dev_reject", r["dir"] or "", f"#{r['id']} {note}")
                 _notify(r["agent_user"], r["id"], "failed", f"제출 {r['dir']}: 거절", note)
                 return {"ok": True, "status": "rejected"}
+            # shortcut: 아래 설치(폴더 복사·tools.json 등록·사용법·상태)는 한 단계가 실패하면 앞 단계가 남음(재승인은 '이미 같은 이름') — 승인 잠금을 풀기 전에 되돌리기를 붙일 것
             if not config.DEV_APPROVE:
                 raise Locked(LOCK_MSG)
             chk = json.loads(r["checks"] or "{}")
