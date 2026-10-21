@@ -646,6 +646,26 @@
    "x-external-network": false,
    "x-external-network-note": "LLM 서버(내부)만 호출",
    "x-response-style": "json"
+  },
+  {
+   "name": "shapes-local",
+   "description": "그림 → 편집 가능한 도형 — 도식·흐름도·구성도·조직도·슬라이드 캡처를 이미지 입력 LLM(구조)·OpenCV(위치·모양·색)·OCR(한국어 글자)로 읽어 검토·수정 뒤 PPTX(진짜 도형·연결선)·draw.io·SVG·Mermaid 로. 그래프면 디지타이저를 권함. 문서: docs/api/shapes-local.md",
+   "x-tool-id": "shapes",
+   "x-name": "그림 → 도형",
+   "x-description": "도식 그림 → PPTX 도형·연결선 / draw.io / SVG / Mermaid (검토 화면에서 고친 뒤)",
+   "x-kind": "agent",
+   "x-kind-note": "구조 읽기에 이미지 입력 LLM(없으면 영상처리·OCR 만), 위치·글자·내보내기는 결정론 코드",
+   "x-category": "디자인/시각화",
+   "x-category-note": "그림을 편집 가능한 도식으로 바꾸는 도구",
+   "x-entry": "/t/shapes-local/",
+   "x-health-path": "/t/shapes-local/healthz",
+   "x-long-running": true,
+   "x-long-running-note": "변환은 작업으로 받아 …/items/{iid} 를 1~2초마다 확인(보통 10~40초)",
+   "x-docs-input": "file",
+   "x-docs-input-note": "그림(PNG·JPG·GIF·BMP·WEBP)을 base64 JSON 으로",
+   "x-external-network": false,
+   "x-external-network-note": "LLM 서버(내부)만 호출, OCR·영상처리는 도구 안(CPU)",
+   "x-response-style": "polling"
   }
  ],
  "paths": {
@@ -31943,6 +31963,623 @@
      }
     }
    }
+  },
+  "/t/shapes-local/api/health": {
+   "get": {
+    "tags": [
+     "shapes-local"
+    ],
+    "operationId": "shapesHealth",
+    "summary": "살아 있는지",
+    "description": "VLM·OCR 연결 여부 포함.",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ShapesHealth"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/shapes-local/api/meta": {
+   "get": {
+    "tags": [
+     "shapes-local"
+    ],
+    "operationId": "shapesMeta",
+    "summary": "VLM·OCR 상태, 도형 종류, 내보내기 형식, 제한, 안내 문구",
+    "description": "vision.ok 가 거짓이어도 변환은 됨(영상처리·OCR 만).",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ShapesMeta"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/shapes-local/api/items": {
+   "get": {
+    "tags": [
+     "shapes-local"
+    ],
+    "operationId": "shapesItems",
+    "summary": "변환한 그림 목록(최근 순)",
+    "description": "사용자별(X-Agent-User → WORKSPACE/u/<id>/items/). 사용자당 60개(넘으면 오래된 것부터 지움).",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ShapesItems"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/shapes-local/api/analyze": {
+   "post": {
+    "tags": [
+     "shapes-local"
+    ],
+    "operationId": "shapesAnalyze",
+    "summary": "그림 올려 변환 시작(작업)",
+    "description": "① OCR(한국어 모델)로 글자 줄 ② OpenCV 로 닫힌 칸(도형 후보)·모양·색 ③ 이미지 입력 LLM 으로 노드·연결선·묶음·그림 종류(JSON 스키마 안내) ④ 합치기: LLM 노드를 실제 칸에 맞춤(겹침·글자), 글자는 OCR(띄어쓰기는 LLM 에서), 화살촉으로 방향 확인, 놓친 선·칸은 check=true 후보. 그래프·사진이면 도형을 비워 두고 kind 로 알림. 바로 {id, status: running} — …/items/{iid} 를 1~2초마다 확인(보통 10~40초). 사용자당 동시 1·1시간 30번, 서버 동시 2.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ShapesAnalyze"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ShapesStarted"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "409": {
+      "description": "이미 변환 중(code: busy)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-llm": true,
+    "x-long-running": true
+   }
+  },
+  "/t/shapes-local/api/items/{iid}": {
+   "get": {
+    "tags": [
+     "shapes-local"
+    ],
+    "operationId": "shapesItem",
+    "summary": "그림 하나(상태·경고·문서)",
+    "description": "status: running(progress 글)·done(doc)·error(error 글). 시각은 UTC ISO(+00:00).",
+    "parameters": [
+     {
+      "name": "iid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "그림 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ShapesItem"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/shapes-local/api/items/{iid}/image": {
+   "get": {
+    "tags": [
+     "shapes-local"
+    ],
+    "operationId": "shapesImage",
+    "summary": "올린 그림(PNG)",
+    "description": "긴 변 2400px 넘으면 줄인 그림 — 문서 좌표의 기준.",
+    "parameters": [
+     {
+      "name": "iid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "그림 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "파일(Content-Disposition attachment)",
+      "content": {
+       "image/png": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/shapes-local/api/items/{iid}/doc": {
+   "post": {
+    "tags": [
+     "shapes-local"
+    ],
+    "operationId": "shapesSaveDoc",
+    "summary": "고친 문서 저장",
+    "description": "화면에서 글자·모양·지우기·연결선을 고친 문서. 서버가 검사(id 형식, 없는 노드를 가리키는 선은 버림, 좌표는 그림 안으로).",
+    "parameters": [
+     {
+      "name": "iid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "그림 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ShapesSaveDoc"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ShapesSaved"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/shapes-local/api/items/{iid}/reset": {
+   "post": {
+    "tags": [
+     "shapes-local"
+    ],
+    "operationId": "shapesReset",
+    "summary": "고친 것 되돌리기(처음 변환 결과로)",
+    "description": "",
+    "parameters": [
+     {
+      "name": "iid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "그림 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ShapesItem"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/shapes-local/api/items/{iid}/rerun": {
+   "post": {
+    "tags": [
+     "shapes-local"
+    ],
+    "operationId": "shapesRerun",
+    "summary": "같은 그림 다시 변환",
+    "description": "force: 그래프·사진으로 보여도 도형으로 / use_llm: 거짓이면 영상처리·OCR 만. 고친 것은 사라짐.",
+    "parameters": [
+     {
+      "name": "iid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "그림 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ShapesRerun"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ShapesStarted"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "이미 변환 중(code: busy)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-llm": true,
+    "x-long-running": true
+   }
+  },
+  "/t/shapes-local/api/items/{iid}/export": {
+   "post": {
+    "tags": [
+     "shapes-local"
+    ],
+    "operationId": "shapesExport",
+    "summary": "내보내기(PPTX·draw.io·SVG·Mermaid·JSON)",
+    "description": "pptx: 진짜 도형(사각·둥근·마름모·타원·원통·평행사변형·육각형)·글 상자·도형 연결점에 붙은 연결선(직선·꺾은선, 화살표·점선)·묶음 틀, 2쪽에 원본 그림. drawio: mxGraph(묶음은 container, 연결선 source/target). svg. mermaid: flowchart(도형 2개·연결선 1개 이상일 때만, 아니면 400). doc 를 주면 저장한 뒤 내보냄. 파일 이름은 올린 그림 이름 + 확장자.",
+    "parameters": [
+     {
+      "name": "iid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "그림 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ShapesExport"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "파일(Content-Disposition attachment)",
+      "content": {
+       "application/vnd.openxmlformats-officedocument.presentationml.presentation": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       },
+       "application/xml": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       },
+       "image/svg+xml": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       },
+       "text/plain": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       },
+       "application/json": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/shapes-local/api/items/{iid}/rename": {
+   "post": {
+    "tags": [
+     "shapes-local"
+    ],
+    "operationId": "shapesRename",
+    "summary": "이름 바꾸기",
+    "description": "",
+    "parameters": [
+     {
+      "name": "iid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "그림 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ShapesRename"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ShapesItemBrief"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/shapes-local/api/items/{iid}/delete": {
+   "post": {
+    "tags": [
+     "shapes-local"
+    ],
+    "operationId": "shapesDelete",
+    "summary": "지우기",
+    "description": "그림·문서 모두. 변환 중이면 409.",
+    "parameters": [
+     {
+      "name": "iid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "그림 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ok"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "변환 중(code: busy)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
   }
  },
  "components": {
@@ -58527,6 +59164,776 @@
      "file",
      "count"
     ]
+   },
+   "ShapesHealth": {
+    "type": "object",
+    "properties": {
+     "ok": {
+      "type": "boolean"
+     },
+     "vision": {
+      "type": "boolean"
+     },
+     "ocr": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "ok",
+     "vision",
+     "ocr"
+    ]
+   },
+   "ShapesMeta": {
+    "type": "object",
+    "properties": {
+     "vision": {
+      "type": "object",
+      "properties": {
+       "ok": {
+        "type": "boolean"
+       },
+       "model": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "ok",
+       "model"
+      ],
+      "description": "이미지 입력 LLM — 꺼져 있으면 영상처리·OCR 만(연결선 방향·묶음이 덜 정확)"
+     },
+     "ocr": {
+      "type": "object",
+      "properties": {
+       "ok": {
+        "type": "boolean"
+       },
+       "engine": {
+        "type": "string"
+       },
+       "why": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "ok",
+       "engine",
+       "why"
+      ],
+      "description": "글자 읽기(RapidOCR 한국어 모델, CPU) — 꺼져 있으면 AI 가 읽은 글자"
+     },
+     "limits": {
+      "type": "object",
+      "properties": {
+       "mb": {
+        "type": "integer"
+       },
+       "per_hour": {
+        "type": "integer"
+       },
+       "items": {
+        "type": "integer"
+       },
+       "max_side": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "mb",
+       "per_hour",
+       "items",
+       "max_side"
+      ]
+     },
+     "shapes": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "enum": [
+        "rect",
+        "round",
+        "diamond",
+        "ellipse",
+        "cylinder",
+        "parallelogram",
+        "hexagon",
+        "image",
+        "text"
+       ]
+      }
+     },
+     "formats": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "enum": [
+        "pptx",
+        "drawio",
+        "svg",
+        "mermaid",
+        "json"
+       ]
+      }
+     },
+     "chart_tool": {
+      "type": "string",
+      "description": "그래프 그림이면 권하는 도구 dir(digitizer-local)"
+     },
+     "notice": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "vision",
+     "ocr",
+     "limits",
+     "shapes",
+     "formats",
+     "chart_tool",
+     "notice"
+    ]
+   },
+   "ShapesNode": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "shape": {
+      "type": "string",
+      "enum": [
+       "rect",
+       "round",
+       "diamond",
+       "ellipse",
+       "cylinder",
+       "parallelogram",
+       "hexagon",
+       "image",
+       "text"
+      ]
+     },
+     "text": {
+      "type": "string",
+      "description": "줄바꿈은 \\n"
+     },
+     "bbox": {
+      "type": "array",
+      "items": {
+       "type": "integer"
+      },
+      "minItems": 4,
+      "maxItems": 4,
+      "description": "[x1, y1, x2, y2] 원본(줄인) 그림 픽셀"
+     },
+     "fill": {
+      "anyOf": [
+       {
+        "type": "string",
+        "pattern": "^#[0-9a-f]{6}$"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "stroke": {
+      "anyOf": [
+       {
+        "type": "string",
+        "pattern": "^#[0-9a-f]{6}$"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "color": {
+      "anyOf": [
+       {
+        "type": "string",
+        "pattern": "^#[0-9a-f]{6}$"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "글자 색"
+     },
+     "font_px": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "check": {
+      "type": "boolean",
+      "description": "확인 필요(한쪽만 찾은 후보·위치를 어림함)"
+     },
+     "src": {
+      "type": "object",
+      "properties": {
+       "text": {
+        "type": "string",
+        "enum": [
+         "ocr",
+         "llm",
+         "none"
+        ]
+       }
+      },
+      "description": "글자를 어디서 읽었나"
+     },
+     "dashed": {
+      "type": "boolean",
+      "description": "점선 테두리"
+     },
+     "bold": {
+      "type": "boolean",
+      "description": "굵은 글씨(제목 등)"
+     },
+     "rotation": {
+      "type": "integer",
+      "enum": [
+       90,
+       -90
+      ],
+      "description": "세로 글: 글 상자는 돌리고, 도형은 안의 글만 세로로"
+     },
+     "note": {
+      "type": "string",
+      "description": "확인할 까닭(수식·첨자 글자, 읽지 못한 글자 등)"
+     }
+    },
+    "required": [
+     "id",
+     "shape",
+     "text",
+     "bbox"
+    ],
+    "description": "shape=image 는 도형으로 바꾸기 어려운 부분(아이콘·화면 캡처·복잡한 그림) — 내보낼 때 원본에서 bbox 만큼 잘라 그림으로 넣음"
+   },
+   "ShapesEdge": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "from": {
+      "type": "string",
+      "description": "노드 또는 묶음 id"
+     },
+     "to": {
+      "type": "string",
+      "description": "노드 또는 묶음 id"
+     },
+     "label": {
+      "type": "string"
+     },
+     "dashed": {
+      "type": "boolean"
+     },
+     "arrow": {
+      "type": "string",
+      "enum": [
+       "end",
+       "both",
+       "none"
+      ]
+     },
+     "check": {
+      "type": "boolean"
+     },
+     "label_box": {
+      "type": "array",
+      "items": {
+       "type": "integer"
+      },
+      "minItems": 4,
+      "maxItems": 4,
+      "description": "[x1, y1, x2, y2] 원본(줄인) 그림 픽셀"
+     },
+     "color": {
+      "anyOf": [
+       {
+        "type": "string",
+        "pattern": "^#[0-9a-f]{6}$"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "label_color": {
+      "anyOf": [
+       {
+        "type": "string",
+        "pattern": "^#[0-9a-f]{6}$"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "note": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "from",
+     "to",
+     "label",
+     "dashed",
+     "arrow"
+    ]
+   },
+   "ShapesGroup": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "label": {
+      "type": "string"
+     },
+     "bbox": {
+      "type": "array",
+      "items": {
+       "type": "integer"
+      },
+      "minItems": 4,
+      "maxItems": 4,
+      "description": "[x1, y1, x2, y2] 원본(줄인) 그림 픽셀"
+     },
+     "children": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "노드·묶음 id"
+     },
+     "dashed": {
+      "type": "boolean"
+     },
+     "fill": {
+      "anyOf": [
+       {
+        "type": "string",
+        "pattern": "^#[0-9a-f]{6}$"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "stroke": {
+      "anyOf": [
+       {
+        "type": "string",
+        "pattern": "^#[0-9a-f]{6}$"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "check": {
+      "type": "boolean"
+     },
+     "label_box": {
+      "type": "array",
+      "items": {
+       "type": "integer"
+      },
+      "minItems": 4,
+      "maxItems": 4,
+      "description": "이름 글자 자리(판 바깥 위 제목이면 따로 그림)"
+     },
+     "label_color": {
+      "anyOf": [
+       {
+        "type": "string",
+        "pattern": "^#[0-9a-f]{6}$"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "font_px": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "id",
+     "label",
+     "bbox",
+     "children"
+    ],
+    "description": "판·가로줄·점선 틀. 내보낼 때 안의 것보다 먼저(뒤에) 그림"
+   },
+   "ShapesDoc": {
+    "type": "object",
+    "properties": {
+     "width": {
+      "type": "integer"
+     },
+     "height": {
+      "type": "integer"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "diagram",
+       "chart",
+       "photo",
+       "other"
+      ]
+     },
+     "nodes": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/ShapesNode"
+      },
+      "maxItems": 800
+     },
+     "edges": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/ShapesEdge"
+      },
+      "maxItems": 1500
+     },
+     "groups": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/ShapesGroup"
+      },
+      "maxItems": 200
+     },
+     "sources": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "llm·ocr 사용 여부·모델"
+     },
+     "timing": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "number"
+      },
+      "description": "단계별 초"
+     }
+    },
+    "required": [
+     "width",
+     "height",
+     "kind",
+     "nodes",
+     "edges",
+     "groups"
+    ],
+    "description": "kind 가 chart·photo 면 nodes 등은 비어 있음(force 로 다시 변환하면 채움)"
+   },
+   "ShapesItemBrief": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "created": {
+      "type": "string"
+     },
+     "updated": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "running",
+       "done",
+       "error"
+      ]
+     },
+     "progress": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "kind": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "diagram",
+         "chart",
+         "photo",
+         "other"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "width": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "height": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "nodes": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "edges": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "created",
+     "status"
+    ]
+   },
+   "ShapesItems": {
+    "type": "object",
+    "properties": {
+     "items": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/ShapesItemBrief"
+      }
+     }
+    },
+    "required": [
+     "items"
+    ]
+   },
+   "ShapesItem": {
+    "allOf": [
+     {
+      "$ref": "#/components/schemas/ShapesItemBrief"
+     },
+     {
+      "type": "object",
+      "properties": {
+       "warnings": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       "sources": {
+        "type": "object",
+        "additionalProperties": true
+       },
+       "timing": {
+        "type": "object",
+        "additionalProperties": {
+         "type": "number"
+        }
+       },
+       "edited": {
+        "type": "boolean"
+       },
+       "doc": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/ShapesDoc"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       }
+      },
+      "required": [
+       "warnings",
+       "sources",
+       "timing",
+       "edited",
+       "doc"
+      ]
+     }
+    ]
+   },
+   "ShapesAnalyze": {
+    "type": "object",
+    "properties": {
+     "b64": {
+      "type": "string",
+      "description": "그림 base64(data URL 머리 있어도 됨). PNG·JPG·GIF·BMP·WEBP, 최대 15MB"
+     },
+     "name": {
+      "type": "string",
+      "maxLength": 120
+     },
+     "use_llm": {
+      "type": "boolean",
+      "description": "거짓이면 영상처리·OCR 만(기본 참)"
+     },
+     "force": {
+      "type": "boolean",
+      "description": "그래프·사진으로 보여도 도형으로"
+     }
+    },
+    "required": [
+     "b64"
+    ]
+   },
+   "ShapesRerun": {
+    "type": "object",
+    "properties": {
+     "use_llm": {
+      "type": "boolean"
+     },
+     "force": {
+      "type": "boolean"
+     }
+    },
+    "required": []
+   },
+   "ShapesStarted": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "status": {
+      "type": "string",
+      "const": "running"
+     }
+    },
+    "required": [
+     "id",
+     "status"
+    ]
+   },
+   "ShapesSaveDoc": {
+    "type": "object",
+    "properties": {
+     "doc": {
+      "$ref": "#/components/schemas/ShapesDoc"
+     }
+    },
+    "required": [
+     "doc"
+    ]
+   },
+   "ShapesSaved": {
+    "type": "object",
+    "properties": {
+     "ok": {
+      "type": "boolean"
+     },
+     "updated": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "ok",
+     "updated"
+    ]
+   },
+   "ShapesExport": {
+    "type": "object",
+    "properties": {
+     "format": {
+      "type": "string",
+      "enum": [
+       "pptx",
+       "drawio",
+       "svg",
+       "mermaid",
+       "json"
+      ]
+     },
+     "doc": {
+      "$ref": "#/components/schemas/ShapesDoc",
+      "description": "주면 저장 뒤 내보냄"
+     }
+    },
+    "required": [
+     "format"
+    ]
+   },
+   "ShapesRename": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "maxLength": 120
+     }
+    },
+    "required": [
+     "name"
+    ]
    }
   },
   "responses": {
@@ -58712,7 +60119,8 @@
     "labnote-local",
     "proposal-local",
     "kpi-local",
-    "strategy-local"
+    "strategy-local",
+    "shapes-local"
    ]
   }
  ]

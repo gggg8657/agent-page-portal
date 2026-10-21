@@ -563,5 +563,24 @@
     "author": "dongju",
     "cat": "기획/전략",
     "icon": "Lightbulb"
+  },
+  {
+    "dir": "shapes-local",
+    "port": 8815,
+    "name": "그림 → 도형",
+    "desc": "도식·흐름도·조직도·슬라이드 캡처 그림을 편집 가능한 PPTX 도형·연결선, draw.io, SVG, Mermaid 로 (검토 화면에서 고친 뒤 내보내기)",
+    "group": "그림",
+    "title": "그림 → 도형 — 원본 없는 도식 그림을 다시 편집 가능하게",
+    "tags": [
+      "#도형변환",
+      "#PPTX",
+      "#drawio",
+      "#OCR"
+    ],
+    "added": "2026-10-21",
+    "dept": "인공지능응용연구실",
+    "author": "dongju",
+    "cat": "디자인/시각화",
+    "icon": "Shapes"
   }
 ]
