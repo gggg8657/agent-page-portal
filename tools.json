@@ -582,5 +582,17 @@
     "author": "dongju",
     "cat": "디자인/시각화",
     "icon": "Shapes"
+  },
+  {
+    "dir": "kaeri-ui-local",
+    "port": 8816,
+    "name": "KAERI UI 시안",
+    "desc": "외부 전달 화면 시안(정적 목업)",
+    "hidden": true,
+    "cat": "디자인/시각화",
+    "group": "디자인/시각화",
+    "title": "KAERI UI 시안",
+    "added": "2026-10-21",
+    "author": "dongju"
   }
 ]
