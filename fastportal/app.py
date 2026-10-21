@@ -186,11 +186,11 @@ def get_sync(ctx):
         return "tools"
     if p.startswith("/api/guide/"):
         d = p.split("/")[-1]
-        ok_ = (tools.tool(d) and (ctx.is_owner or not toolstate.is_off(d))) or d == "portal"   # 관리자가 끈 도구는 일반 계정에 빈 글
+        ok_ = (tools.tool(d) and (ctx.is_owner or not toolstate.user_hidden(tools.tool(d)))) or d == "portal"   # 숨긴·관리자가 끈 도구는 일반 계정에 빈 글
         return ctx.send(tools.guide(d).encode() if ok_ else b"", "text/plain; charset=utf-8")
     if p.startswith("/api/readme/"):
         d = p.split("/")[-1]
-        f = os.path.join(config.BASE, d, "README.md") if tools.tool(d) and (ctx.is_owner or not toolstate.is_off(d)) else ""
+        f = os.path.join(config.BASE, d, "README.md") if tools.tool(d) and (ctx.is_owner or not toolstate.user_hidden(tools.tool(d))) else ""
         return ctx.send((open(f, encoding="utf-8").read() if f and os.path.exists(f) else "README 없음").encode(), "text/plain; charset=utf-8")
     if p == "/guide" or p.startswith("/guide/"):
         return pages.guide_file(ctx, p)

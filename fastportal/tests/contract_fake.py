@@ -128,6 +128,7 @@ open(os.path.join(ROOT, "portal.py"), "wb").write(subprocess.run(["git", "-C", R
 for d in ("theme", "v2", "guides"):
     shutil.copytree(os.path.join(REPO, d), os.path.join(ROOT, d))
 os.makedirs(os.path.join(ROOT, "guide"))
+open(os.path.join(ROOT, "guides", "hidden-local.md"), "w").write("숨긴 도구 사용법")
 shutil.copy(os.path.join(REPO, "docs", "img", "landing-home.png"), os.path.join(ROOT, "docs", "img"))
 json.dump([{"dir": "fake-local", "port": TOOL_PORT, "name": "가짜", "title": "가짜 도구", "group": "시험"},
            {"dir": "down-local", "port": DOWN_PORT, "name": "꺼짐", "title": "꺼진 도구", "group": "시험"},
@@ -917,6 +918,8 @@ st, j, _ = jget(NEW, "/t/hidden-local/echo", CK, tok=False)
 st2, j2, _ = jpost(NEW, "/api/start", {"dir": "hidden-local"}, CK, tok=False)
 st3, _, _ = req(NEW, "GET", "/t/hidden-local/echo")   # 로컬 주인(토큰)
 check("숨긴 도구: 일반 사용자 프록시·시작 → 404, 관리자는 됨", st == 404 and st2 == 404 and st3 == 200, f"{st} {st2} {st3}", kind="보안")
+g_user, g_owner = req(NEW, "GET", "/api/guide/hidden-local", CK, tok=False)[2], req(NEW, "GET", "/api/guide/hidden-local")[2]
+check("숨긴 도구 사용법: 일반 사용자 빈 글, 관리자는 보임", g_user == b"" and "숨긴 도구 사용법" in g_owner.decode(), f"{g_user[:20]!r} {g_owner[:20]!r}", kind="보안")
 s_ = socket.create_connection(("127.0.0.1", NEW), 5); t0 = time.time()
 s_.sendall(b"POST /api/post HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n1000\r\n" + b"x" * 4096 + b"\r\n")
 s_.settimeout(5); got = b""
