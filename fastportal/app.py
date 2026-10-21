@@ -47,7 +47,8 @@ with db.db() as _c:
     toolstate.init(_c)   # 관리자 도구 켜기·끄기(tool_state — 없으면 켜짐)
     ask.init(_c)   # 물어보기 — 계정별 대화 기록(보관 기한 지난 것 지움)
 toolstate.write_file()   # 파동이 펫 등이 읽는 꺼진 도구 목록(DATA/tools-disabled.json)
-flows.recover(); devsubmit.recover()
+if config.RECOVER:
+    flows.recover(); devsubmit.recover()
 jobs.load_self_report()
 _AB = auth.backend()   # 계정 저장소(AUTH_BACKEND) — 설정이 틀리면 여기서 멈춤
 if not auth.is_local() and hasattr(_AB, "ready") and not _AB.ready():

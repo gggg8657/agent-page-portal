@@ -115,6 +115,7 @@ HOP = {"connection", "keep-alive", "transfer-encoding", "te", "trailer", "upgrad
 JOBS_KEEPALIVE = float(os.environ.get("PORTAL_JOBS_KEEPALIVE", "25"))   # SSE 빈 줄(주석) 간격 — 중간 프록시가 끊지 않게
 
 # ── 백업 ────────────────────────────────────────────────────────────────
+RECOVER = os.environ.get("PORTAL_RECOVER", "1") != "0"   # 기동 때 멈춘 흐름·제출 검증을 실패로 — 같은 DB 를 쓰는 시험 포털(:8701)은 0(운영의 진행 중 일을 건드리지 않게)
 BACKUP = os.environ.get("BACKUP", "0") == "1"        # 매일 백업 — 기본 꺼짐(운영 :8700 만 start-portal.sh 가 켬)
 BACKUP_DIR = os.environ.get("AGENT_BACKUP_DIR") or os.path.expanduser("~/agent-page-backup")
 
