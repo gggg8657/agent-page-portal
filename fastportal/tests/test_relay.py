@@ -50,6 +50,14 @@ class Check(unittest.TestCase):
         relay._lookup = lambda ip, port, sp: None
         self.assertIsNone(relay.check(self.req(1)))
 
+    def test_remote_address_skips_proc_lookup(self):
+        seen = []
+        relay._lookup = lambda ip, port, sp: seen.append(ip) or 1008
+        r = self.req(9); r.client.host = "192.0.2.10"   # 이 서버 주소가 아님(문서용 대역)
+        self.assertIsNone(relay.check(r))
+        self.assertEqual(seen, [], "다른 PC 접속은 /proc 표를 읽지 않음")
+        self.assertTrue(relay.is_local("127.0.0.1")); self.assertFalse(relay.is_local("192.0.2.10"))
+
     def test_same_account_allowed(self):
         relay._lookup = lambda ip, port, sp: 1010
         self.assertIsNone(relay.check(self.req(2)))

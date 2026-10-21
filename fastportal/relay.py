@@ -82,6 +82,25 @@ def _lookup(ip, port, server_port):
     return found.get((ip, port))
 
 
+_local = {}         # ip → 이 서버의 주소인지
+
+
+def is_local(ip):
+    """이 서버의 주소인지 — 그 주소로 bind 가 되면 이 서버 것. 다른 PC 의 접속은 /proc 표(읽기만 약 10ms)를 볼 필요가 없음"""
+    hit = _local.get(ip)
+    if hit is None:
+        try:
+            with socket.socket(socket.AF_INET6 if ":" in ip else socket.AF_INET) as s:
+                s.bind((ip, 0))
+            hit = True
+        except OSError:
+            hit = False
+        if len(_local) > 4096:
+            _local.clear()
+        _local[ip] = hit
+    return hit
+
+
 def peer_uid(ip, port, server_port):
     """이 서버 안 소켓이면 주인 uid, 아니면 None(밖에서 온 접속)"""
     key = (ip, port)
@@ -118,6 +137,8 @@ def check(request):
         return None
     srv = request.scope.get("server") or (None, None)
     if not srv[1]:
+        return None
+    if not is_local(request.client.host):   # 다른 PC·컨테이너에서 온 접속 — 이 서버의 소켓 표에 없음
         return None
     uid = peer_uid(request.client.host, request.client.port, srv[1])
     if uid is None or uid in ALLOW or direct(request.headers):
