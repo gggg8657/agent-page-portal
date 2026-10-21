@@ -1,7 +1,7 @@
 """LocalBackend — 포털 내부 DB(portal.db 의 users 표) 계정 저장소. 지금(임시) 기본값.
 PIN: PBKDF2-HMAC-SHA256 60만 번(예전 20만 번 해시는 로그인 성공 때 다시 해시), 비활성·정지·익명화(disabled=1)는 로그인 불가.
 portal.py(예전 구현)와 같은 표·열·해시 규칙 — 두 구현이 같은 DB 를 써도 됨."""
-import hashlib, hmac, re, secrets
+import hashlib, hmac, re, secrets, sqlite3
 
 from ..config import OWNERS
 from ..db import now
@@ -50,8 +50,10 @@ class LocalBackend(AuthBackend):
 
     def create_user(self, c, uid, name, secret, dept=""):
         salt = secrets.token_bytes(16)
-        c.execute("INSERT INTO users(id,name,dept,salt,hash,iters,ts) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, dept=excluded.dept, "
-                  "salt=excluded.salt, hash=excluded.hash, iters=excluded.iters", (uid, name, dept, salt, _hash(secret, salt), ITERS, now()))
+        try:   # check_new 뒤 해시 계산(약 0.5초) 사이에 같은 아이디 가입이 끼면 — 덮어쓰지 않고 거절
+            c.execute("INSERT INTO users(id,name,dept,salt,hash,iters,ts) VALUES(?,?,?,?,?,?,?)", (uid, name, dept, salt, _hash(secret, salt), ITERS, now()))
+        except sqlite3.IntegrityError:
+            raise ValueError("이미 있는 아이디입니다") from None
 
     def check_secret_rule(self, secret):
         if not PIN_RE.match(secret):
