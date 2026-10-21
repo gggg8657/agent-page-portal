@@ -1,6 +1,7 @@
 """모두의 에이전트 연결(flows.py) — 어댑터 목록 밖 거절, 매핑 검사, 계정 격리(403), 사용자당 동시 실행 1, 앞 단계 결과 넘김·실패 단계에서 멈춤,
 서명 헤더(X-Agent-User = 실행자). 실제 도구·LLM 은 부르지 않음(가짜 HTTP 도구)."""
-import json, os, tempfile, threading, time, unittest
+import contextlib, json, os, sqlite3, tempfile, threading, time, unittest
+from types import SimpleNamespace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest.mock import patch
 
@@ -136,6 +137,19 @@ class FlowsTest(unittest.TestCase):
         with db() as c, self.assertRaises(ValueError):
             flows.start_run(c, "alice", "alice", {"id": f["id"], "inputs": {"0.body": "a"}})
         flows._ACTIVE.clear()
+
+    def test_commit_failure_releases_run_slot(self):
+        f, real = self.save(), flows.db
+
+        @contextlib.contextmanager
+        def locked():   # start_run 은 됐는데 커밋에서 DB 잠김
+            with real() as c:
+                yield c
+                raise sqlite3.OperationalError("database is locked")
+        ctx = SimpleNamespace(uid="alice", agent_user="alice", p="/api/flows/run", send=lambda d, code=200: (code, d))
+        with patch.object(flows, "db", locked), self.assertRaises(sqlite3.OperationalError):
+            flows.handle_post(ctx, {"id": f["id"], "inputs": {"0.body": "a"}})
+        self.assertEqual(flows._ACTIVE, {}, "자리를 돌려줌 — 다음 실행이 막히지 않음")
 
     def test_tool_down_is_reported(self):
         with patch.object(flows.tools, "alive_sync", return_value=False):

@@ -627,17 +627,23 @@ def handle_get(ctx, up=None):
 
 
 def handle_post(ctx, req):
-    p = ctx.p
+    p, res = ctx.p, None
     try:
-        with db() as c:
-            if p == "/api/flows/save":
-                return ctx.send({"flow": save(c, ctx.uid, req)})
-            if p == "/api/flows/delete":
-                return ctx.send(delete(c, ctx.uid, req))
-            if p == "/api/flows/run":
-                res, go = start_run(c, ctx.uid, ctx.agent_user, req)
-            else:
-                return ctx.send({"error": "not found"}, code=404)
+        try:
+            with db() as c:
+                if p == "/api/flows/save":
+                    return ctx.send({"flow": save(c, ctx.uid, req)})
+                if p == "/api/flows/delete":
+                    return ctx.send(delete(c, ctx.uid, req))
+                if p == "/api/flows/run":
+                    res, go = start_run(c, ctx.uid, ctx.agent_user, req)
+                else:
+                    return ctx.send({"error": "not found"}, code=404)
+        except BaseException:
+            if res:   # 자리는 잡았는데 커밋 실패(DB 잠김 등) — 돌려주지 않으면 재시작 전까지 '이미 실행 중'
+                with _LOCK:
+                    _ACTIVE.pop(ctx.uid, None)
+            raise
         go()   # 커밋한 뒤 실행 시작
         return ctx.send(res)
     except PermissionError as e:
