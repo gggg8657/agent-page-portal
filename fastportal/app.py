@@ -474,7 +474,7 @@ def preflight(ctx):
     hd = [("Allow", METHODS)]
     if cors_headers(ctx):
         want = ctx.headers.get("access-control-request-headers") or ""
-        ok = ", ".join(h for h in (x.strip() for x in want.split(",")) if h and h.lower() not in ("cookie", "x-agent-user", "x-agent-auth", "x-local-owner"))
+        ok = ", ".join(h for h in (x.strip() for x in want.split(",")) if h and h.lower() not in ("cookie", "x-agent-user", "x-agent-auth", "x-agent-role", "x-agent-role-auth", "x-local-owner"))
         hd += [("Access-Control-Allow-Methods", METHODS), ("Access-Control-Max-Age", "600")] + ([("Access-Control-Allow-Headers", ok)] if ok else [])
     return ctx.bare(204, hd)
 

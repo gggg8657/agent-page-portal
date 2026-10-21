@@ -67,12 +67,12 @@ def _text(v, n, label, required=False):
 
 
 # ── 대상: 볼 수 있는지·주인 ──────────────────────────────────────────────
-def _builder(user, path):
-    """빌더에 그 사람 이름 + 포털 서명으로 GET → (상태, JSON). 꺼져 있으면 (502, None)"""
+def _builder(user, path, role=""):
+    """빌더에 그 사람 이름 + 포털 서명(관리자 계정이면 서명된 역할도)으로 GET → (상태, JSON). 꺼져 있으면 (502, None)"""
     t = tools.tool(BUILDER)
     if not t or not tools.tool_host(t) or time.time() < _DOWN[0]:
         return 502, None
-    hd = {**jobs.tool_headers(user, BUILDER), "Accept": "application/json"}
+    hd = {**jobs.tool_headers(user, BUILDER, role), "Accept": "application/json"}
     try:
         with jobs.TOOL_OPENER.open(urllib.request.Request(f"http://{tools.tool_host(t)}:{int(t['port'])}{path}", headers=hd), timeout=5) as r:
             return r.status, json.loads(r.read(4 * 1024 * 1024) or b"{}")
@@ -131,7 +131,7 @@ def target(ctx, kind, tid):
         return {"kind": kind, "id": tid, "name": r["name"], "owner": r["uid"], "mine": True}
     if not AGENT_RE.fullmatch(tid):
         raise ValueError("에이전트 id 형식")
-    st, a = _builder(ctx.agent_user, f"/api/agents/{tid}")
+    st, a = _builder(ctx.agent_user, f"/api/agents/{tid}", ctx.agent_role)
     if st == 502:
         raise LookupError("에이전트 빌더가 꺼져 있습니다 — 홈에서 시작한 뒤 다시 해 주세요")
     if st != 200 or not isinstance(a, dict):

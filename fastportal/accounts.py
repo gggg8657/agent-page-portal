@@ -245,7 +245,7 @@ def me(c, uid, uname):
     u = c.execute("SELECT dept, onboarded, tour_seen, tut_seen FROM users WHERE id=?", (uid,)).fetchone()
     pend = c.execute("SELECT dept FROM requests WHERE uid=? AND kind='dept_join' AND status='pending'", (uid,)).fetchone()
     n = sum(can_decide(c, uid, r) for r in c.execute("SELECT * FROM requests WHERE status='pending'"))
-    return {"id": uid, "name": uname, "owner": is_owner, "agent_user": "owner" if is_owner else uid, "role": role(c, uid),
+    return {"id": uid, "name": uname, "owner": is_owner, "agent_user": uid, "role": role(c, uid),
             "dept": u["dept"] if u else "", "dept_pending": pend["dept"] if pend else "", "heads": my_heads(c, uid), "approvals": n,
             "account": bool(u), "onboarded": bool(u["onboarded"]) if u else True,
             "tour_seen": (u["tour_seen"] or 0) if u else config.TOUR_VERSION, "tour_version": config.TOUR_VERSION,

@@ -65,7 +65,13 @@ class Ctx:
 
     @property
     def agent_user(self):
-        return "owner" if self.is_owner else self.uid
+        """도구로 넘기는 사용자(X-Agent-User) = 계정 아이디 — 관리자 계정도 자기 작업 공간(u/<id>). owner 는 로컬 주인 토큰뿐(루트 작업 공간)"""
+        return self.uid
+
+    @property
+    def agent_role(self):
+        """도구로 넘기는 역할(X-Agent-Role, 서명함) — 관리자면 admin. 도구는 portal_auth.is_admin 으로 권한을 판정"""
+        return "admin" if self.is_owner else ""
 
     def theme(self):
         return pages.user_theme(self.uid, self.cookie)

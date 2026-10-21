@@ -11,7 +11,7 @@ class H(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
-        b = json.dumps({"user": self.headers.get("X-Agent-User") or "owner"}).encode()
+        b = json.dumps({"user": self.headers.get("X-Agent-User") or "owner"} | ({"role": pa.role(self), "admin": pa.is_admin(self)} if self.path == "/r" else {})).encode()
         self.send_response(200); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
 
     do_POST = do_GET
@@ -38,6 +38,8 @@ assert get("/x") == (200, {"user": "owner"})
 assert get("/x", {"X-Agent-User": "kim"}) == (200, {"user": "kim"})
 c, j = get("/healthz")
 assert c == 200 and j["ok"] and j["tool"] == "test-local" and j["auth"] == "standalone", j
+assert get("/r") == (200, {"user": "owner", "role": "", "admin": True})                       # 단독 실행 = 주인
+assert get("/r", {"X-Agent-User": "kim", "X-Agent-Role": "admin"}) == (200, {"user": "kim", "role": "", "admin": False})   # 확인할 키 없음 → 역할 지움
 
 # 2) 서명 모드
 os.environ["PORTAL_TOOL_KEY"] = "k" * 43
@@ -59,6 +61,24 @@ assert pa.verify("kim", v1["X-Agent-Auth"], "test-local", now=int(ts)) == (time.
 _u = pa.V1_UNTIL; pa.V1_UNTIL = "2000-01-01"
 assert get("/x", v1)[0] == 401                                        # 날짜가 지나면 v1 거부
 pa.V1_UNTIL = _u                                              # 사용자 없으면 서명 안 함
+# 역할(관리자 계정) 서명 — 사용자·역할·받는 도구를 함께 서명(r2)
+T = "test-local"
+assert pa.sign("kim", T, role="admin")["X-Agent-Role"] == "admin" and pa.sign("kim", T, role="admin")["X-Agent-Role-Auth"].startswith("r2.")
+assert get("/r", pa.sign("kim", T, role="admin")) == (200, {"user": "kim", "role": "admin", "admin": True})
+assert get("/r", pa.sign("kim", T)) == (200, {"user": "kim", "role": "", "admin": False})
+assert get("/r", {**pa.sign("kim", T), "X-Agent-Role": "admin"}) == (200, {"user": "kim", "role": "", "admin": False})   # 역할 서명 없이 붙임 → 지움
+lee = pa.sign("lee", T, role="admin")
+assert get("/r", {**pa.sign("kim", T), "X-Agent-Role": "admin", "X-Agent-Role-Auth": lee["X-Agent-Role-Auth"]})[1]["admin"] is False   # 남의 역할 서명
+oth = pa.sign("kim", "other-local", role="admin")
+assert get("/r", {**pa.sign("kim", T), "X-Agent-Role": "admin", "X-Agent-Role-Auth": oth["X-Agent-Role-Auth"]})[1]["admin"] is False   # 다른 도구 앞 역할 서명
+up = pa.sign("kim", T, role="user"); up["X-Agent-Role"] = "admin"
+assert get("/r", up)[1]["admin"] is False                                                         # 역할 바꿔치기
+stale = pa.sign("kim", T, now=time.time() - 600, role="admin"); stale["X-Agent-Auth"] = pa.sign("kim", T)["X-Agent-Auth"]
+assert get("/r", stale)[1]["admin"] is False                                                      # 오래된 역할 서명
+v1r = {**v1, **{k: v for k, v in pa.sign("kim", T, now=int(ts), role="admin").items() if k.startswith("X-Agent-Role")}}
+assert get("/r", v1r)[1]["admin"] is (time.strftime("%Y-%m-%d") < pa.V1_UNTIL and abs(time.time() - int(ts)) < pa.SKEW)   # 옮기는 동안: v1 사용자 서명 + r2 역할도 됨
+assert get("/r", pa.sign("owner", T)) == (200, {"user": "owner", "role": "", "admin": True})     # 로컬 주인 토큰
+assert not pa.verify_role("kim", "admin", None, T) and not pa.verify_role("kim", "admin", "v2.1.x", T)
 c, j = get("/healthz")
 assert c == 200 and j["auth"] == "signed", j                           # 헬스는 서명 없이
 os.environ["PORTAL_TOOL_KEY"] = "other-key-xxxxxxxxxxxxxxxxx"
@@ -81,6 +101,7 @@ f = Fake("172.17.0.9"); assert pa.check(f, "t")                       # 옮기�
 f = Fake("172.18.0.9"); assert not pa.check(f, "t") and f.code == 403
 os.environ["PORTAL_TOOL_KEY"] = "k" * 43
 f = Fake("172.17.0.9"); assert pa.check(f, "t")                       # 서명 모드에서도 허용 대역은 서명 없이
+f = Fake("172.17.0.9", {"X-Agent-User": "kim", "X-Agent-Role": "admin"}); assert pa.check(f, "t") and not pa.is_admin(f)   # 서명 없는 역할은 지움
 f = Fake("172.17.0.9", {"X-Agent-Auth": "v2.1.bad", "X-Agent-User": "kim"}); assert not pa.check(f, "t") and f.code == 401   # 틀린 서명은 허용 대역이어도 거부
 f = Fake("10.0.0.5", pa.sign("kim", "t")); assert pa.check(f, "t")         # 서명 맞으면 어디서든
 os.environ.pop("PORTAL_AUTH_ALLOW_UNSIGNED")

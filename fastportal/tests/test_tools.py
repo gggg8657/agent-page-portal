@@ -34,6 +34,69 @@ class ToolHeadersTest(unittest.TestCase):
         self.assertEqual(hd["X-Agent-Auth"], jobs.sign("kim", "a-local", int(ts)), "도구가 확인하는 서명과 같음")
         with mock.patch.object(jobs.config, "TOOL_AUTH", False):
             self.assertEqual(jobs.tool_headers("kim", "a-local"), {"X-Agent-User": "kim"})
+            self.assertEqual(jobs.tool_headers("kim", "a-local", "admin"), {"X-Agent-User": "kim"}, "서명을 안 쓰면 역할도 안 보냄")
+
+    def test_role_signed_like_sdk(self):
+        """관리자 계정 역할: 포털 서명(jobs.sign_role)을 도구 관문(sdk/portal_auth)이 그대로 인정 — 다른 사용자·다른 도구로는 안 통함"""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("pa_sdk", os.path.join(os.path.dirname(jobs.__file__), "..", "sdk", "portal_auth.py"))
+        pa = importlib.util.module_from_spec(spec); spec.loader.exec_module(pa)
+        with mock.patch.object(jobs.config, "TOOL_AUTH", True), mock.patch.dict(os.environ, {"PORTAL_TOOL_KEY": jobs.TOOL_KEY}):
+            hd = jobs.tool_headers("kim", "a-local", "admin")
+            self.assertEqual(hd["X-Agent-Role"], "admin")
+            self.assertTrue(pa.verify(hd["X-Agent-User"], hd["X-Agent-Auth"], "a-local"))
+            self.assertTrue(pa.verify_role("kim", "admin", hd["X-Agent-Role-Auth"], "a-local"))
+            self.assertFalse(pa.verify_role("lee", "admin", hd["X-Agent-Role-Auth"], "a-local"), "다른 사용자에 옮겨 붙일 수 없음")
+            self.assertFalse(pa.verify_role("kim", "admin", hd["X-Agent-Role-Auth"], "b-local"), "다른 도구에 다시 쓸 수 없음")
+            self.assertNotIn("X-Agent-Role", jobs.tool_headers("kim", "a-local"), "일반 계정은 역할 없음")
+
+
+class AgentUserTest(unittest.TestCase):
+    """계정마다 자기 작업 공간: X-Agent-User = 계정 아이디(관리자 포함), owner 는 로컬 주인 토큰뿐. 관리자는 서명된 역할로"""
+    def _ctx(self, uid):
+        from fastportal import ctx as C
+        c = C.Ctx.__new__(C.Ctx); c.uid = uid
+        return c
+
+    def test_admin_accounts_split(self):
+        from fastportal import ctx as C
+        with mock.patch.object(C.accounts, "is_admin", lambda u: u == "owner" or u in {"adm1", "adm2"}):
+            a, b, u, o = (self._ctx(x) for x in ("adm1", "adm2", "kim", "owner"))
+            self.assertEqual((a.agent_user, b.agent_user), ("adm1", "adm2"), "관리자 계정끼리 작업 공간을 나누지 않음")
+            self.assertEqual((a.agent_role, b.agent_role, u.agent_role, o.agent_role), ("admin", "admin", "", ""), "owner 는 이름만으로 관리자(역할 안 붙임)")
+            self.assertEqual((u.agent_user, o.agent_user), ("kim", "owner"))
+
+    def test_proxy_headers(self):
+        from fastportal import proxy
+        from types import SimpleNamespace as NS
+        req = NS(headers=NS(raw=[(b"x-agent-role", b"admin"), (b"x-agent-role-auth", b"r2.1.x"), (b"x-agent-user", b"owner"), (b"accept", b"*/*")]))
+        with mock.patch.object(jobs.config, "TOOL_AUTH", True):
+            hd = dict(proxy.upstream_headers(NS(request=req, agent_user="kim", agent_role=""), None, "a-local"))
+            self.assertEqual(hd["X-Agent-User"], "kim")
+            self.assertNotIn("X-Agent-Role", hd, "밖에서 붙인 역할 헤더는 버림")
+            self.assertNotIn("x-agent-role", hd)
+            hd = dict(proxy.upstream_headers(NS(request=req, agent_user="adm1", agent_role="admin"), None, "a-local"))
+            self.assertEqual((hd["X-Agent-User"], hd["X-Agent-Role"]), ("adm1", "admin"))
+            self.assertTrue(hd["X-Agent-Role-Auth"].startswith("r2."))
+
+
+class AdminInboxTest(unittest.TestCase):
+    """작업 알림: 관리자 계정 = 본인 + 관리자 알림함('owner'), 일반 = 본인, 로컬 주인 = 전부"""
+    def test_vis(self):
+        with mock.patch.object(jobs.config, "OWNERS", {"adm1"}):
+            self.assertEqual(jobs._vis("owner"), ("1=1", ()))
+            self.assertEqual(jobs._vis("adm1"), ("user IN (?, 'owner')", ("adm1",)))
+            self.assertEqual(jobs._vis("kim"), ("user=?", ("kim",)))
+
+    def test_hub(self):
+        with mock.patch.object(jobs.config, "OWNERS", {"adm1"}):
+            h = jobs.Hub()
+            qs = {v: h.subscribe(v) for v in ("owner", "adm1", "kim")}
+            h._dispatch("job", 1, "owner")
+            h._dispatch("job", 2, "kim")
+            h._dispatch("read", 3, "owner", exact=True)
+            got = {v: [q.get_nowait()[1] for _ in range(q.qsize())] for v, q in qs.items()}
+            self.assertEqual(got, {"owner": [1, 2, 3], "adm1": [1], "kim": [2]})
 
 
 class AddToolTest(unittest.TestCase):

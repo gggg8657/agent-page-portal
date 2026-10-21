@@ -12,7 +12,7 @@ TOOLS = {"sql-local": {"dir": "sql-local", "port": 1, "name": "SQL", "author": "
 
 
 def ctx(uid, owner=False):
-    return NS(uid=uid, agent_user="owner" if owner else uid, is_owner=owner)
+    return NS(uid=uid, agent_user=uid, agent_role="admin" if owner else "", is_owner=owner)
 
 
 class CommunityTest(unittest.TestCase):
@@ -34,9 +34,9 @@ class CommunityTest(unittest.TestCase):
             flows.init(c); community.init(c)
             c.execute("INSERT INTO flows VALUES('flow123456','alice','내 흐름','[]','t','t')")
 
-    def fake_builder(self, user, path):
-        if path == "/api/agents/abc123":   # alice 의 부서 공개 에이전트 — 같은 부서(bob)·주인만 봄
-            return (200, {"name": "규정 도우미", "mine": user == "alice"}) if user in ("alice", "bob", "owner") else (404, None)
+    def fake_builder(self, user, path, role=""):
+        if path == "/api/agents/abc123":   # alice 의 부서 공개 에이전트 — 같은 부서(bob)·주인·관리자(서명된 역할)만 봄
+            return (200, {"name": "규정 도우미", "mine": user == "alice"}) if user in ("alice", "bob", "owner") or role == "admin" else (404, None)
         if path == "/api/stats":
             return 200, {"creators_detail": [{"uid": "alice", "name": "앨리스", "dept": "A", "agents": 1, "uses_30d": 7, "forks_30d": 2}]}
         return 404, None

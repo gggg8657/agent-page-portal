@@ -1,6 +1,6 @@
 """/t/<도구>/… 중계 — httpx.AsyncClient(연결 풀)로 요청·응답 본문을 버퍼링 없이 흘림. 브라우저가 끊으면 도구 쪽 연결도 바로 닫음.
 도구로 보내는 헤더 규칙: 사용자 헤더(X-Agent-User 등)·쿠키(전부 — 도구는 쿠키를 안 씀)·로컬 주인 토큰·서명은 버리고
-포털이 정한 X-Agent-User + 서명(X-Agent-Auth, config.TOOL_AUTH)을 붙임. 모든 메서드(GET·POST·PUT·DELETE·PATCH·HEAD·OPTIONS)를 넘김.
+포털이 정한 X-Agent-User(= 계정 아이디, 로컬 주인 토큰만 owner) + 서명(X-Agent-Auth, config.TOOL_AUTH) + 관리자 계정이면 서명된 X-Agent-Role 을 붙임. 모든 메서드(GET·POST·PUT·DELETE·PATCH·HEAD·OPTIONS)를 넘김.
 도구 응답: 포털 쿠키(ag*)를 덮는 Set-Cookie 는 버리고, 보안 헤더(nosniff·frame-ancestors 등)를 붙이고, API 가 주는 HTML·SVG(사용자 내용)는 sandbox 로.
 도구 첫 화면 HTML 에만 사용법(?)·테마·저작자 표기를 끼워 넣음(일반 사용자에겐 주석을 걷은 HTML — strip.py, PORTAL_LEGACY_STRIP). 오래 걸리는 POST 는 작업 알림(jobs)에 자동 기록."""
 import asyncio, http.cookiejar, os, re, secrets, sqlite3, tempfile, time, urllib.parse
@@ -14,7 +14,7 @@ from . import config, jobs, pages, strip, tools, toolstate
 from .config import HOP
 from .ctx import Raw, TooBig, drain, length, too_big
 
-DROP_REQ = HOP | {"x-agent-user", "x-agent-auth", "x-forwarded-user", "x-user", "cookie", "x-local-owner"}   # 로컬 주인 토큰·쿠키·밖에서 온 서명은 도구로 넘기지 않음
+DROP_REQ = HOP | {"x-agent-user", "x-agent-auth", "x-agent-role", "x-agent-role-auth", "x-forwarded-user", "x-user", "cookie", "x-local-owner"}   # 로컬 주인 토큰·쿠키·밖에서 온 서명은 도구로 넘기지 않음
 AG_SETCOOKIE = re.compile(rb"^\s*ag", re.I)   # 도구가 포털 쿠키(agsid·agtheme)를 덮지 못하게
 SPOOL_MEM = 8 * 1024 * 1024   # 청크 업로드: 이보다 크면 메모리 대신 디스크 임시 파일에 모음
 # 사용자 내용일 수 있는 문서형 응답(API 가 주는 HTML·SVG·XML) → 별도 출처처럼 격리(sandbox: 스크립트는 돌아도 포털 쿠키·API 에 못 닿음)
@@ -203,6 +203,7 @@ def upstream_headers(ctx, length_, tool_dir):
     hd.append(("X-Agent-User", ctx.agent_user))
     if config.TOOL_AUTH:
         hd.append(("X-Agent-Auth", jobs.sign(ctx.agent_user, tool_dir)))
+        hd.extend(jobs.sign_role(ctx.agent_user, tool_dir, ctx.agent_role).items())   # 관리자 계정: 서명된 X-Agent-Role(작업 공간은 자기 u/<id>, 권한만 관리자)
     hd.append(("Accept-Encoding", "identity"))   # 압축 안 받음(portal.py 의 urllib 와 같음) — 첫 화면 HTML 에 끼워 넣어야 하므로
     if length_ is not None:
         hd.append(("Content-Length", str(length_)))

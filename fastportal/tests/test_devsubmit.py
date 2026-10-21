@@ -47,7 +47,7 @@ class DevSubmitTest(unittest.TestCase):
         for x in reversed(self.p): x.stop()
         self.tmp.cleanup()
 
-    ctx = staticmethod(lambda uid, owner=False: SimpleNamespace(uid=uid, agent_user="owner" if owner else uid, is_owner=owner))
+    ctx = staticmethod(lambda uid, owner=False: SimpleNamespace(uid=uid, agent_user=uid, agent_role="admin" if owner else "", is_owner=owner))
 
     def test_zip_attacks_rejected(self):
         d = os.path.join(self.tmp.name, "x"); os.makedirs(d)

@@ -9,7 +9,7 @@
        파일에 두는 까닭: 포털만 재시작해도(start-portal.sh) 이미 떠 있는 도구의 토큰이 그대로 맞게.
        받는 곳: 127.0.0.1/::1, tools.json 의 host 주소(다른 컨테이너 도구), PORTAL_JOBS_ALLOW(쉼표 IP) — 그 밖은 403
   전달: 프로세스 안 asyncio 큐 구독(연결마다 큐 하나, 스레드 없음). 쓰기는 스레드 풀에서 하고 call_soon_threadsafe 로 루프에 넘김.
-  보기 규칙: /api/events 와 같음 — 본인 작업만, 주인(owner)은 전부. 읽음은 보는 사람마다(job_reads)."""
+  보기 규칙: /api/events 와 같음 — 본인 작업만, 로컬 주인(owner 토큰)은 전부, 관리자 계정은 본인 + 관리자 알림함(user='owner'). 읽음은 보는 사람마다(job_reads)."""
 import asyncio, hashlib, hmac, json, os, re, secrets, socket, time, urllib.parse, urllib.request
 
 import anyio
@@ -66,6 +66,15 @@ def sign(user, tool_dir, now=None):
     return f"v2.{ts}." + hmac.new(TOOL_KEY.encode(), f"v2|{ts}|{tool_dir}|{user}".encode(), hashlib.sha256).hexdigest()
 
 
+def sign_role(user, tool_dir, role, now=None):
+    """역할 헤더(관리자 계정): {X-Agent-Role, X-Agent-Role-Auth: r2.<초>.HMAC(TOOL_KEY, "r2|<초>|<받는 도구 dir>|<user>|<role>")} — portal_auth.verify_role 과 같은 규칙.
+    사용자 서명과 함께일 때만 도구가 인정. role 이 없거나 서명을 안 쓰면(TOOL_AUTH 끔) 빈 dict — 서명 없는 역할은 도구가 지움"""
+    if not (role and config.TOOL_AUTH):
+        return {}
+    ts = str(int(now if now is not None else time.time()))
+    return {"X-Agent-Role": role, "X-Agent-Role-Auth": f"r2.{ts}." + hmac.new(TOOL_KEY.encode(), f"r2|{ts}|{tool_dir}|{user}|{role}".encode(), hashlib.sha256).hexdigest()}
+
+
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *a, **k):
         return None
@@ -74,9 +83,9 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 TOOL_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())   # 포털이 도구를 직접 부를 때 — 프록시 안 거치고, 리디렉트를 안 따름(서명 헤더가 다른 주소로 새지 않게)
 
 
-def tool_headers(user, tool_dir):
-    """포털이 도구(tool_dir)를 직접 부를 때의 사용자 헤더 + 서명(TOOL_AUTH 일 때 — 도구도 그때만 확인함)"""
-    return {"X-Agent-User": user, **({"X-Agent-Auth": sign(user, tool_dir)} if config.TOOL_AUTH else {})}
+def tool_headers(user, tool_dir, role=""):
+    """포털이 도구(tool_dir)를 직접 부를 때의 사용자 헤더 + 서명(TOOL_AUTH 일 때 — 도구도 그때만 확인함). role="admin" 이면 서명된 역할도"""
+    return {"X-Agent-User": user, **({"X-Agent-Auth": sign(user, tool_dir)} if config.TOOL_AUTH else {}), **sign_role(user, tool_dir, role)}
 
 
 def tool_env(t, port=None):
@@ -211,8 +220,15 @@ def upsert(user, tool_dir, status, jid=None, title="", link="", message="", prog
     return public(r)
 
 
+def _admin_inbox(viewer):
+    """관리자 계정은 자기 작업 + 관리자 알림함('owner' 앞 알림: 제출 승인 대기·관리자 대상 요청 등)을 봄"""
+    return viewer != "owner" and viewer in config.OWNERS
+
+
 def _vis(viewer):
-    return ("1=1", ()) if viewer == "owner" else ("user=?", (viewer,))
+    if viewer == "owner":
+        return ("1=1", ())
+    return ("user IN (?, 'owner')", (viewer,)) if _admin_inbox(viewer) else ("user=?", (viewer,))
 
 
 def listing(viewer, unread_only=False, limit=50, since=0):
@@ -271,7 +287,7 @@ class Hub:
 
     def _dispatch(self, kind, payload, owner, exact=False):
         for q in list(self.subs):
-            if q.viewer == owner or (q.viewer == "owner" and not exact):
+            if q.viewer == owner or (not exact and (q.viewer == "owner" or (owner == "owner" and _admin_inbox(q.viewer)))):
                 try:
                     q.put_nowait((kind, payload))
                 except asyncio.QueueFull:   # 너무 느린 연결 — 끊음(브라우저가 다시 붙어 since 로 빠진 것을 받음)
