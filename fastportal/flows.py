@@ -2,7 +2,7 @@
 
   연결할 수 있는 단계는 아래 ADAPTERS 에 정의한 것뿐(사용자가 임의 주소·API 를 부를 수 없음). 어댑터 = 도구·작업 이름, 입력 칸, 출력, 부르는 법.
   흐름: 단계 2~6개, 단계마다 입력 칸 매핑 {from: prev(바로 앞 결과) | step(앞 단계 n 의 결과) | const(고정값) | ask(실행 때 입력)}.
-  실행: 포털이 순서대로 도구 API 호출 — 프록시와 같은 X-Agent-User(= 실행자, 주인은 owner) + 서명(X-Agent-Auth). 남의 흐름은 보지도 돌리지도 못함(403).
+  실행: 포털이 순서대로 도구 API 호출 — 프록시와 같은 X-Agent-User(= 실행자 계정 id, 로컬 주인 토큰만 owner) + 서명(X-Agent-Auth). 남의 흐름은 보지도 돌리지도 못함(403).
         단계별 시간 제한, 사용자당 동시 실행 1, 전체 동시 실행 FLOW_MAX_RUNS. 진행·결과는 작업 알림(jobs, tool='flows')과 flow_runs 표.
         실패한 단계에서 멈추고 이유를 남김.
 API: GET /api/flows · /api/flows/adapters · /api/flows/<id> · /api/flows/runs/<run_id>
