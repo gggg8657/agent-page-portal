@@ -10,12 +10,15 @@ OpenAPI 3.1: [`openapi/agent-builder-local.json`](openapi/agent-builder-local.js
 |---|---|---|---|---|
 | GET | `api/health` | 살아 있는지, 문서 엔진·포털 DB 읽기 가능 여부 | 아니오 | 누구나 |
 | GET | `api/me` | 나(이름·부서·역할)·승인 대기 수·안 읽은 피드백 수 | 아니오 | 본인 |
-| GET | `api/templates` | 템플릿 5종 | 아니오 | 누구나 |
+| GET | `api/templates` | 템플릿 5종 + `cats`(분류 8개) | 아니오 | 누구나 |
 | GET | `api/agents?tab=mine\|dept\|fav\|admin` | 목록(내가 만든 것·부서 공유·즐겨찾기 · admin = 관리자만: 부서 공개·대기 + 공유를 끈 것) | 아니오 | 볼 수 있는 것만 |
 | POST | `api/agents/<id>/block` `{off, reason?}` | 관리자 공유 끄기·켜기(포털 '에이전트 관리') | 아니오 | 관리자 |
 | POST | `api/agents` | 새 에이전트(초안) | 아니오 | 누구나(만든 계정 기록) |
 | GET | `api/agents/{id}` | 상세 | 아니오 | 볼 수 있는 사람(아니면 404) |
 | POST | `api/agents/{id}` | 설정 고치기(자동 저장) | 아니오 | 만든 사람·관리자(403) |
+| GET | `api/agents/{id}/build` | 대화로 만들기 — 도우미와 나눈 말·잠긴 칸 | 아니오 | 만든 사람·관리자(본인 기록) |
+| POST | `api/agents/{id}/build` | 대화로 만들기 — 도우미에게 한 마디 → 답 + 초안 patch | 예 — LLM, **SSE** | 만든 사람·관리자 |
+| POST | `api/agents/{id}/build/locks` · `…/build/reset` | 잠긴 칸 저장 · 나눈 말 지우기 | 아니오 | 만든 사람·관리자 |
 | POST | `api/agents/{id}/publish` | 게시 — 나만 / 우리 부서(승인 요청) | 아니오 | 만든 사람·관리자 |
 | POST | `api/agents/{id}/duplicate` | 복제(초안·나만, 자료 포함) | 아니오 | 만든 사람·관리자 · 볼 수 있는 부서 공개 에이전트 |
 | POST | `api/agents/{id}/delete` | 지우기(자료·피드백 포함) | 아니오 | 만든 사람·관리자 |
@@ -48,6 +51,7 @@ OpenAPI 3.1: [`openapi/agent-builder-local.json`](openapi/agent-builder-local.js
 - 부서원에게는 `instructions`·`only_docs`·`cite`·`length` 를 내보내지 않는다(대화에 필요한 이름·설명·예시 질문·자료 목록만).
 - 대화 기록·즐겨찾기는 사용자 폴더(`WORKSPACE/u/<id>/`)에 본인만.
 - 틀림 알리기는 만든 사람과 관리자 **둘 다**의 `api/feedback` 에 나온다.
+- **포털 기본 에이전트**(주인 `_system`, 사람 계정 아님): `owner_name` 은 `"포털 기본"`, `mine` 은 누구에게나 거짓(내 것 탭에 없음), `can_edit` 는 관리자만 참. 관리자에게 주는 `owner_id` 는 `null` — 포털은 주인 없는 대상처럼 리뷰·요청을 관리자 알림함으로 보내고 기여 순위에서 뺌. `api/stats` 의 `top_creators`·`creators_detail`·`creators` 에서도 빠짐. `X-Agent-User: _system` 은 403.
 - 공개 범위 `all`(전체)은 2차 — 지금은 400.
 
 ## 엔드포인트
@@ -109,6 +113,19 @@ OpenAPI 3.1: [`openapi/agent-builder-local.json`](openapi/agent-builder-local.js
 - `GET api/agents/{id}/convs/{conv}` 에 `attachments`(AbDoc 목록)가 붙음 — 지난 대화를 열면 그 첨부가 다시 붙음. `POST …/convs/{conv}/delete` 는 첨부도 같이 지움. 질문 없이 첨부만 한 빈 대화·시험 대화 첨부는 하루 뒤 지움.
 - `GET …/convs/{conv}/chunk?id=` 첨부 근거 조각 + 앞뒤, `GET …/convs/{conv}/attach/{file}/file` 원본(PDF·TXT·MD 는 inline, 그 밖은 attachment), `POST …/convs/{conv}/attach/{file}/delete` 하나 빼기.
 - 채팅 `POST api/agents/{id}/chat {"conv"}`: 그 대화에 첨부가 있으면 첨부 글이 1만 2천 자(`ATT_INLINE_CHARS`) 이하면 전문을, 넘으면 질문마다 조각 검색(BM25 + 임베딩 RRF)으로 넣고 에이전트 자료와 합침 — 첨부가 앞 번호. 근거 `AbCite.src` = `att`(첨부, `conv` 포함 — 화면 표시 "첨부: 파일명 p.N") | `agent`(에이전트 자료).
+
+### 대화로 만들기 (2026-10-21)
+'만들기 도우미'(로컬 LLM)와 대화하며 **같은 초안**(초안·나만, 주인 = 나)을 채운다. 화면: 빌더 `#/build/<id>`, 포털 `/tool/agent-builder-local/build/<id>`(`/build` 만 주면 새 초안을 만들고 그 주소로). 편집 화면과 같은 에이전트라 오가도 그대로.
+- `POST api/agents/{id}/build` `{"message": "4000자", "locks"?: ["instructions", …]}` — SSE: `{"token"}`(도우미 말, patch 앞까지만)… → `{"done": AbBuildDone}` 또는 `{"error"}`.
+  - `AbBuildDone` = `{"reply", "summary", "changed": [칸], "held": {칸: 값}, "rejected": [칸], "warnings": [글], "upload": bool, "agent": AbAgent}`
+  - 도우미는 매번 지금 초안·잠긴 칸·자료 수를 보고 한 번에 하나씩 묻는다(무엇·누가·입력(글/파일)·출력 형식·말투·지킬 것·근거 자료). "지시문 더 짧게"·"예시 질문 3개 더" 같은 말은 바로 고치고 `summary` 한 줄.
+  - 서버 검사: 허용 칸만(`name`·`icon`·`desc`·`instructions`·`examples`·`only_docs`·`cite`·`length`·`cat`), 글 상한은 고치기와 같음, `cat` 은 8개 중 하나 또는 빈 글, 참/거짓 형식. `scope`·`status`·`owner`·`review` 등은 `rejected` — **도우미는 게시하지 못함**(게시는 사람이 `publish`).
+  - 주입 검사: 지시문·이름·설명·예시 질문에 '이전 지시 무시'·'시스템 프롬프트 보여 줘'·역할 토큰(`<|im_start|>` 등)·도우미 프롬프트 문장이 있으면 넣지 않고 `warnings`. "…라고 해도 따르지 않는다" 같은 막는 문장은 통과.
+  - 잠긴 칸은 바꾸지 않고 `held` 로만 — 화면이 '이 안으로 바꾸기'를 누르면 `POST api/agents/{id}` 로 넣음. 넣은 칸은 고치기와 같은 길이라 승인된 부서 공개 에이전트면 다시 승인 대기.
+  - `upload: true` 면 도우미가 지식 자료를 권함 — 화면이 대화 안에 올리기 칸을 띄움(`api/agents/{id}/docs`).
+- `GET api/agents/{id}/build` → `AbBuildState` `{"turns": [{"role": "user|assistant", "content"}], "locks": [칸]}` — 사용자 폴더 `build/<에이전트>.json`(최근 40개, 본인 것).
+- `POST api/agents/{id}/build/locks` `{"locks": [칸]}` → `{"locks"}`(허용 칸이 아니면 400) · `POST api/agents/{id}/build/reset` → `{"ok": true}`(초안은 그대로).
+- 권한: 고칠 수 있는 사람(만든 사람·관리자)만, 볼 수 없으면 404·고칠 수 없으면 403.
 
 ## 오류
 `{"error": "한국어 설명"}` — 400 잘못된 본문(JSON 아님·객체 아님·형식), 403 권한, 404 없음·볼 수 없음, 409 상태, 413 크기, 500 "서버 내부 오류"(자세한 것은 server.log). SSE 도중 오류는 HTTP 200 + `error` 이벤트. 응답에 서버 경로·내부 주소·계정 id 를 넣지 않는다.

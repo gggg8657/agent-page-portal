@@ -20579,6 +20579,23 @@
              }
             }
            }
+          },
+          "cats": {
+           "type": "array",
+           "items": {
+            "type": "string",
+            "enum": [
+             "업무지원",
+             "연구/실험",
+             "분석/데이터",
+             "기획/전략",
+             "개발/코딩",
+             "디자인/시각화",
+             "교육/학습",
+             "생활/기타"
+            ]
+           },
+           "description": "허브 카테고리 8개(분류 cat 에 쓸 수 있는 값)"
           }
          }
         }
@@ -26641,6 +26658,324 @@
       "$ref": "#/components/responses/BadGateway"
      }
     }
+   }
+  },
+  "/t/agent-builder-local/api/agents/{id}/build": {
+   "get": {
+    "tags": [
+     "agent-builder-local"
+    ],
+    "operationId": "agentBuilderBuildState",
+    "summary": "대화로 만들기 — 도우미와 나눈 말·잠긴 칸(본인 것)",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{6,16}$"
+      },
+      "description": "에이전트 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AbBuildState"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     },
+     "403": {
+      "description": "만든 사람·관리자만",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "x-permission": "editor"
+   },
+   "post": {
+    "tags": [
+     "agent-builder-local"
+    ],
+    "operationId": "agentBuilderBuild",
+    "summary": "대화로 만들기 — 만들기 도우미에게 한 마디 → 답(SSE) + 초안 patch",
+    "description": "도우미(로컬 LLM)는 지금 초안·잠긴 칸을 보고 한 번에 하나씩 묻고(무엇·누가·입력·출력 형식·말투·지킬 것·근거 자료), 답 끝의 JSON patch 로 초안을 고친다. 서버가 patch 를 검사: 허용 칸만(name·icon·desc·instructions·examples·only_docs·cite·length·cat), 글 상한(update 와 같음), cat 은 8개 중 하나 또는 빈 글, only_docs·cite 는 참/거짓. scope·status·owner·review 등은 rejected — 도우미는 게시하지 못함. 지시문·이름·설명·예시 질문에 '이전 지시 무시'·'시스템 프롬프트 보여 줘'·역할 토큰·도우미 프롬프트 문장이 있으면 넣지 않고 warnings. 잠긴 칸은 held 로만 돌려줌. 넣은 칸은 POST api/agents/{id} 와 같은 길(update)로 저장 — 승인된 부서 공개 에이전트면 다시 승인 대기.",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{6,16}$"
+      },
+      "description": "에이전트 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "message"
+        ],
+        "properties": {
+         "message": {
+          "type": "string",
+          "maxLength": 4000
+         },
+         "locks": {
+          "type": "array",
+          "items": {
+           "type": "string",
+           "enum": [
+            "name",
+            "icon",
+            "desc",
+            "instructions",
+            "examples",
+            "only_docs",
+            "cite",
+            "length",
+            "cat"
+           ]
+          },
+          "description": "잠긴 칸(주면 저장, 안 주면 저장된 것)"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "SSE"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     },
+     "403": {
+      "description": "만든 사람·관리자만",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    },
+    "x-llm": true,
+    "x-long-running": true,
+    "x-permission": "editor",
+    "x-stream-events": [
+     {
+      "token": "도우미 말 조각(<patch> 앞까지만)"
+     },
+     {
+      "done": "AbBuildDone"
+     },
+     {
+      "error": "한국어 설명"
+     }
+    ]
+   }
+  },
+  "/t/agent-builder-local/api/agents/{id}/build/locks": {
+   "post": {
+    "tags": [
+     "agent-builder-local"
+    ],
+    "operationId": "agentBuilderBuildLocks",
+    "summary": "대화로 만들기 — 잠긴 칸 저장",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{6,16}$"
+      },
+      "description": "에이전트 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "locks"
+        ],
+        "properties": {
+         "locks": {
+          "type": "array",
+          "items": {
+           "type": "string",
+           "enum": [
+            "name",
+            "icon",
+            "desc",
+            "instructions",
+            "examples",
+            "only_docs",
+            "cite",
+            "length",
+            "cat"
+           ]
+          }
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "locks": {
+           "type": "array",
+           "items": {
+            "type": "string",
+            "enum": [
+             "name",
+             "icon",
+             "desc",
+             "instructions",
+             "examples",
+             "only_docs",
+             "cite",
+             "length",
+             "cat"
+            ]
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-permission": "editor"
+   }
+  },
+  "/t/agent-builder-local/api/agents/{id}/build/reset": {
+   "post": {
+    "tags": [
+     "agent-builder-local"
+    ],
+    "operationId": "agentBuilderBuildReset",
+    "summary": "대화로 만들기 — 도우미와 나눈 말 지우기(초안은 그대로)",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{6,16}$"
+      },
+      "description": "에이전트 id"
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ok"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-permission": "editor"
    }
   }
  },
@@ -41480,7 +41815,7 @@
      },
      "owner_name": {
       "type": "string",
-      "description": "내가 만들었으면 '내가 만듦', 아니면 이름(계정 id 아님)"
+      "description": "내가 만들었으면 '내가 만듦', 포털 기본 에이전트면 '포털 기본', 아니면 이름(계정 id 아님)"
      },
      "mine": {
       "type": "boolean"
@@ -46731,6 +47066,124 @@
      "ids",
      "chars"
     ]
+   },
+   "AbBuildState": {
+    "type": "object",
+    "required": [
+     "turns",
+     "locks"
+    ],
+    "description": "대화로 만들기 — 도우미와 나눈 말(최근 40개)·잠긴 칸. 사용자 폴더 build/<에이전트>.json(본인 것)",
+    "properties": {
+     "turns": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "role",
+        "content"
+       ],
+       "properties": {
+        "role": {
+         "enum": [
+          "user",
+          "assistant"
+         ]
+        },
+        "content": {
+         "type": "string",
+         "description": "assistant 는 도우미 말 + '(초안에 반영: 이름, 지시문)' 한 줄"
+        }
+       }
+      }
+     },
+     "locks": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "enum": [
+        "name",
+        "icon",
+        "desc",
+        "instructions",
+        "examples",
+        "only_docs",
+        "cite",
+        "length",
+        "cat"
+       ]
+      },
+      "description": "잠긴 칸 — 도우미가 바꾸지 않고 held 로만 돌려줌"
+     }
+    }
+   },
+   "AbBuildDone": {
+    "type": "object",
+    "required": [
+     "reply",
+     "summary",
+     "changed",
+     "held",
+     "rejected",
+     "warnings",
+     "upload",
+     "agent"
+    ],
+    "description": "도우미 답 한 번의 결과. 게시·공개 범위·주인·승인은 도우미가 바꿀 수 없음(rejected) — 게시는 사람이 api/agents/{id}/publish 로",
+    "properties": {
+     "reply": {
+      "type": "string",
+      "description": "사용자에게 하는 말(patch JSON 은 빠짐)"
+     },
+     "summary": {
+      "type": "string",
+      "description": "바꾼 것 한 줄(없으면 빈 글)"
+     },
+     "changed": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "enum": [
+        "name",
+        "icon",
+        "desc",
+        "instructions",
+        "examples",
+        "only_docs",
+        "cite",
+        "length",
+        "cat"
+       ]
+      },
+      "description": "초안에 넣은 칸"
+     },
+     "held": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "잠긴 칸에 대한 바꿀 안 {칸: 값} — 화면이 '이 안으로 바꾸기'를 누르면 POST api/agents/{id} 로 넣음"
+     },
+     "rejected": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "넣지 않은 칸(허용 칸이 아님·형식 틀림·주입 문구)"
+     },
+     "warnings": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "주입 문구로 거부·patch 를 읽지 못함 등 한국어 안내"
+     },
+     "upload": {
+      "type": "boolean",
+      "description": "도우미가 지식 자료 올리기를 권함 — 화면이 대화 안에 올리기 칸을 띄움"
+     },
+     "agent": {
+      "$ref": "#/components/schemas/AbAgent"
+     }
+    }
    }
   },
   "responses": {
