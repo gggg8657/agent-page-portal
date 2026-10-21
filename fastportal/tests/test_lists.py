@@ -16,7 +16,7 @@ class ListsTest(unittest.TestCase):
         self.p.stop()
 
     def test_per_account(self):
-        self.assertEqual(lists.get(self.c, "a"), {"fav": [], "recent": [], "home": "clean", "seen": "?"})
+        self.assertEqual(lists.get(self.c, "a"), {"fav": [], "recent": [], "home": "clean", "seen": "?", "design": None})
         lists.put(self.c, "a", {"kind": "fav", "items": ["sql-local", "chart-local"]})
         self.assertEqual(lists.get(self.c, "a")["fav"], ["sql-local", "chart-local"])
         self.assertEqual(lists.get(self.c, "b")["fav"], [], "다른 계정에 보이면 안 됨")
@@ -38,6 +38,20 @@ class ListsTest(unittest.TestCase):
         for items in (["x"], [], ["clean", "plaza"], "plaza"):
             with self.assertRaises(ValueError):
                 lists.put(self.c, "a", {"kind": "home", "items": items})
+
+    def test_design(self):
+        self.assertIsNone(lists.get(self.c, "a")["design"], "저장한 적 없음 = null(화면이 옮길지 정함)")
+        d = {"design": "kaeri", "layout": "b", "font": "noto", "orbit": "off", "icons": "off"}
+        self.assertEqual(lists.put(self.c, "a", {"kind": "design", "items": d}), {"design": d})
+        self.assertEqual(lists.get(self.c, "a")["design"], d)
+        self.assertIsNone(lists.get(self.c, "b")["design"], "다른 계정에 보이면 안 됨")
+        self.assertEqual(lists.put(self.c, "a", {"kind": "design", "items": {"design": ""}})["design"],
+                         {"design": "", "layout": "a", "font": "pretendard", "orbit": "", "icons": "on"}, "없는 키 = 기본값, 구버전 = \"\"")
+        for items in ({"design": "nope"}, {"layout": "z"}, {"font": "comic"}, {"orbit": True}, {"icons": "maybe"}, {"x": 1}, ["kaeri"], "kaeri", None):
+            with self.assertRaises(ValueError, msg=repr(items)):
+                lists.put(self.c, "a", {"kind": "design", "items": items})
+        self.c.execute("UPDATE user_lists SET items=? WHERE uid='a' AND kind='design'", ('{"design": "gone"}',))
+        self.assertEqual(lists.get(self.c, "a")["design"]["design"], "", "옛 값이 목록에 없으면 기본값")
 
     def test_seen(self):
         self.c.execute("CREATE TABLE users(id TEXT PRIMARY KEY, ts TEXT)")
