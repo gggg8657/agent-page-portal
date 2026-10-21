@@ -338,13 +338,19 @@ def submit(ctx, data):
         f.write(data)
     os.chmod(os.path.join(base, "upload.zip"), 0o600)
     path = os.path.join(base, "src", top)
-    with db() as c:
+    with db() as c:   # 먼저 커밋 — 큰 zip 검사(읽기만) 동안 쓰기 잠금을 잡으면 로그인·저장이 모두 기다리다 'database is locked'
         c.execute("INSERT INTO dev_submissions(id, uid, agent_user, dir, title, status, created, updated, size, nfiles) VALUES(?,?,?,?,?,?,?,?,?,?)",
                   (sid, ctx.uid, ctx.agent_user, top, top, "checking", now(), now(), len(data), len(files)))
-        chk = check_tree(c, sid, top, path, files)
-        st = "failed" if chk["errors"] else "sandbox"
-        c.execute("UPDATE dev_submissions SET checks=?, title=?, status=? WHERE id=?", (json.dumps(chk, ensure_ascii=False), chk["meta"]["title"], st, sid))
-        accounts.audit(c, ctx.uid, "dev_submit", top, f"#{sid} {len(data) // 1024}KB 파일 {len(files)}개")
+    try:
+        with db() as c:
+            chk = check_tree(c, sid, top, path, files)
+            st = "failed" if chk["errors"] else "sandbox"
+            c.execute("UPDATE dev_submissions SET checks=?, title=?, status=? WHERE id=?", (json.dumps(chk, ensure_ascii=False), chk["meta"]["title"], st, sid))
+            accounts.audit(c, ctx.uid, "dev_submit", top, f"#{sid} {len(data) // 1024}KB 파일 {len(files)}개")
+    except Exception:
+        with db() as c:   # 'checking' 으로 남으면 그 개발자는 다시 못 올림(예전 한 트랜잭션일 때의 rollback 과 같게)
+            c.execute("DELETE FROM dev_submissions WHERE id=?", (sid,))
+        raise
     if st == "sandbox":
         threading.Thread(target=_pipeline, args=(sid, ctx.agent_user, top, os.path.join(base, "src")), daemon=True, name=f"devcheck-{sid}").start()
     with db() as c:

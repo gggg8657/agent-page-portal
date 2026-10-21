@@ -115,6 +115,12 @@ class DevSubmitTest(unittest.TestCase):
         devsubmit.submit(self.ctx("dev"), mkzip(GOOD))   # 검사 중(sandbox) 제출이 생김
         self.assertEqual(devsubmit.precheck(mk("dev"))[0], 400, "검사 중 제출이 있으면 본문 전에 400")
 
+    def test_check_error_does_not_block_next_upload(self):
+        with patch.object(devsubmit, "check_tree", side_effect=RuntimeError("boom")):
+            with self.assertRaises(RuntimeError):
+                devsubmit.submit(self.ctx("dev"), mkzip(GOOD))
+        self.assertEqual(devsubmit.submit(self.ctx("dev"), mkzip(GOOD))["status"], "sandbox", "검사 오류 뒤에도 다시 올릴 수 있음")
+
     def test_reject_during_sandbox_stays_rejected(self):
         s = devsubmit.submit(self.ctx("dev"), mkzip(GOOD))   # status=sandbox(검증은 패치로 멈춤)
         devsubmit.decide(self.ctx("owner", True), {"id": s["id"], "ok": False, "note": "보안 문제"})
