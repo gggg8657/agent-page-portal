@@ -495,6 +495,36 @@
    "expect": [
     "labnote-local"
    ]
+  },
+  {
+   "q": "과제 제안서 쓰기",
+   "expect": [
+    "proposal-local"
+   ]
+  },
+  {
+   "q": "연구계획서 작성",
+   "expect": [
+    "proposal-local"
+   ]
+  },
+  {
+   "q": "국가 R&D 과제 신청서",
+   "expect": [
+    "proposal-local"
+   ]
+  },
+  {
+   "q": "제안서 평가 점검",
+   "expect": [
+    "proposal-local"
+   ]
+  },
+  {
+   "q": "연구 추진 일정 간트",
+   "expect": [
+    "proposal-local"
+   ]
   }
  ],
  "hard": [
@@ -703,6 +733,12 @@
    "q": "지난번 실험이랑 조건이 뭐가 달라졌는지",
    "expect": [
     "labnote-local"
+   ]
+  },
+  {
+   "q": "공모에 낼 연구 내용을 그럴듯하게 정리",
+   "expect": [
+    "proposal-local"
    ]
   }
  ],

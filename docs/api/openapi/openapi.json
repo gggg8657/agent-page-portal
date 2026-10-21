@@ -587,6 +587,25 @@
    "x-external-network": false,
    "x-external-network-note": "LLM 서버(내부)만 호출, HWPX 는 같은 서버의 kordoc CLI",
    "x-response-style": "json"
+  },
+  {
+   "name": "proposal-local",
+   "description": "과제 제안서 도우미 — 과제 아이디어 → 사업 유형별 절(필요성·목표·내용·추진 체계·기대효과·연구비) 초안·다듬기·개조식·분량 조절(LLM), 공고문 쪽 번호 근거(서버가 인용 확인), 추진 일정 간트, 평가 관점 점검, HWPX(kordoc)·DOCX·Markdown 내보내기. 문서: docs/api/proposal-local.md",
+   "x-tool-id": "proposal",
+   "x-name": "과제 제안서 도우미",
+   "x-description": "과제 아이디어 → 절별 제안서 초안·근거·간트·평가 점검 → HWPX·DOCX",
+   "x-kind": "agent",
+   "x-kind-note": "저장·참고 자료 읽기·인용 확인·규칙 점검·내보내기는 결정론 코드, LLM 은 절 작업·근거 고르기·일정 뽑기·평가 점검에만",
+   "x-category": "기획/전략",
+   "x-category-note": "연구개발 과제 기획 문서를 쓰는 도구",
+   "x-entry": "/t/proposal-local/",
+   "x-health-path": "/t/proposal-local/healthz",
+   "x-long-running": false,
+   "x-docs-input": "files",
+   "x-docs-input-note": "참고 자료 pdf·hwp·hwpx·docx·md·txt 를 base64 JSON 으로",
+   "x-external-network": false,
+   "x-external-network-note": "LLM 서버(내부)만 호출",
+   "x-response-style": "json"
   }
  ],
  "paths": {
@@ -29194,6 +29213,1086 @@
      }
     }
    }
+  },
+  "/t/proposal-local/api/health": {
+   "get": {
+    "tags": [
+     "proposal-local"
+    ],
+    "operationId": "proposalHealth",
+    "summary": "살아 있는지",
+    "description": "가벼운 확인(LLM 연결 여부 포함).",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProposalHealth"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/proposal-local/api/meta": {
+   "get": {
+    "tags": [
+     "proposal-local"
+    ],
+    "operationId": "proposalMeta",
+    "summary": "LLM·kordoc 상태, 사업 유형별 절 구성, 평가 관점, 절 작업, 프리셋, 제한",
+    "description": "LLM 확인은 60초 기억. llm.ok 가 거짓이면 화면은 AI 작업 단추를 끄고 글 쓰기·일정·내보내기만. notice 는 화면에 늘 보임.",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProposalMeta"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/proposal-local/api/drafts": {
+   "get": {
+    "tags": [
+     "proposal-local"
+    ],
+    "operationId": "proposalList",
+    "summary": "초안 목록(최근 고친 순)",
+    "description": "사용자별(X-Agent-User → WORKSPACE/u/<id>/drafts/).",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProposalList"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "proposal-local"
+    ],
+    "operationId": "proposalCreate",
+    "summary": "초안 만들기 · 연습 초안",
+    "description": "kind(사업 유형)의 절 구성·권장 분량으로 빈 절을 만듦. sample: true 면 가상 아이디어와 가상 공고문(3쪽)이 든 연습 초안. 사용자당 40개.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ProposalCreate"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "만듦",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Proposal"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/proposal-local/api/drafts/{did}": {
+   "get": {
+    "tags": [
+     "proposal-local"
+    ],
+    "operationId": "proposalGet",
+    "summary": "초안 하나",
+    "description": "절·근거·일정·참고 자료·마지막 평가 점검.",
+    "parameters": [
+     {
+      "name": "did",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "초안 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Proposal"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "proposal-local"
+    ],
+    "operationId": "proposalSave",
+    "summary": "저장(자동 저장)",
+    "description": "바꾼 칸만 보냄. rev 가 마지막으로 받은 값과 다르면(다른 창이 먼저 저장) 409 conflict + 최신 초안 — 덮어쓰지 않음. rev 는 사용자가 고치는 칸(제목·아이디어·절 글·일정)과 근거 붙이기만 올림. 근거(cites)는 지우기만 됨.",
+    "parameters": [
+     {
+      "name": "did",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "초안 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ProposalSave"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Proposal"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "충돌",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProposalConflict"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/proposal-local/api/drafts/{did}/delete": {
+   "post": {
+    "tags": [
+     "proposal-local"
+    ],
+    "operationId": "proposalDelete",
+    "summary": "초안 지우기",
+    "description": "참고 자료·평가 점검까지.",
+    "parameters": [
+     {
+      "name": "did",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "초안 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ok"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/proposal-local/api/drafts/{did}/refs": {
+   "post": {
+    "tags": [
+     "proposal-local"
+    ],
+    "operationId": "proposalRefAdd",
+    "summary": "참고 자료 올리기(공고문·기존 보고서)",
+    "description": "pdf·hwp·hwpx·docx 는 kordoc --format json 으로 쪽마다(블록의 쪽 번호), kordoc 이 없으면 pdf 는 pdftotext. md·txt 는 \\f 나 '<!-- page N -->' 줄이 있으면 쪽, 없으면 1,500자 안팎 줄 범위. 초안당 8개, 파일 20MB.",
+    "parameters": [
+     {
+      "name": "did",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "초안 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ProposalRefUpload"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "만듦",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProposalRef"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "413": {
+      "description": "파일이 너무 큼(code: too_large)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/proposal-local/api/drafts/{did}/refs/{rid}": {
+   "get": {
+    "tags": [
+     "proposal-local"
+    ],
+    "operationId": "proposalRefUnit",
+    "summary": "참고 자료 한 쪽(단위) 원문",
+    "description": "근거 확인용. n = 단위 번호(근거의 unit).",
+    "parameters": [
+     {
+      "name": "did",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "초안 id"
+     },
+     {
+      "name": "rid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^R\\d{1,3}$"
+      },
+      "description": "참고 자료 id"
+     },
+     {
+      "name": "n",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "minimum": 0
+      },
+      "description": "단위 번호"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProposalRefUnit"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/proposal-local/api/drafts/{did}/refs/{rid}/delete": {
+   "post": {
+    "tags": [
+     "proposal-local"
+    ],
+    "operationId": "proposalRefDelete",
+    "summary": "참고 자료 빼기",
+    "description": "그 자료를 가리키던 근거도 뺌(rev 는 그대로).",
+    "parameters": [
+     {
+      "name": "did",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "초안 id"
+     },
+     {
+      "name": "rid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^R\\d{1,3}$"
+      },
+      "description": "참고 자료 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Proposal"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/proposal-local/api/drafts/{did}/sections/{sid}/act": {
+   "post": {
+    "tags": [
+     "proposal-local"
+    ],
+    "operationId": "proposalAct",
+    "summary": "절 작업(초안 쓰기·다듬기·개조식으로·분량 줄이기/늘리기)",
+    "description": "LLM 1번(JSON 스키마 안내 디코딩 → 서버 검사, 틀리면 JSON 객체 방식으로 한 번 더). 결과는 제안만(저장 안 함). 입력·자료에 없는 수치(10 이상·소수)는 unverified, '세계 최초' 같은 단정 표현은 warnings. 초안 쓰기·늘리기는 아이디어·다른 절·참고 자료 발췌(글자 2-gram 으로 가까운 쪽 4개)를 재료로. 수십 초.",
+    "parameters": [
+     {
+      "name": "did",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "초안 id"
+     },
+     {
+      "name": "sid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[a-z]{2,12}$"
+      },
+      "description": "절 id(need·goal·method·plan·impact·budget·summary — 사업 유형마다 다름, meta.kinds[].sections)"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ProposalActRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProposalAct"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "AI 작업이 이미 돎(code: busy)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "503": {
+      "description": "LLM 이 연결되지 않음(code: unavailable)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-llm": true
+   }
+  },
+  "/t/proposal-local/api/drafts/{did}/sections/{sid}/cite": {
+   "post": {
+    "tags": [
+     "proposal-local"
+    ],
+    "operationId": "proposalCite",
+    "summary": "근거 붙이기(쪽 번호, 서버가 인용 확인)",
+    "description": "절 문장(S번호)과 가까운 참고 자료 쪽(U번호, 8개)을 LLM 에 주고 인용을 고르게 함 → 서버가 그 쪽 원문에서 인용을 다시 찾음(정규화 뒤 일치 0.85 이상 + 숫자 같아야, 10자 미만 불통). 다른 쪽에 있으면 쪽을 바로잡고(fixed), 없으면 버림(dropped·이유). 옛 〔근거 n〕 표시를 지우고 문장 뒤에 새로 넣어 저장(rev 올림). 먼저 저장해 rev 를 맞출 것.",
+    "parameters": [
+     {
+      "name": "did",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "초안 id"
+     },
+     {
+      "name": "sid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[a-z]{2,12}$"
+      },
+      "description": "절 id(need·goal·method·plan·impact·budget·summary — 사업 유형마다 다름, meta.kinds[].sections)"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ProposalCiteRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProposalCiteResult"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "rev 충돌(code: conflict) 또는 AI 작업 중(code: busy)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "503": {
+      "description": "LLM 이 연결되지 않음(code: unavailable)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-llm": true
+   }
+  },
+  "/t/proposal-local/api/drafts/{did}/schedule/suggest": {
+   "post": {
+    "tags": [
+     "proposal-local"
+    ],
+    "operationId": "proposalScheduleSuggest",
+    "summary": "내용에서 일정 뽑기",
+    "description": "목표·내용·추진 체계 절과 아이디어에서 세부 과제·분기(1~연차×4)를 제안(12행까지, 범위 밖·거꾸로는 서버가 바로잡음). 저장 안 함.",
+    "parameters": [
+     {
+      "name": "did",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "초안 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ProposalScheduleRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProposalScheduleResult"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "AI 작업이 이미 돎(code: busy)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "503": {
+      "description": "LLM 이 연결되지 않음(code: unavailable)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-llm": true
+   }
+  },
+  "/t/proposal-local/api/drafts/{did}/review": {
+   "post": {
+    "tags": [
+     "proposal-local"
+    ],
+    "operationId": "proposalReview",
+    "summary": "평가 관점 점검",
+    "description": "필요성·창의성·실현 가능성·파급효과 점수(1~5)·약한 곳(절 id 는 스키마 enum, 구절은 서버가 그 절에서 확인 — 다른 절이면 바로잡고 없으면 지움) + 규칙 점검(빈 절·분량·[입력 필요] 남음·필요성 근거 없음·일정 비어 있음). 초안에 저장(rev 는 그대로).",
+    "parameters": [
+     {
+      "name": "did",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "초안 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProposalReview"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "AI 작업이 이미 돎(code: busy)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "503": {
+      "description": "LLM 이 연결되지 않음(code: unavailable)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-llm": true
+   }
+  },
+  "/t/proposal-local/api/drafts/{did}/export.md": {
+   "get": {
+    "tags": [
+     "proposal-local"
+    ],
+    "operationId": "proposalExportMd",
+    "summary": "Markdown 내려받기",
+    "description": "절·근거(〔근거 n〕 표시가 남은 것만)·간트 표(■ 수행 분기).",
+    "parameters": [
+     {
+      "name": "did",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "초안 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "파일",
+      "content": {
+       "text/markdown": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/proposal-local/api/drafts/{did}/export.hwpx": {
+   "get": {
+    "tags": [
+     "proposal-local"
+    ],
+    "operationId": "proposalExportHwpx",
+    "summary": "HWPX 내려받기(kordoc 공문서 프리셋)",
+    "description": "kordoc generate --preset(계획서·보고서·개조식) 뒤 validate — 결과 헤더 X-Hwpx-Valid: 1|0. kordoc 이 없으면 503.",
+    "parameters": [
+     {
+      "name": "did",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "초안 id"
+     },
+     {
+      "name": "preset",
+      "in": "query",
+      "schema": {
+       "type": "string",
+       "enum": [
+        "계획서",
+        "보고서",
+        "개조식"
+       ],
+       "default": "계획서"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "파일",
+      "content": {
+       "application/hwp+zip": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "503": {
+      "description": "kordoc 없음(code: unavailable)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/proposal-local/api/drafts/{did}/export.docx": {
+   "get": {
+    "tags": [
+     "proposal-local"
+    ],
+    "operationId": "proposalExportDocx",
+    "summary": "DOCX 내려받기",
+    "description": "표준 라이브러리 OOXML — 제목·절·개조식 들여쓰기·간트 표(분기 칸 음영)·근거.",
+    "parameters": [
+     {
+      "name": "did",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "초안 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "파일",
+      "content": {
+       "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/proposal-local/api/drafts/{did}/gantt.svg": {
+   "get": {
+    "tags": [
+     "proposal-local"
+    ],
+    "operationId": "proposalGanttSvg",
+    "summary": "간트 SVG",
+    "description": "연차·분기 칸, 이어진 분기는 막대 하나(인쇄용 고정 색).",
+    "parameters": [
+     {
+      "name": "did",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "초안 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "파일",
+      "content": {
+       "image/svg+xml": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/proposal-local/api/drafts/{did}/gantt.csv": {
+   "get": {
+    "tags": [
+     "proposal-local"
+    ],
+    "operationId": "proposalGanttCsv",
+    "summary": "간트 CSV",
+    "description": "UTF-8 BOM, 분기마다 1/빈칸. 수식으로 읽힐 칸은 ' 를 붙임.",
+    "parameters": [
+     {
+      "name": "did",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "초안 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "파일",
+      "content": {
+       "text/csv": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
   }
  },
  "components": {
@@ -52106,6 +53205,1135 @@
      "file",
      "warning"
     ]
+   },
+   "ProposalHealth": {
+    "type": "object",
+    "properties": {
+     "ok": {
+      "type": "boolean"
+     },
+     "llm": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "ok",
+     "llm"
+    ]
+   },
+   "ProposalMeta": {
+    "type": "object",
+    "properties": {
+     "llm": {
+      "type": "object",
+      "properties": {
+       "ok": {
+        "type": "boolean"
+       },
+       "model": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "ok",
+       "model"
+      ]
+     },
+     "tools": {
+      "type": "object",
+      "properties": {
+       "kordoc": {
+        "type": "boolean"
+       },
+       "pdftotext": {
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "kordoc",
+       "pdftotext"
+      ],
+      "description": "kordoc 없으면 hwp·hwpx·pdf 읽기와 HWPX 내보내기 꺼짐"
+     },
+     "notice": {
+      "type": "string",
+      "description": "절 구성은 일반 틀이라는 안내·지어내지 않는다는 안내 — 화면에 늘 보임"
+     },
+     "kinds": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string",
+         "enum": [
+          "rnd",
+          "inst",
+          "basic",
+          "biz"
+         ]
+        },
+        "name": {
+         "type": "string"
+        },
+        "desc": {
+         "type": "string"
+        },
+        "sections": {
+         "type": "array",
+         "items": {
+          "type": "object",
+          "properties": {
+           "id": {
+            "type": "string"
+           },
+           "title": {
+            "type": "string"
+           },
+           "budget": {
+            "type": "integer",
+            "description": "권장 글자 수"
+           }
+          },
+          "required": [
+           "id",
+           "title",
+           "budget"
+          ]
+         }
+        }
+       },
+       "required": [
+        "id",
+        "name",
+        "desc",
+        "sections"
+       ]
+      }
+     },
+     "criteria": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string",
+         "enum": [
+          "필요성",
+          "창의성",
+          "실현 가능성",
+          "파급효과"
+         ]
+        },
+        "guide": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "id",
+        "guide"
+       ]
+      }
+     },
+     "actions": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string",
+         "enum": [
+          "draft",
+          "polish",
+          "bullets",
+          "shorter",
+          "longer"
+         ]
+        },
+        "name": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "id",
+        "name"
+       ]
+      }
+     },
+     "presets": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "enum": [
+        "계획서",
+        "보고서",
+        "개조식"
+       ]
+      }
+     },
+     "page_chars": {
+      "type": "integer",
+      "description": "1쪽 어림 글자 수(1,200)"
+     },
+     "limits": {
+      "type": "object",
+      "properties": {
+       "drafts": {
+        "type": "integer"
+       },
+       "refs": {
+        "type": "integer"
+       },
+       "file_mb": {
+        "type": "integer"
+       },
+       "section_chars": {
+        "type": "integer"
+       },
+       "idea_chars": {
+        "type": "integer"
+       },
+       "years_max": {
+        "type": "integer"
+       },
+       "rows_max": {
+        "type": "integer"
+       },
+       "ai_per_10min": {
+        "type": "integer"
+       },
+       "cites_max": {
+        "type": "integer"
+       },
+       "quote_min": {
+        "type": "number"
+       }
+      },
+      "required": [
+       "drafts",
+       "refs",
+       "file_mb",
+       "section_chars",
+       "idea_chars",
+       "years_max",
+       "rows_max",
+       "ai_per_10min",
+       "cites_max",
+       "quote_min"
+      ]
+     },
+     "accept": {
+      "type": "string",
+      "description": "참고 자료 파일 고르기 accept 값"
+     }
+    },
+    "required": [
+     "llm",
+     "tools",
+     "notice",
+     "kinds",
+     "criteria",
+     "actions",
+     "presets",
+     "page_chars",
+     "limits",
+     "accept"
+    ]
+   },
+   "ProposalBrief": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "rnd",
+       "inst",
+       "basic",
+       "biz"
+      ]
+     },
+     "created": {
+      "type": "string"
+     },
+     "updated": {
+      "type": "string"
+     },
+     "sections": {
+      "type": "integer"
+     },
+     "filled": {
+      "type": "integer",
+      "description": "글이 있는 절 수"
+     },
+     "chars": {
+      "type": "integer"
+     },
+     "refs": {
+      "type": "integer"
+     },
+     "origin": {
+      "type": "string",
+      "description": "넘겨받은 도구 dir(예: yield-local), 없으면 빈 글"
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "kind",
+     "created",
+     "updated",
+     "sections",
+     "filled",
+     "chars",
+     "refs",
+     "origin"
+    ]
+   },
+   "ProposalList": {
+    "type": "object",
+    "properties": {
+     "items": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/ProposalBrief"
+      }
+     }
+    },
+    "required": [
+     "items"
+    ]
+   },
+   "ProposalCreate": {
+    "type": "object",
+    "properties": {
+     "title": {
+      "type": "string",
+      "maxLength": 80
+     },
+     "idea": {
+      "type": "string",
+      "maxLength": 4000,
+      "description": "과제 아이디어(문제·대상·기술·기간·기대효과)"
+     },
+     "period": {
+      "type": "string",
+      "maxLength": 60
+     },
+     "scale": {
+      "type": "string",
+      "maxLength": 80
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "rnd",
+       "inst",
+       "basic",
+       "biz"
+      ],
+      "description": "사업 유형(없으면 rnd)"
+     },
+     "years": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "description": "간트 연차 수(없으면 3)"
+     },
+     "origin": {
+      "type": "object",
+      "properties": {
+       "tool": {
+        "type": "string"
+       },
+       "title": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "tool",
+       "title"
+      ],
+      "description": "다른 도구에서 넘겨받았을 때"
+     },
+     "sample": {
+      "type": "boolean",
+      "description": "참이면 연습 초안(가상 아이디어·가상 공고문 3쪽)"
+     }
+    },
+    "required": []
+   },
+   "ProposalCite": {
+    "type": "object",
+    "properties": {
+     "n": {
+      "type": "integer",
+      "description": "절 안 번호 — 글의 〔근거 n〕"
+     },
+     "ref": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "page": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "unit": {
+      "type": "integer"
+     },
+     "where": {
+      "type": "string",
+      "description": "'3쪽' 또는 '12–20줄'"
+     },
+     "quote": {
+      "type": "string"
+     },
+     "score": {
+      "type": "number"
+     },
+     "fixed": {
+      "type": "boolean",
+      "description": "AI 가 말한 쪽에 없고 다른 쪽에서 찾아 바로잡음"
+     },
+     "sentence": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "n",
+     "ref",
+     "name",
+     "page",
+     "unit",
+     "where",
+     "quote",
+     "score",
+     "fixed",
+     "sentence"
+    ]
+   },
+   "ProposalSection": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "guide": {
+      "type": "string"
+     },
+     "budget": {
+      "type": "integer"
+     },
+     "text": {
+      "type": "string"
+     },
+     "cites": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/ProposalCite"
+      }
+     },
+     "updated": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "guide",
+     "budget",
+     "text",
+     "cites",
+     "updated"
+    ]
+   },
+   "ProposalRow": {
+    "type": "object",
+    "properties": {
+     "task": {
+      "type": "string"
+     },
+     "q": {
+      "type": "array",
+      "items": {
+       "type": "boolean"
+      },
+      "description": "분기마다 수행 여부(연차 × 4)"
+     }
+    },
+    "required": [
+     "task",
+     "q"
+    ]
+   },
+   "ProposalSchedule": {
+    "type": "object",
+    "properties": {
+     "years": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+     },
+     "rows": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/ProposalRow"
+      }
+     }
+    },
+    "required": [
+     "years",
+     "rows"
+    ]
+   },
+   "ProposalRef": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "added": {
+      "type": "string"
+     },
+     "units": {
+      "type": "integer"
+     },
+     "pages": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "chars": {
+      "type": "integer"
+     },
+     "paged": {
+      "type": "boolean",
+      "description": "쪽 번호가 있음(거짓이면 줄 범위)"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "added",
+     "units",
+     "pages",
+     "chars",
+     "paged"
+    ]
+   },
+   "ProposalReviewItem": {
+    "type": "object",
+    "properties": {
+     "criterion": {
+      "type": "string",
+      "enum": [
+       "필요성",
+       "창의성",
+       "실현 가능성",
+       "파급효과",
+       "형식"
+      ]
+     },
+     "section": {
+      "type": "string"
+     },
+     "issue": {
+      "type": "string"
+     },
+     "suggestion": {
+      "type": "string"
+     },
+     "quote": {
+      "type": "string",
+      "description": "약한 곳을 보여 주는 절 원문 구절(서버가 확인, 못 찾으면 빈 글)"
+     },
+     "quote_ok": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "source": {
+      "type": "string",
+      "enum": [
+       "AI",
+       "규칙"
+      ]
+     }
+    },
+    "required": [
+     "criterion",
+     "section",
+     "issue",
+     "suggestion",
+     "quote",
+     "quote_ok",
+     "source"
+    ]
+   },
+   "ProposalReview": {
+    "type": "object",
+    "properties": {
+     "scores": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "criterion": {
+         "type": "string",
+         "enum": [
+          "필요성",
+          "창의성",
+          "실현 가능성",
+          "파급효과"
+         ]
+        },
+        "score": {
+         "anyOf": [
+          {
+           "type": "integer",
+           "minimum": 1,
+           "maximum": 5
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "comment": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "criterion",
+        "score",
+        "comment"
+       ]
+      }
+     },
+     "items": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/ProposalReviewItem"
+      }
+     },
+     "overall": {
+      "type": "string"
+     },
+     "at": {
+      "type": "string"
+     },
+     "model": {
+      "type": "string"
+     },
+     "rev": {
+      "type": "integer",
+      "description": "점검한 초안의 rev"
+     }
+    },
+    "required": [
+     "scores",
+     "items",
+     "overall",
+     "at",
+     "model",
+     "rev"
+    ]
+   },
+   "Proposal": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "created": {
+      "type": "string"
+     },
+     "updated": {
+      "type": "string"
+     },
+     "rev": {
+      "type": "integer",
+      "description": "저장할 때 그대로 보냄"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "rnd",
+       "inst",
+       "basic",
+       "biz"
+      ]
+     },
+     "idea": {
+      "type": "string"
+     },
+     "period": {
+      "type": "string"
+     },
+     "scale": {
+      "type": "string"
+     },
+     "years": {
+      "type": "integer"
+     },
+     "sections": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/ProposalSection"
+      }
+     },
+     "schedule": {
+      "$ref": "#/components/schemas/ProposalSchedule"
+     },
+     "review": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/ProposalReview"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "refs": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/ProposalRef"
+      }
+     },
+     "origin": {
+      "anyOf": [
+       {
+        "type": "object",
+        "properties": {
+         "tool": {
+          "type": "string"
+         },
+         "title": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "tool",
+         "title"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "created",
+     "updated",
+     "rev",
+     "kind",
+     "idea",
+     "period",
+     "scale",
+     "years",
+     "sections",
+     "schedule",
+     "review",
+     "refs",
+     "origin"
+    ]
+   },
+   "ProposalSave": {
+    "type": "object",
+    "properties": {
+     "rev": {
+      "type": "integer"
+     },
+     "title": {
+      "type": "string"
+     },
+     "idea": {
+      "type": "string"
+     },
+     "period": {
+      "type": "string"
+     },
+     "scale": {
+      "type": "string"
+     },
+     "sections": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "text": {
+         "type": "string"
+        },
+        "budget": {
+         "type": "integer",
+         "minimum": 100,
+         "maximum": 20000
+        },
+        "cites": {
+         "type": "array",
+         "items": {
+          "type": "object",
+          "properties": {
+           "n": {
+            "type": "integer"
+           }
+          },
+          "required": [
+           "n"
+          ]
+         },
+         "description": "남길 근거 번호만(지우기만 됨)"
+        }
+       },
+       "required": [
+        "id"
+       ]
+      }
+     },
+     "schedule": {
+      "$ref": "#/components/schemas/ProposalSchedule"
+     }
+    },
+    "required": [
+     "rev"
+    ],
+    "description": "바꾼 칸만. rev 가 다르면 409 conflict(최신 초안 draft 와 함께)"
+   },
+   "ProposalConflict": {
+    "type": "object",
+    "properties": {
+     "error": {
+      "type": "string"
+     },
+     "code": {
+      "type": "string",
+      "const": "conflict"
+     },
+     "draft": {
+      "$ref": "#/components/schemas/Proposal"
+     }
+    },
+    "required": [
+     "error",
+     "code",
+     "draft"
+    ]
+   },
+   "ProposalRefUpload": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "maxLength": 120
+     },
+     "b64": {
+      "type": "string",
+      "description": "파일 base64(최대 20MB)"
+     },
+     "text": {
+      "type": "string",
+      "description": "붙여 넣은 글"
+     }
+    },
+    "required": [],
+    "description": "b64 나 text 중 하나. pdf·hwp·hwpx·hml·docx·md·txt"
+   },
+   "ProposalRefUnit": {
+    "type": "object",
+    "properties": {
+     "ref": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "n": {
+      "type": "integer"
+     },
+     "page": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "where": {
+      "type": "string"
+     },
+     "text": {
+      "type": "string"
+     },
+     "units": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "ref",
+     "name",
+     "n",
+     "page",
+     "where",
+     "text",
+     "units"
+    ]
+   },
+   "ProposalActRequest": {
+    "type": "object",
+    "properties": {
+     "action": {
+      "type": "string",
+      "enum": [
+       "draft",
+       "polish",
+       "bullets",
+       "shorter",
+       "longer"
+      ]
+     },
+     "text": {
+      "type": "string",
+      "description": "지금 편집 칸의 글(없으면 저장된 글)"
+     }
+    },
+    "required": [
+     "action"
+    ]
+   },
+   "ProposalAct": {
+    "type": "object",
+    "properties": {
+     "action": {
+      "type": "string",
+      "enum": [
+       "draft",
+       "polish",
+       "bullets",
+       "shorter",
+       "longer"
+      ]
+     },
+     "label": {
+      "type": "string"
+     },
+     "text": {
+      "type": "string",
+      "description": "제안 글(저장 안 됨 — 적용은 화면에서)"
+     },
+     "chars": {
+      "type": "integer"
+     },
+     "target": {
+      "type": "integer"
+     },
+     "budget": {
+      "type": "integer"
+     },
+     "questions": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "notes": {
+      "type": "string"
+     },
+     "unverified": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "n": {
+         "type": "string"
+        },
+        "ctx": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "n",
+        "ctx"
+       ]
+      }
+     },
+     "placeholders": {
+      "type": "integer",
+      "description": "[입력 필요]·[근거 자료 필요] 수"
+     },
+     "warnings": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "'세계 최초' 같은 단정 표현"
+     }
+    },
+    "required": [
+     "action",
+     "label",
+     "text",
+     "chars",
+     "target",
+     "budget",
+     "questions",
+     "notes",
+     "unverified",
+     "placeholders",
+     "warnings"
+    ]
+   },
+   "ProposalCiteRequest": {
+    "type": "object",
+    "properties": {
+     "rev": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "rev"
+    ]
+   },
+   "ProposalCiteResult": {
+    "type": "object",
+    "properties": {
+     "draft": {
+      "$ref": "#/components/schemas/Proposal"
+     },
+     "cites": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/ProposalCite"
+      }
+     },
+     "dropped": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "quote": {
+         "type": "string"
+        },
+        "why": {
+         "type": "string"
+        },
+        "claimed": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "quote",
+        "why"
+       ]
+      }
+     },
+     "stats": {
+      "type": "object",
+      "properties": {
+       "asked": {
+        "type": "integer"
+       },
+       "kept": {
+        "type": "integer"
+       },
+       "dropped": {
+        "type": "integer"
+       },
+       "fixed": {
+        "type": "integer"
+       },
+       "sentences": {
+        "type": "integer"
+       },
+       "units": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "asked",
+       "kept",
+       "dropped",
+       "fixed",
+       "sentences",
+       "units"
+      ]
+     }
+    },
+    "required": [
+     "draft",
+     "cites",
+     "dropped",
+     "stats"
+    ]
+   },
+   "ProposalScheduleRequest": {
+    "type": "object",
+    "properties": {
+     "years": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+     }
+    },
+    "required": []
+   },
+   "ProposalScheduleResult": {
+    "type": "object",
+    "properties": {
+     "years": {
+      "type": "integer"
+     },
+     "rows": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/ProposalRow"
+      }
+     }
+    },
+    "required": [
+     "years",
+     "rows"
+    ]
    }
   },
   "responses": {
@@ -52288,7 +54516,8 @@
     "promptlab-local",
     "yield-local",
     "meetplan-local",
-    "labnote-local"
+    "labnote-local",
+    "proposal-local"
    ]
   }
  ]

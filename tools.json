@@ -506,5 +506,24 @@
     "author": "dongju",
     "cat": "연구/실험",
     "icon": "ClipboardList"
+  },
+  {
+    "dir": "proposal-local",
+    "port": 8812,
+    "name": "과제 제안서 도우미",
+    "desc": "과제 아이디어에서 연구개발 제안서를 절별로 쓰고 다듬기 — 공고문 쪽 번호 근거·추진 일정 간트·평가 관점 점검·HWPX/DOCX 내보내기",
+    "group": "기획",
+    "title": "과제 제안서 도우미 — 아이디어 → 절별 초안·근거·간트·평가 점검",
+    "tags": [
+      "#제안서",
+      "#연구계획서",
+      "#국가R&D",
+      "#간트"
+    ],
+    "added": "2026-10-21",
+    "dept": "인공지능응용연구실",
+    "author": "dongju",
+    "cat": "기획/전략",
+    "icon": "ClipboardList"
   }
 ]
