@@ -480,7 +480,8 @@ def allow(uid):
 
 
 # ── 공유 빌더 에이전트(그 사람이 볼 수 있는 것만) ───────────────────────────
-#   빌더 API(GET /api/agents?tab=dept — 포털 서명 + 그 사람 X-Agent-User)가 부서 공개 범위·관리자가 끈 공유를 이미 거름. 여기서는 published·막히지 않은 것만 한 번 더.
+#   빌더 API(GET /api/agents?tab=system·tab=dept — 포털 서명 + 그 사람 X-Agent-User)가 공개 범위·관리자가 끈 공유를 이미 거름. 여기서는 published·막히지 않은 것만 한 번 더.
+#   system = 포털 기본 에이전트(모두에게), dept = 동료가 부서에 공개한 것. 같은 id 는 한 번만(kind 로 구분)
 #   이름·설명·분야(cat)로 낱말·같은 뜻 표현·임베딩(에이전트 글 해시로 메모리 캐시) 점수. 사람마다 목록을 AGENTS_TTL 초 기억
 AGENTS_TTL = float(os.environ.get("MATCH_AGENTS_TTL", "60"))
 AGENTS_MAX = 3
@@ -500,13 +501,15 @@ def agents_for(user):
     if not t or user_hidden(t):   # 빌더를 관리자가 끄면 공유 에이전트도 안 보임
         out = []
     else:
-        st, b = community._builder(user, "/api/agents?tab=dept")
-        out = []
-        for a in (b or {}).get("agents") or [] if st == 200 and isinstance(b, dict) else []:
-            if not isinstance(a, dict) or not _AGENT_ID.fullmatch(str(a.get("id") or "")) or a.get("blocked") or a.get("status", "published") != "published":
-                continue
-            out.append({"id": a["id"], "name": str(a.get("name") or "")[:60], "desc": str(a.get("desc") or "")[:200], "cat": str(a.get("cat") or "")[:20],
-                        "icon": str(a.get("icon") or "")[:4]})
+        out, seen = [], set()
+        for tab in ("system", "dept"):
+            st, b = community._builder(user, "/api/agents?tab=" + tab)
+            for a in (b or {}).get("agents") or [] if st == 200 and isinstance(b, dict) else []:
+                if not isinstance(a, dict) or not _AGENT_ID.fullmatch(str(a.get("id") or "")) or a.get("blocked") or a.get("status", "published") != "published" or a["id"] in seen:
+                    continue
+                seen.add(a["id"])
+                out.append({"id": a["id"], "name": str(a.get("name") or "")[:60], "desc": str(a.get("desc") or "")[:200], "cat": str(a.get("cat") or "")[:20],
+                            "icon": str(a.get("icon") or "")[:4], "kind": "system" if a.get("kind") == "system" else "user"})
     if len(_AG) > 2000:
         _AG.clear()
     _AG[user] = (time.time(), out)

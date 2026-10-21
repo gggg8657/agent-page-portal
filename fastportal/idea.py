@@ -265,14 +265,16 @@ def candidates(ctx, text, limit_tools=10, limit_agents=6):
         cands.append({"id": "tool:" + t["dir"], "kind": "tool", "name": str(t.get("name") or t["dir"])[:60],
                       "desc": str(t.get("title") or "")[:120] + (" — " if t.get("title") else "") + str(t.get("desc") or "")[:160],
                       "tags": tags[:100], "group": str(t.get("group") or "")[:20], "link": f"/tool/{t['dir']}"})
-    st, b = community._builder(ctx.agent_user, "/api/agents?tab=dept")
-    agents = (b or {}).get("agents") if st == 200 and isinstance(b, dict) else []
-    for a in agents or []:
-        if not isinstance(a, dict) or not community.AGENT_RE.fullmatch(str(a.get("id") or "")):
-            continue
-        cands.append({"id": "agent:" + a["id"], "kind": "agent", "name": str(a.get("name") or "")[:60], "desc": str(a.get("desc") or "")[:200],
-                      "tags": "", "group": "공유 에이전트" + (f"({a['dept']})" if a.get("dept") else ""),
-                      "link": f"/tool/{BUILDER}/chat/{a['id']}"})
+    seen = set()
+    for tab in ("system", "dept"):   # 포털 기본 에이전트(모두에게) + 동료가 부서에 공개한 것
+        st, b = community._builder(ctx.agent_user, "/api/agents?tab=" + tab)
+        for a in (b or {}).get("agents") or [] if st == 200 and isinstance(b, dict) else []:
+            if not isinstance(a, dict) or not community.AGENT_RE.fullmatch(str(a.get("id") or "")) or a["id"] in seen:
+                continue
+            seen.add(a["id"])
+            group = "포털 기본 에이전트" if a.get("kind") == "system" else "공유 에이전트" + (f"({a['dept']})" if a.get("dept") else "")
+            cands.append({"id": "agent:" + a["id"], "kind": "agent", "name": str(a.get("name") or "")[:60], "desc": str(a.get("desc") or "")[:200],
+                          "tags": "", "group": group, "link": f"/tool/{BUILDER}/chat/{a['id']}"})
 
     def score(c):
         h = _tokens(" ".join((c["name"], c["desc"], c["tags"], c["group"])))

@@ -206,6 +206,17 @@ class MatchTest(unittest.TestCase):
             self.assertEqual(m.call_args[0][0], "zed", "그 사람 이름으로 빌더에 물음(공개 범위는 빌더가)")
         match._AG.clear()
 
+    def test_agents_for_system_and_dept(self):
+        """포털 기본(tab=system)과 동료 공유(tab=dept)를 둘 다 — 같은 id 는 한 번, kind 로 구분"""
+        from fastportal import community
+        lists = {"/api/agents?tab=system": {"agents": [{"id": "5e5111", "name": "기본", "status": "published", "kind": "system"}]},
+                 "/api/agents?tab=dept": {"agents": [{"id": "dd4444", "name": "동료", "status": "published", "kind": "user"},
+                                                     {"id": "5e5111", "name": "기본", "status": "published", "kind": "system"}]}}
+        match._AG.clear()
+        with patch.object(community, "_builder", side_effect=lambda u, path: (200, lists[path])):
+            self.assertEqual([(a["id"], a["kind"]) for a in match.agents_for("zed")], [("5e5111", "system"), ("dd4444", "user")])
+        match._AG.clear()
+
     def test_rate_limit(self):
         with patch.object(match, "RATE_N", 3):
             self.assertTrue(all(match.allow("u1") for _ in range(3)))

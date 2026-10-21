@@ -20039,12 +20039,13 @@
        "enum": [
         "mine",
         "dept",
+        "system",
         "fav",
         "admin"
        ],
        "default": "mine"
       },
-      "description": "admin = 관리자만(부서 공개·대기 + 공유를 끈 것, 아니면 403)"
+      "description": "mine = 내가 만든 것(포털 기본 제외) · dept = 동료가 우리 부서에 공개해 승인된 것(포털 기본 제외) · system = 포털 기본 에이전트(로그인한 모두, 관리자는 초안·끈 것까지) · fav = 즐겨찾기 · admin = 관리자만(부서 공개·대기 + 공유를 끈 것 + 포털 기본, 아니면 403)"
      }
     ],
     "responses": {
@@ -20110,6 +20111,15 @@
          "name": {
           "type": "string",
           "maxLength": 60
+         },
+         "kind": {
+          "type": "string",
+          "enum": [
+           "user",
+           "system"
+          ],
+          "default": "user",
+          "description": "system = 포털 기본 에이전트 초안(관리자만, 아니면 403)"
          }
         }
        }
@@ -22102,7 +22112,8 @@
           "shared",
           "new_7d",
           "asks_7d",
-          "top_creators"
+          "top_creators",
+          "system"
          ],
          "properties": {
           "agents": {
@@ -22138,6 +22149,18 @@
              "uses_7d": {
               "type": "integer"
              }
+            }
+           }
+          },
+          "system": {
+           "type": "object",
+           "description": "포털 기본 에이전트(게시·끄지 않은 것)는 따로 — agents·creators·shared·new_7d·asks_7d·top_creators 는 사람이 만든 것만",
+           "properties": {
+            "agents": {
+             "type": "integer"
+            },
+            "asks_7d": {
+             "type": "integer"
             }
            }
           }
@@ -42179,7 +42202,7 @@
      },
      "owner_name": {
       "type": "string",
-      "description": "내가 만들었으면 '내가 만듦', 포털 기본 에이전트면 '포털 기본', 아니면 이름(계정 id 아님)"
+      "description": "내가 만들었으면 '내가 만듦', 포털 기본 에이전트(kind=system)면 '포털 기본', 아니면 이름(계정 id 아님)"
      },
      "mine": {
       "type": "boolean"
@@ -42220,6 +42243,14 @@
      },
      "blocked": {
       "$ref": "#/components/schemas/AbBlocked"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "user",
+       "system"
+      ],
+      "description": "user = 사람이 만든 것(agents/), system = 포털 기본 에이전트(system/ — 관리자만 만들고 고침, 게시하면 부서와 상관없이 로그인한 모두에게). 서버가 저장 위치로 정함"
      }
     }
    },
@@ -42375,6 +42406,14 @@
      "wants_files": {
       "type": "boolean",
       "description": "지시문에 올린·첨부·파일·회의록이 있음 — 대화 화면이 '파일을 함께 올리면 잘 답합니다' 안내를 띄움(지시문 본문은 안 보냄)"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "user",
+       "system"
+      ],
+      "description": "user = 사람이 만든 것(agents/), system = 포털 기본 에이전트(system/ — 관리자만 만들고 고침, 게시하면 부서와 상관없이 로그인한 모두에게). 서버가 저장 위치로 정함"
      }
     }
    },

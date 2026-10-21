@@ -11,7 +11,7 @@ OpenAPI 3.1: [`openapi/agent-builder-local.json`](openapi/agent-builder-local.js
 | GET | `api/health` | 살아 있는지, 문서 엔진·포털 DB 읽기 가능 여부 | 아니오 | 누구나 |
 | GET | `api/me` | 나(이름·부서·역할)·승인 대기 수·안 읽은 피드백 수 | 아니오 | 본인 |
 | GET | `api/templates` | 템플릿 5종 + `cats`(분류 8개) | 아니오 | 누구나 |
-| GET | `api/agents?tab=mine\|dept\|fav\|admin` | 목록(내가 만든 것·부서 공유·즐겨찾기 · admin = 관리자만: 부서 공개·대기 + 공유를 끈 것) | 아니오 | 볼 수 있는 것만 |
+| GET | `api/agents?tab=mine\|dept\|system\|fav\|admin` | 목록(내가 만든 것·동료 부서 공유·**포털 기본**·즐겨찾기 · admin = 관리자만: 부서 공개·대기 + 공유를 끈 것 + 포털 기본). dept·mine 에는 포털 기본이 없음 | 아니오 | 볼 수 있는 것만 |
 | POST | `api/agents/<id>/block` `{off, reason?}` | 관리자 공유 끄기·켜기(포털 '에이전트 관리') | 아니오 | 관리자 |
 | POST | `api/agents` | 새 에이전트(초안) | 아니오 | 누구나(만든 계정 기록) |
 | GET | `api/agents/{id}` | 상세 | 아니오 | 볼 수 있는 사람(아니면 404) |
@@ -51,7 +51,7 @@ OpenAPI 3.1: [`openapi/agent-builder-local.json`](openapi/agent-builder-local.js
 - 부서원에게는 `instructions`·`only_docs`·`cite`·`length` 를 내보내지 않는다(대화에 필요한 이름·설명·예시 질문·자료 목록만).
 - 대화 기록·즐겨찾기는 사용자 폴더(`WORKSPACE/u/<id>/`)에 본인만.
 - 틀림 알리기는 만든 사람과 관리자 **둘 다**의 `api/feedback` 에 나온다.
-- **포털 기본 에이전트**(주인 `_system`, 사람 계정 아님): `owner_name` 은 `"포털 기본"`, `mine` 은 누구에게나 거짓(내 것 탭에 없음), `can_edit` 는 관리자만 참. 관리자에게 주는 `owner_id` 는 `null` — 포털은 주인 없는 대상처럼 리뷰·요청을 관리자 알림함으로 보내고 기여 순위에서 뺌. `api/stats` 의 `top_creators`·`creators_detail`·`creators` 에서도 빠짐. `X-Agent-User: _system` 은 403.
+- **포털 기본 에이전트**(`kind: "system"`, 빌더 저장소 `system/<id>/` — 사람이 만든 것은 `agents/<id>/`, `kind` 는 서버가 놓인 곳으로 정함): 관리자만 만들기(`POST api/agents {"kind": "system"}`, 그 밖 403)·고치기·게시·공유 끄기. 게시하면 **부서와 상관없이 로그인한 모두**에게 보이고 부서 승인이 없음(`scope_label: "포털 기본"`), 관리자 `block` 은 그대로. 목록 `GET api/agents?tab=system` — `tab=dept`(동료가 공유한 것)·`tab=mine` 에는 없음. 카드·상세에 `kind`. 주인 `_system`(사람 계정 아님, `X-Agent-User: _system` 은 403): `owner_name` 은 `"포털 기본"`, `mine` 은 누구에게나 거짓, 관리자에게 주는 `owner_id` 는 `null` — 포털은 주인 없는 대상처럼 리뷰·요청을 관리자 알림함으로 보내고 기여 순위에서 뺌. `api/stats` 는 사람이 만든 것만 세고 포털 기본은 `system: {agents, asks_7d}` 로 따로. 사용자가 복제하면 보통 사용자 에이전트(주인 = 그 사람). 포털 할 일 검색·물어보기·아이디어로 만들기의 에이전트 후보는 `tab=system` + `tab=dept`(같은 id 한 번).
 - 공개 범위 `all`(전체)은 2차 — 지금은 400.
 
 ## 엔드포인트
