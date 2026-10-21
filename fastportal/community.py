@@ -70,7 +70,7 @@ def _text(v, n, label, required=False):
 def _builder(user, path):
     """빌더에 그 사람 이름 + 포털 서명으로 GET → (상태, JSON). 꺼져 있으면 (502, None)"""
     t = tools.tool(BUILDER)
-    if not t or not tools.tool_host(t):
+    if not t or not tools.tool_host(t) or time.time() < _DOWN[0]:
         return 502, None
     hd = {**jobs.tool_headers(user), "Accept": "application/json"}
     try:
@@ -78,10 +78,14 @@ def _builder(user, path):
             return r.status, json.loads(r.read(4 * 1024 * 1024) or b"{}")
     except urllib.error.HTTPError as e:
         return e.code, None
-    except (urllib.error.URLError, OSError, ValueError):
+    except (urllib.error.URLError, OSError):
+        _DOWN[0] = time.time() + 30   # 응답 없음 — 30초 동안은 바로 502(목록 행마다 5초씩 기다리며 스레드를 잡지 않게)
+        return 502, None
+    except ValueError:
         return 502, None
 
 
+_DOWN = [0.0]   # 빌더가 응답하지 않아 건너뛸 시각까지
 _OWNERS = {}   # 에이전트 id → (주인 계정, 이름, 읽은 시각) — 5분 캐시
 
 

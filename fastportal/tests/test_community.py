@@ -127,5 +127,19 @@ class CommunityTest(unittest.TestCase):
         self.assertNotIn("uid", top)
 
 
+
+class BuilderDownTest(unittest.TestCase):
+    def test_no_answer_skips_next_calls(self):
+        calls = []
+        def fail(*a, **k):
+            calls.append(1); raise OSError("timed out")
+        with patch.object(community.tools, "tool", return_value={"dir": community.BUILDER, "port": 1}), \
+             patch.object(community.tools, "tool_host", return_value="127.0.0.1"), \
+             patch.object(community.jobs.TOOL_OPENER, "open", fail), patch.object(community, "_DOWN", [0.0]):
+            self.assertEqual(community._builder("owner", "/api/agents/abc123"), (502, None))
+            self.assertEqual(community._builder("owner", "/api/agents/def456"), (502, None))
+        self.assertEqual(len(calls), 1, "응답 없던 빌더는 30초 동안 다시 부르지 않음(목록 행마다 5초씩 막히지 않게)")
+
+
 if __name__ == "__main__":
     unittest.main()
