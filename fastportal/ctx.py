@@ -70,8 +70,9 @@ class Ctx:
 
     @property
     def agent_role(self):
-        """도구로 넘기는 역할(X-Agent-Role, 서명함) — 관리자면 admin. 도구는 portal_auth.is_admin 으로 권한을 판정"""
-        return "admin" if self.is_owner else ""
+        """도구로 넘기는 역할(X-Agent-Role, 서명함) — 관리자 계정이면 admin. owner(로컬 주인 토큰)는 사용자 이름만으로 관리자라 안 붙임.
+        도구는 portal_auth.is_admin 으로 권한을 판정"""
+        return "admin" if self.is_owner and self.uid != "owner" else ""
 
     def theme(self):
         return pages.user_theme(self.uid, self.cookie)
