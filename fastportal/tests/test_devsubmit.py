@@ -125,6 +125,17 @@ class DevSubmitTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             devsubmit.submit(self.ctx("dev"), mkzip(GOOD))
 
+    def test_daily_cap_counts_kst_day(self):
+        # 어제(KST) 마지막 초에 낸 것은 오늘 한도에 안 셈 — KST 0시 = UTC 전날 15시
+        import datetime
+        from fastportal import timeutil
+        before = (datetime.datetime.fromisoformat(timeutil.kst_day_start_utc(0)) - datetime.timedelta(seconds=1)).isoformat()
+        with db() as c:
+            c.executemany("INSERT INTO dev_submissions(id, uid, agent_user, dir, title, status, created, updated, size, nfiles) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                          [(f"y{i:07d}", "dev", "dev", "x", "x", "failed", before, before, 1, 1) for i in range(devsubmit.DAILY_MAX)])
+        mk = SimpleNamespace(uid="dev", agent_user="dev", is_owner=False, send=lambda d, code=200: (code, d))
+        self.assertIsNone(devsubmit.precheck(mk), "어제(KST) 제출은 오늘 한도에 들지 않음")
+
     def test_corrupt_zip_is_400(self):
         z = bytearray(mkzip(GOOD))
         i = z.index(b"import os")   # 파일 내용 한 바이트를 바꿔 CRC 를 깨뜨림(목록은 멀쩡)

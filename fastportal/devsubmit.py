@@ -14,7 +14,7 @@
   승인: ~/agent-page/<dir> 로 설치 + tools.json 등록(tools.add_tool) + guides/<dir>.md + 포털이 시작(서명 모드 PORTAL_TOOL_KEY). 모두 감사 기록."""
 import io, json, os, re, secrets, shutil, socket, stat, subprocess, threading, time, zipfile
 
-from . import accounts, config, jobs, pkgindex, tools
+from . import accounts, config, jobs, pkgindex, timeutil, tools
 from .db import db, now, own_row
 
 PKG_LIST_MAX = 8 * 1024 * 1024   # 폐쇄망 패키지 목록 파일(pip index 출력 포함) 상한
@@ -313,7 +313,7 @@ def _gate(c, uid):
         return 403, "forbidden", "개발자 권한이 필요합니다 — 관리자에게 요청하세요"
     if c.execute("SELECT COUNT(*) FROM dev_submissions WHERE uid=? AND status IN ('checking','sandbox')", (uid,)).fetchone()[0]:
         return 400, "bad_request", "검사 중인 제출이 있습니다 — 끝난 뒤 다시 올리세요"
-    if c.execute("SELECT COUNT(*) FROM dev_submissions WHERE uid=? AND created>=?", (uid, now()[:10])).fetchone()[0] >= DAILY_MAX:
+    if c.execute("SELECT COUNT(*) FROM dev_submissions WHERE uid=? AND created>=?", (uid, timeutil.kst_day_start_utc(0))).fetchone()[0] >= DAILY_MAX:   # 하루 = KST 0시부터(저장은 UTC)
         return 429, "rate_limited", f"제출은 하루 {DAILY_MAX}번까지입니다 — 내일 다시 올리세요"
     return None
 
