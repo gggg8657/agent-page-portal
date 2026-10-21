@@ -15,7 +15,7 @@
 import io, json, os, re, secrets, shutil, socket, stat, subprocess, threading, time, zipfile
 
 from . import accounts, config, jobs, pkgindex, tools
-from .db import db, now
+from .db import db, now, own_row
 
 PKG_LIST_MAX = 8 * 1024 * 1024   # 폐쇄망 패키지 목록 파일(pip index 출력 포함) 상한
 ZIP_MAX = int(os.environ.get("DEVSUBMIT_ZIP_MAX", str(50 * 1024 * 1024)))
@@ -29,7 +29,6 @@ IMAGE_PY = os.environ.get("DEVCHECK_PYTHON", "/opt/env/bin/python3")
 CHECK_TIMEOUT = int(os.environ.get("DEVCHECK_TIMEOUT", "180"))
 PORT_RANGE = (8810, 8899)
 NAME_RE = re.compile(r"[a-z][a-z0-9-]{1,38}-local")
-ID_RE = re.compile(r"[A-Za-z0-9_-]{6,40}")
 JOB_TOOL = "devsubmit"
 CHECK_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "devcheck_runner.py")
 SDK_AUTH = os.path.join(config.ROOT, "sdk", "portal_auth.py")
@@ -369,16 +368,7 @@ def _public(r, detail=False):
 
 
 def _get(c, ctx, sid, admin_only=False):
-    if not isinstance(sid, str) or not ID_RE.fullmatch(sid):
-        raise FileNotFoundError("제출을 찾을 수 없습니다")
-    r = c.execute("SELECT * FROM dev_submissions WHERE id=?", (sid,)).fetchone()
-    if not r:
-        raise FileNotFoundError("제출을 찾을 수 없습니다")
-    if ctx.is_owner:
-        return r
-    if admin_only or r["uid"] != ctx.uid:
-        raise PermissionError("이 제출을 볼 권한이 없습니다")
-    return r
+    return own_row(c, "dev_submissions", sid, None if admin_only else ctx.uid, "제출을 찾을 수 없습니다", "이 제출을 볼 권한이 없습니다", ctx.is_owner)
 
 
 def file_text(c, ctx, sid, rel):

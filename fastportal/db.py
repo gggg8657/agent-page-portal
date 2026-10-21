@@ -2,7 +2,7 @@
 portal.py 와 같은 _data/portal.db 를 동시에 써도 되게 같은 표·열·마이그레이션 규칙을 따르고, 더한 것은 login_fails 표와
 users 의 새 열(비활성·익명화)·depts.archived·jobs 표(jobs.py)뿐(예전 코드는 모르는 표·열 — 무시됨).
 users 표는 '포털 쪽 사용자 정보'(이름·부서·테마·비활성 등)이고, 그중 salt·hash·iters(PIN)는 계정 저장소가 local 일 때만 쓴다(auth/local.py)."""
-import contextlib, datetime, os, sqlite3, subprocess, threading, time
+import contextlib, datetime, os, re, sqlite3, subprocess, threading, time
 
 from . import config
 
@@ -66,6 +66,21 @@ def db():
             except sqlite3.Error:
                 pass
             c.close()
+
+
+ROW_ID = re.compile(r"[A-Za-z0-9_-]{6,40}")   # 흐름·아이디어·제출·리뷰·요청의 id
+
+
+def own_row(c, table, rid, uid, missing, forbidden, owner=False):
+    """id 로 한 줄 — 형식이 틀리거나 없으면 FileNotFoundError(missing), 남의 것이면 PermissionError(forbidden). owner=True 면 남의 것도 됨(관리자)"""
+    if not isinstance(rid, str) or not ROW_ID.fullmatch(rid):
+        raise FileNotFoundError(missing)
+    r = c.execute(f"SELECT * FROM {table} WHERE id=?", (rid,)).fetchone()   # table 은 호출하는 코드의 상수
+    if not r:
+        raise FileNotFoundError(missing)
+    if r["uid"] != uid and not owner:
+        raise PermissionError(forbidden)
+    return r
 
 
 def now():

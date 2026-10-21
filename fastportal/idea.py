@@ -15,7 +15,7 @@ API: POST /api/idea/plan {text, route?, id?} · GET /api/idea/recent · GET /api
 import ast, io, json, os, re, secrets, sys, threading, time, urllib.error, urllib.request, zipfile
 
 from . import accounts, community, config, flows, tools, toolstate
-from .db import db
+from .db import db, own_row
 
 ROUTES = ("existing", "builder", "flow", "newtool")
 ROUTE_NAMES = {"existing": "이미 있는 것", "builder": "빌더 에이전트", "flow": "에이전트 연결", "newtool": "새 도구(데모)"}
@@ -23,7 +23,6 @@ TEXT_MAX = 2000
 KEEP = 20
 RATE_N, RATE_S = int(os.environ.get("IDEA_RATE_N", "10")), 600
 LLM_TIMEOUT = int(os.environ.get("IDEA_LLM_TIMEOUT", "300"))
-ID_RE = re.compile(r"[A-Za-z0-9_-]{6,40}")
 SLUG_RE = re.compile(r"[a-z][a-z0-9-]{1,30}")
 FIELD_RE = re.compile(r"[a-z][a-z0-9_]{0,20}")
 BUILDER = "agent-builder-local"
@@ -901,14 +900,7 @@ def plan(ctx, req):
 
 
 def _own(c, uid, hid):
-    if not isinstance(hid, str) or not ID_RE.fullmatch(hid):
-        raise FileNotFoundError("아이디어 기록을 찾을 수 없습니다")
-    r = c.execute("SELECT * FROM idea_history WHERE id=?", (hid,)).fetchone()
-    if not r:
-        raise FileNotFoundError("아이디어 기록을 찾을 수 없습니다")
-    if r["uid"] != uid:
-        raise PermissionError("다른 사람의 아이디어입니다")
-    return r
+    return own_row(c, "idea_history", hid, uid, "아이디어 기록을 찾을 수 없습니다", "다른 사람의 아이디어입니다")
 
 
 def recent(c, uid):

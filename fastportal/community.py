@@ -12,7 +12,7 @@ API: GET /api/community/summary?t=agent:<id>,tool:<dir>,… · /api/community/re
 import json, os, re, secrets, threading, time, urllib.error, urllib.request, urllib.parse
 
 from . import accounts, config, jobs, tools, toolstate
-from .db import db, now
+from .db import db, now, own_row
 
 KINDS = ("agent", "flow", "tool")
 REQ_TYPES = {"improve": "개선", "bug": "버그", "feature": "새 기능"}
@@ -268,14 +268,7 @@ def write_review(ctx, req):
 
 
 def _own_row(c, table, rid, ctx, admin_ok=True):
-    if not isinstance(rid, str) or not FLOW_RE.fullmatch(rid):
-        raise FileNotFoundError("없습니다")
-    r = c.execute(f"SELECT * FROM {table} WHERE id=?", (rid,)).fetchone()
-    if not r:
-        raise FileNotFoundError("없습니다")
-    if r["uid"] != ctx.uid and not (admin_ok and ctx.is_owner):
-        raise PermissionError("다른 사람의 글입니다")
-    return r
+    return own_row(c, table, rid, ctx.uid, "없습니다", "다른 사람의 글입니다", admin_ok and ctx.is_owner)
 
 
 def delete_review(ctx, req):

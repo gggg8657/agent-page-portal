@@ -10,7 +10,7 @@ API: GET /api/flows · /api/flows/adapters · /api/flows/<id> · /api/flows/runs
 import base64, csv, io, json, os, re, secrets, threading, time, urllib.error, urllib.request
 
 from . import accounts, config, jobs, tools, toolstate
-from .db import db, now
+from .db import db, now, own_row
 
 MIN_STEPS, MAX_STEPS = 2, 6
 MAX_FLOWS = 50                      # 계정당 저장 흐름 수
@@ -368,15 +368,8 @@ def _clean_steps(steps):
 
 
 def _own(c, uid, fid):
-    """흐름 하나 — 없으면 FileNotFoundError, 남의 것이면 PermissionError(관리자도 남의 흐름은 못 봄)"""
-    if not isinstance(fid, str) or not ID_RE.fullmatch(fid):
-        raise FileNotFoundError("흐름을 찾을 수 없습니다")
-    r = c.execute("SELECT * FROM flows WHERE id=?", (fid,)).fetchone()
-    if not r:
-        raise FileNotFoundError("흐름을 찾을 수 없습니다")
-    if r["uid"] != uid:
-        raise PermissionError("다른 사람의 흐름입니다")
-    return r
+    """흐름 하나(관리자도 남의 흐름은 못 봄)"""
+    return own_row(c, "flows", fid, uid, "흐름을 찾을 수 없습니다", "다른 사람의 흐름입니다")
 
 
 def _flow_public(r):
