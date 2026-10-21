@@ -1,5 +1,5 @@
 {
- "note": "검색어 → 기대 도구(순서 없음). capabilities.json 을 보기 전에 사람이 쓰는 말로 적은 평가 묶음 — 고칠 때 카탈로그 문구를 베끼지 말 것. scripts/match_eval.py 가 recall@3·MRR 을 셈 · hard: 카탈로그를 본 뒤 낱말이 겹치지 않게 돌려 말한 검색어(의미 검색 확인용) · agents: 공유 빌더 에이전트(실제 빌더에서 주인이 볼 수 있는 것 — --agents 로 셈, 이름으로 비교)",
+ "note": "검색어 → 기대 도구(순서 없음). capabilities.json 을 보기 전에 사람이 쓰는 말로 적은 평가 묶음 — 고칠 때 카탈로그 문구를 베끼지 말 것. scripts/match_eval.py 가 recall@3·MRR 을 셈 · hard: 카탈로그를 본 뒤 낱말이 겹치지 않게 돌려 말한 검색어(의미 검색 확인용) · agents: 공유 빌더 에이전트(전용 도구로 옮긴 회의 안건·실험 노트·KPI·제안서·SWOT 에이전트는 은퇴 — 그 검색어는 queries 에서 새 도구로 셈)(실제 빌더에서 주인이 볼 수 있는 것 — --agents 로 셈, 이름으로 비교)",
  "queries": [
   {
    "q": "회의록",
@@ -579,6 +579,36 @@
    "expect": [
     "strategy-local"
    ]
+  },
+  {
+   "q": "연구계획서 초안",
+   "expect": [
+    "proposal-local"
+   ]
+  },
+  {
+   "q": "제안서",
+   "expect": [
+    "proposal-local"
+   ]
+  },
+  {
+   "q": "KPI",
+   "expect": [
+    "kpi-local"
+   ]
+  },
+  {
+   "q": "OKR 목표값",
+   "expect": [
+    "kpi-local"
+   ]
+  },
+  {
+   "q": "회의 아젠다와 액션 아이템",
+   "expect": [
+    "meetplan-local"
+   ]
   }
  ],
  "hard": [
@@ -828,34 +858,6 @@
   {
    "q": "docstring 만들기",
    "expect": "코드 설명·문서화"
-  },
-  {
-   "q": "실험 노트 정리",
-   "expect": "실험 노트 정리"
-  },
-  {
-   "q": "연구계획서 초안",
-   "expect": "과제 제안서 도우미"
-  },
-  {
-   "q": "제안서",
-   "expect": "과제 제안서 도우미"
-  },
-  {
-   "q": "SWOT 분석",
-   "expect": "SWOT·로직모델"
-  },
-  {
-   "q": "KPI",
-   "expect": "성과지표(KPI) 설계"
-  },
-  {
-   "q": "OKR 목표값",
-   "expect": "성과지표(KPI) 설계"
-  },
-  {
-   "q": "회의 아젠다와 액션 아이템",
-   "expect": "회의 안건·결정 추적"
   }
  ]
 }
