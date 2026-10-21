@@ -32,7 +32,6 @@ NAME_RE = re.compile(r"[a-z][a-z0-9-]{1,38}-local")
 JOB_TOOL = "devsubmit"
 CHECK_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "devcheck_runner.py")
 SDK_AUTH = os.path.join(config.ROOT, "sdk", "portal_auth.py")
-STATES = ("checking", "sandbox", "review", "failed", "approved", "rejected")
 
 
 def init(c):

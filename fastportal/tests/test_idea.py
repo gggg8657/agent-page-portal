@@ -241,6 +241,12 @@ class IdeaTest(unittest.TestCase):
         self.assertTrue(any("os.system" in w for w in nt["checks"]["warnings"]))
         self.assertEqual(nt["dir"], "meeting-new-local")   # 이미 있는 도구 이름과 겹치지 않게
 
+    def test_newtool_backslash_title_still_compiles(self):
+        ans = self.newtool_ans("def process(inputs):\n    return {'text': 'ok'}\n")
+        ans["title"] = "C:\\Users 정리"
+        nt = idea.assemble(idea.check(idea.newtool_schema(["문서"]), ans), set(), "t")
+        self.assertFalse(any("문법" in e for e in nt["checks"]["errors"]), nt["checks"]["errors"])
+
     def test_zip_rejects_tampered_paths(self):
         with db() as c:
             plan = {"route": "newtool", "newtool": {"dir": "x-local", "files": [{"path": "x-local/../../etc/passwd", "content": "x"}]}}

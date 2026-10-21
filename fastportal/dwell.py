@@ -124,7 +124,6 @@ def report(ctx):
                           "opens": r["opens"], "jobs": r["jobs"], "job_seconds": r["job_seconds"]})
     tool_rows.sort(key=lambda r: (r["active_seconds"], r["opens"], r["job_seconds"]), reverse=True)
     active = sum(r["seconds"] for r in raw_rows)
-    visits = len({(r["uid"], r["screen"], r["tool"]) for r in raw_rows})
     # 정확한 방문 수는 선택 조건 전체에서 DISTINCT 로 계산한다.
     with db.db() as c:
         visits = c.execute("SELECT COUNT(DISTINCT uid||':'||visit) FROM dwell_segments WHERE " + where, args).fetchone()[0]

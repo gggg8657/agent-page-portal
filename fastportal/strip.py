@@ -6,7 +6,7 @@
 - 블록 주석이 줄바꿈을 품고 있었으면 그 자리에 줄바꿈이 남는다(자동 세미콜론 규칙이 그대로).
 - 확신이 없으면(문자열·템플릿·주석이 닫히지 않음, 모르는 script type) 원본 그대로 — 실패는 늘 '안 지움' 쪽.
 결과는 원본 해시로 캐시(도구 화면 수십 개라 작음)."""
-import hashlib, re
+import hashlib, re, threading
 from collections import OrderedDict
 
 KEEP = re.compile(r"©|\(c\)|copyright|licen[cs]e|spdx|@preserve|저작", re.I)   # 저작권·라이선스 표기는 남김
@@ -269,15 +269,17 @@ def strip_html(h):
 
 
 _CACHE = OrderedDict()
+_CACHE_LOCK = threading.Lock()   # 스레드 풀에서 move_to_end·popitem 이 겹치면 KeyError
 CACHE_MAX = 96
 
 
 def stripped(html):
     """주석을 걷은 HTML(캐시). 확신이 없으면 원본 — 실패를 늘 '안 지움' 쪽으로"""
     key = hashlib.sha1(html.encode("utf-8", "surrogatepass")).digest()
-    if key in _CACHE:
-        _CACHE.move_to_end(key)
-        return _CACHE[key]
+    with _CACHE_LOCK:
+        if key in _CACHE:
+            _CACHE.move_to_end(key)
+            return _CACHE[key]
     try:
         out = strip_html(html)
     except Unsure as e:
@@ -286,7 +288,8 @@ def stripped(html):
     except Exception as e:   # 예상 못 한 경우도 원본(화면을 깨뜨리지 않음)
         print("strip: 오류, 원본 그대로 —", type(e).__name__, e, flush=True)
         out = html
-    _CACHE[key] = out
-    if len(_CACHE) > CACHE_MAX:
-        _CACHE.popitem(last=False)
+    with _CACHE_LOCK:
+        _CACHE[key] = out
+        if len(_CACHE) > CACHE_MAX:
+            _CACHE.popitem(last=False)
     return out

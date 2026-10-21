@@ -570,7 +570,7 @@ def assemble(v, closed, src):
     logic = "\n".join(x.replace("\r", "").replace("\n", " ").rstrip() for x in v["logic"]).strip("\n")
     sample = {s["key"]: s["value"] for s in v["sample"] if s["key"] in seen}
     files = {
-        "app.py": APP_TMPL.format(title=title.replace('"', "'"), desc=desc.replace('"', "'"), tool=_py_str(d), logic=logic),
+        "app.py": APP_TMPL.format(title=title.replace("\\", "/").replace('"', "'"), desc=desc.replace("\\", "/").replace('"', "'"), tool=_py_str(d), logic=logic),   # 독스트링 안 — \U 같은 역빗금이면 문법 오류
         "ui.html": ui_html(title, desc, fields),
         "agent.json": json.dumps({"name": title[:30], "title": title, "desc": desc, "group": v["group"], "usage": usage, "tags": ["#아이디어로만들기"],
                                   "author": "", "dept": ""}, ensure_ascii=False, indent=2) + "\n",
