@@ -555,6 +555,30 @@
    "expect": [
     "kpi-local"
    ]
+  },
+  {
+   "q": "SWOT 분석",
+   "expect": [
+    "strategy-local"
+   ]
+  },
+  {
+   "q": "로직모델",
+   "expect": [
+    "strategy-local"
+   ]
+  },
+  {
+   "q": "교차 전략",
+   "expect": [
+    "strategy-local"
+   ]
+  },
+  {
+   "q": "투입 활동 산출 성과",
+   "expect": [
+    "strategy-local"
+   ]
   }
  ],
  "hard": [
@@ -775,6 +799,12 @@
    "q": "교육 만족도 말고 어떤 지표를 더 봐야 할까",
    "expect": [
     "kpi-local"
+   ]
+  },
+  {
+   "q": "우리 사업 강점이랑 약점 정리해서 전략 짜기",
+   "expect": [
+    "strategy-local"
    ]
   }
  ],

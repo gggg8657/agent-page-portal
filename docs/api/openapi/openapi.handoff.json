@@ -606,6 +606,26 @@
    "x-external-network": false,
    "x-external-network-note": "LLM 서버(내부)만 호출",
    "x-response-style": "json"
+  },
+  {
+   "name": "strategy-local",
+   "description": "SWOT·로직모델 — 사업·과제 설명(첨부 포함) → SWOT 2×2(근거 인용을 서버가 확인, 없으면 검토 제안) · TOWS 교차 전략·우선 전략 · 로직모델(투입→활동→산출→성과→영향, 지표 후보) 초안(LLM) + 편집(부분별 rev)·되돌리기 · SVG/PNG/PPTX/Markdown/HWPX 내보내기 · KPI 넘기기. 문서: docs/api/strategy-local.md",
+   "x-tool-id": "strategy",
+   "x-name": "SWOT·로직모델",
+   "x-description": "사업·과제 설명 → 고칠 수 있는 SWOT 표·TOWS 교차 전략·로직모델 + 내보내기",
+   "x-kind": "agent",
+   "x-kind-note": "편집·검증·그림·문서는 결정론 코드, LLM 은 초안(generate 작업)에만",
+   "x-category": "기획/전략",
+   "x-category-note": "기획 담당자의 전략 분석·성과 체계 도구",
+   "x-entry": "/t/strategy-local/",
+   "x-health-path": "/t/strategy-local/healthz",
+   "x-long-running": true,
+   "x-long-running-note": "AI 초안은 작업으로 받아 …/job 을 2초마다 확인(부분 하나 약 15~30초)",
+   "x-docs-input": "files",
+   "x-docs-input-note": "첨부 md·txt·docx·hwp·hwpx·pdf 를 base64 JSON 으로",
+   "x-external-network": false,
+   "x-external-network-note": "LLM 서버(내부)만 호출",
+   "x-response-style": "json"
   }
  ],
  "paths": {
@@ -31476,6 +31496,785 @@
      }
     }
    }
+  },
+  "/t/strategy-local/api/health": {
+   "get": {
+    "tags": [
+     "strategy-local"
+    ],
+    "operationId": "strategyHealth",
+    "summary": "살아 있는지",
+    "description": "가벼운 확인(LLM 연결 여부 포함).",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StrategyHealth"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/strategy-local/api/meta": {
+   "get": {
+    "tags": [
+     "strategy-local"
+    ],
+    "operationId": "strategyMeta",
+    "summary": "LLM 상태·내보내기 형식·칸 이름·연습 예시·제한",
+    "description": "LLM 확인은 60초 기억. llm.ok 가 거짓이면 AI 초안 단추를 끄고 직접 쓰기·내보내기만. export 는 이 서버에서 되는 형식.",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StrategyMeta"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/strategy-local/api/analyses": {
+   "get": {
+    "tags": [
+     "strategy-local"
+    ],
+    "operationId": "strategyList",
+    "summary": "분석 목록(최근 고친 순)",
+    "description": "사용자별(X-Agent-User → WORKSPACE/u/<id>/analyses/).",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StrategyList"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "strategy-local"
+    ],
+    "operationId": "strategyCreate",
+    "summary": "분석 만들기 · 연습 예시",
+    "description": "제목이 비면 설명 첫 줄. sample: true 면 가상 사업 예시. 사용자당 분석 100개.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/StrategyCreate"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "만듦",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StrategyDoc"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/strategy-local/api/analyses/{aid}": {
+   "get": {
+    "tags": [
+     "strategy-local"
+    ],
+    "operationId": "strategyGet",
+    "summary": "분석 하나",
+    "description": "job 은 이 서버가 기억하는 마지막 AI 초안 작업(재시작하면 null).",
+    "parameters": [
+     {
+      "name": "aid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "분석 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StrategyDoc"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "strategy-local"
+    ],
+    "operationId": "strategySave",
+    "summary": "부분 저장(입력·SWOT·전략·로직모델)",
+    "description": "rev 가 지금 doc.revs[part] 와 다르면 409 conflict + 최신 doc(다른 탭·AI 초안이 먼저 바꿈). 서버가 길이·개수(칸 15·전략 8·단계 12)·id·src 를 검사하고, SWOT 에서 지운 항목을 가리키던 전략 연결은 걷음. 전략 연결은 짝 칸(SO 는 S·O …)의 항목만 남음. AI 가 그 부분을 만드는 중이면 409 busy.",
+    "parameters": [
+     {
+      "name": "aid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "분석 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/StrategySave"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StrategyDoc"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "판 충돌(code: conflict, 최신 doc 포함) 또는 AI 초안 중(code: busy)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StrategyConflict"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/strategy-local/api/analyses/{aid}/delete": {
+   "post": {
+    "tags": [
+     "strategy-local"
+    ],
+    "operationId": "strategyDelete",
+    "summary": "분석 지우기",
+    "description": "AI 초안 중이면 409.",
+    "parameters": [
+     {
+      "name": "aid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "분석 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ok"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "AI 초안을 만드는 중(code: busy)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/strategy-local/api/analyses/{aid}/files": {
+   "post": {
+    "tags": [
+     "strategy-local"
+    ],
+    "operationId": "strategyFileAdd",
+    "summary": "첨부(사업계획서 등) 올리기",
+    "description": "md·txt 그대로, pdf 는 pdftotext, docx·hwp·hwpx 는 kordoc 으로 글로 바꿔 저장(원본 파일은 남기지 않음). 분석마다 5개, 20MB.",
+    "parameters": [
+     {
+      "name": "aid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "분석 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/StrategyFileUpload"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "만듦",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StrategyDoc"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "413": {
+      "description": "파일이 너무 큼(code: too_large)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/strategy-local/api/analyses/{aid}/files/{fid}/delete": {
+   "post": {
+    "tags": [
+     "strategy-local"
+    ],
+    "operationId": "strategyFileDelete",
+    "summary": "첨부 빼기",
+    "description": "",
+    "parameters": [
+     {
+      "name": "aid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "분석 id"
+     },
+     {
+      "name": "fid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{8}$"
+      },
+      "description": "첨부 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StrategyDoc"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/strategy-local/api/analyses/{aid}/generate": {
+   "post": {
+    "tags": [
+     "strategy-local"
+    ],
+    "operationId": "strategyGenerate",
+    "summary": "AI 초안 시작(작업)",
+    "description": "swot: 입력(설명·메모·첨부 16,000자) → 칸마다 2~5개 + 근거 인용, 서버가 인용을 입력에서 다시 찾음(정규화 뒤 비슷함 0.85 이상 + 인용 속 숫자가 입력에 있어야, 아니면 검토 제안). 입력이 모자라면 SWOT 대신 insufficient(질문·예시). tows: 지금 SWOT → SO·WO·ST·WT 1~3개 + 우선 전략 3개(항목 번호가 짝에 맞는지 확인). logic: 여섯 단계 + 가정·외부 요인, 목표 수치가 입력에 없으면 '설정 필요'. all = 세 가지 차례로(SWOT 이 모자라면 전략은 건너뜀). 덮기 전 내용은 undo 로 되돌릴 수 있음. 202 로 작업을 돌려주고 …/job 을 2초마다 확인. 사용자당 동시 1·1시간 30번, 도구 전체 동시 2.",
+    "parameters": [
+     {
+      "name": "aid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "분석 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/StrategyGenerate"
+       }
+      }
+     }
+    },
+    "responses": {
+     "202": {
+      "description": "시작함",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StrategyJobWrap"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "이미 만드는 중이거나 자리가 없음(code: busy)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "503": {
+      "description": "LLM 이 연결되지 않음(code: unavailable)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-llm": true,
+    "x-long-running": true
+   }
+  },
+  "/t/strategy-local/api/analyses/{aid}/job": {
+   "get": {
+    "tags": [
+     "strategy-local"
+    ],
+    "operationId": "strategyJob",
+    "summary": "AI 초안 작업 상태",
+    "description": "stage: swot·tows·logic·done. 메모리에만(서버 재시작 시 null).",
+    "parameters": [
+     {
+      "name": "aid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "분석 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StrategyJobWrap"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/strategy-local/api/analyses/{aid}/undo": {
+   "post": {
+    "tags": [
+     "strategy-local"
+    ],
+    "operationId": "strategyUndo",
+    "summary": "AI 가 덮기 전으로 되돌리기",
+    "description": "부분마다 하나. 되돌릴 것이 없으면 400.",
+    "parameters": [
+     {
+      "name": "aid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "분석 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/StrategyUndo"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StrategyDoc"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "AI 초안을 만드는 중(code: busy)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/strategy-local/api/analyses/{aid}/export.{fmt}": {
+   "get": {
+    "tags": [
+     "strategy-local"
+    ],
+    "operationId": "strategyExport",
+    "summary": "내보내기(SVG·PNG·PPTX·Markdown·HWPX)",
+    "description": "svg·png: part=swot(SWOT 2×2 + TOWS + 우선 전략) 또는 logic(로직모델 흐름). pptx: python-pptx 네이티브 도형(SWOT·TOWS·로직모델·질문 슬라이드, 글을 고칠 수 있음). md: 표. hwpx: kordoc generate(보고서 프리셋, 그림 + 표). Content-Disposition attachment. 이 서버에 없는 형식은 400(meta.export 참고).",
+    "parameters": [
+     {
+      "name": "aid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "분석 id"
+     },
+     {
+      "name": "fmt",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "enum": [
+        "svg",
+        "png",
+        "pptx",
+        "md",
+        "hwpx"
+       ]
+      }
+     },
+     {
+      "name": "part",
+      "in": "query",
+      "schema": {
+       "type": "string",
+       "enum": [
+        "swot",
+        "logic",
+        "all"
+       ]
+      },
+      "description": "그림은 swot(기본)·logic, 문서는 all"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "파일",
+      "content": {
+       "image/svg+xml": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       },
+       "image/png": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       },
+       "application/vnd.openxmlformats-officedocument.presentationml.presentation": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       },
+       "text/markdown": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       },
+       "application/hwp+zip": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/strategy-local/api/analyses/{aid}/handoff/kpi": {
+   "post": {
+    "tags": [
+     "strategy-local"
+    ],
+    "operationId": "strategyHandoffKpi",
+    "summary": "성과지표(KPI) 도구로 넘길 자료",
+    "description": "로직모델 여섯 단계 → logic-model.json {goal, context, items[{level, text}]}(kpi-local 과 정한 약속, 활동은 과정·단기·중기·영향은 성과로 그쪽이 묶음) + 목표 한 줄. 이 API 는 자료만 만들고 다른 도구를 부르지 않음 — 포털 화면이 받는 도구 화면에 채움(src/lib/handoff.ts). 산출·성과 칸이 비면 400.",
+    "parameters": [
+     {
+      "name": "aid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "분석 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StrategyKpiHandoff"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
   }
  },
  "components": {
@@ -57067,6 +57866,1101 @@
      "changes",
      "pair"
     ]
+   },
+   "StrategyHealth": {
+    "type": "object",
+    "properties": {
+     "ok": {
+      "type": "boolean"
+     },
+     "llm": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "ok",
+     "llm"
+    ]
+   },
+   "StrategyMeta": {
+    "type": "object",
+    "properties": {
+     "llm": {
+      "type": "object",
+      "properties": {
+       "ok": {
+        "type": "boolean"
+       },
+       "model": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "ok",
+       "model"
+      ]
+     },
+     "tools": {
+      "type": "object",
+      "properties": {
+       "pdftotext": {
+        "type": "boolean"
+       },
+       "kordoc": {
+        "type": "boolean"
+       },
+       "rsvg": {
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "pdftotext",
+       "kordoc",
+       "rsvg"
+      ],
+      "description": "첨부 읽기·그림 변환 프로그램"
+     },
+     "export": {
+      "type": "object",
+      "properties": {
+       "svg": {
+        "type": "boolean"
+       },
+       "png": {
+        "type": "boolean"
+       },
+       "md": {
+        "type": "boolean"
+       },
+       "pptx": {
+        "type": "boolean"
+       },
+       "hwpx": {
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "svg",
+       "png",
+       "md",
+       "pptx",
+       "hwpx"
+      ],
+      "description": "이 서버에서 되는 내보내기 형식"
+     },
+     "quads": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string",
+         "enum": [
+          "S",
+          "W",
+          "O",
+          "T"
+         ]
+        },
+        "name": {
+         "type": "string"
+        },
+        "note": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "id",
+        "name",
+        "note"
+       ]
+      }
+     },
+     "tows": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string",
+         "enum": [
+          "SO",
+          "WO",
+          "ST",
+          "WT"
+         ]
+        },
+        "name": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "id",
+        "name"
+       ]
+      }
+     },
+     "stages": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string",
+         "enum": [
+          "inputs",
+          "activities",
+          "outputs",
+          "short",
+          "mid",
+          "impact"
+         ]
+        },
+        "name": {
+         "type": "string"
+        },
+        "measured": {
+         "type": "boolean",
+         "description": "지표 후보·목표 칸이 있는 단계"
+        }
+       },
+       "required": [
+        "id",
+        "name",
+        "measured"
+       ]
+      }
+     },
+     "sides": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string",
+         "enum": [
+          "assumptions",
+          "external"
+         ]
+        },
+        "name": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "id",
+        "name"
+       ]
+      }
+     },
+     "tbd": {
+      "type": "string",
+      "description": "목표 값 자리표시('설정 필요')"
+     },
+     "note": {
+      "type": "string",
+      "description": "검토 제안 안내 문구"
+     },
+     "sample": {
+      "type": "object",
+      "properties": {
+       "title": {
+        "type": "string"
+       },
+       "subject": {
+        "type": "string"
+       },
+       "notes": {
+        "$ref": "#/components/schemas/StrategyNotes"
+       }
+      },
+      "required": [
+       "title",
+       "subject",
+       "notes"
+      ],
+      "description": "연습 예시(가상 사업)"
+     },
+     "limits": {
+      "type": "object",
+      "properties": {
+       "file_mb": {
+        "type": "integer"
+       },
+       "files": {
+        "type": "integer"
+       },
+       "analyses": {
+        "type": "integer"
+       },
+       "items": {
+        "type": "integer"
+       },
+       "strategies": {
+        "type": "integer"
+       },
+       "cells": {
+        "type": "integer"
+       },
+       "text": {
+        "type": "integer"
+       },
+       "subject": {
+        "type": "integer"
+       },
+       "note": {
+        "type": "integer"
+       },
+       "input_chars": {
+        "type": "integer"
+       },
+       "per_hour": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "file_mb",
+       "files",
+       "analyses",
+       "items",
+       "strategies",
+       "cells",
+       "text",
+       "subject",
+       "note",
+       "input_chars",
+       "per_hour"
+      ]
+     },
+     "accept": {
+      "type": "string",
+      "description": "첨부 파일 고르기 accept 값"
+     }
+    },
+    "required": [
+     "llm",
+     "tools",
+     "export",
+     "quads",
+     "tows",
+     "stages",
+     "sides",
+     "tbd",
+     "note",
+     "sample",
+     "limits",
+     "accept"
+    ]
+   },
+   "StrategyNotes": {
+    "type": "object",
+    "properties": {
+     "S": {
+      "type": "string"
+     },
+     "W": {
+      "type": "string"
+     },
+     "O": {
+      "type": "string"
+     },
+     "T": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "S",
+     "W",
+     "O",
+     "T"
+    ],
+    "description": "칸별 자유 메모(강점·약점·기회·위협)"
+   },
+   "StrategyBrief": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "created": {
+      "type": "string"
+     },
+     "updated": {
+      "type": "string"
+     },
+     "swot": {
+      "type": "integer",
+      "description": "SWOT 항목 수"
+     },
+     "tows": {
+      "type": "integer",
+      "description": "전략 수"
+     },
+     "logic": {
+      "type": "integer",
+      "description": "로직모델 단계 칸 수"
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "created",
+     "updated",
+     "swot",
+     "tows",
+     "logic"
+    ]
+   },
+   "StrategyList": {
+    "type": "object",
+    "properties": {
+     "items": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/StrategyBrief"
+      }
+     }
+    },
+    "required": [
+     "items"
+    ]
+   },
+   "StrategyCreate": {
+    "type": "object",
+    "properties": {
+     "title": {
+      "type": "string",
+      "maxLength": 80
+     },
+     "subject": {
+      "type": "string",
+      "maxLength": 6000
+     },
+     "notes": {
+      "$ref": "#/components/schemas/StrategyNotes"
+     },
+     "sample": {
+      "type": "boolean",
+      "description": "참이면 연습 예시(가상 사업)로 만듦"
+     }
+    },
+    "required": []
+   },
+   "StrategyItem": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "pattern": "^i[0-9a-f]{8}$",
+      "description": "항목 id(없거나 틀리면 서버가 새로 만듦)"
+     },
+     "text": {
+      "type": "string",
+      "maxLength": 300
+     },
+     "quote": {
+      "type": "string",
+      "description": "입력 원문 인용(src=input 일 때)"
+     },
+     "basis": {
+      "type": "string",
+      "description": "근거·이유(검토 제안이면 왜 고려할 만한지, '확인 필요' 표시 등)"
+     },
+     "src": {
+      "type": "string",
+      "enum": [
+       "input",
+       "suggest",
+       "user"
+      ],
+      "description": "input = 인용을 입력에서 서버가 확인함 · suggest = 검토 제안(입력에 근거 없음) · user = 사용자가 씀"
+     }
+    },
+    "required": [
+     "id",
+     "text",
+     "quote",
+     "basis",
+     "src"
+    ],
+    "description": "SWOT 항목·로직모델 가정·외부 요인"
+   },
+   "StrategyCell": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "pattern": "^i[0-9a-f]{8}$",
+      "description": "항목 id(없거나 틀리면 서버가 새로 만듦)"
+     },
+     "text": {
+      "type": "string",
+      "maxLength": 300
+     },
+     "quote": {
+      "type": "string",
+      "description": "입력 원문 인용(src=input 일 때)"
+     },
+     "basis": {
+      "type": "string",
+      "description": "근거·이유(검토 제안이면 왜 고려할 만한지, '확인 필요' 표시 등)"
+     },
+     "src": {
+      "type": "string",
+      "enum": [
+       "input",
+       "suggest",
+       "user"
+      ],
+      "description": "input = 인용을 입력에서 서버가 확인함 · suggest = 검토 제안(입력에 근거 없음) · user = 사용자가 씀"
+     },
+     "indicator": {
+      "type": "string",
+      "description": "지표 후보(산출·성과 단계만)"
+     },
+     "target": {
+      "type": "string",
+      "description": "목표 값 — 입력에 없는 수치는 '설정 필요'"
+     }
+    },
+    "required": [
+     "id",
+     "text",
+     "quote",
+     "basis",
+     "src"
+    ],
+    "description": "로직모델 단계 칸"
+   },
+   "StrategyStrategy": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "text": {
+      "type": "string"
+     },
+     "uses": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "활용한 SWOT 항목 id(짝 칸 것만 남음)"
+     }
+    },
+    "required": [
+     "id",
+     "text",
+     "uses"
+    ]
+   },
+   "StrategyPriority": {
+    "type": "object",
+    "properties": {
+     "key": {
+      "type": "string",
+      "description": "SO1·WT2 처럼 전략 종류 + 순번(없으면 빈 글)"
+     },
+     "text": {
+      "type": "string"
+     },
+     "why": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "key",
+     "text",
+     "why"
+    ]
+   },
+   "StrategySwot": {
+    "type": "object",
+    "properties": {
+     "S": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/StrategyItem"
+      }
+     },
+     "W": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/StrategyItem"
+      }
+     },
+     "O": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/StrategyItem"
+      }
+     },
+     "T": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/StrategyItem"
+      }
+     }
+    },
+    "required": [
+     "S",
+     "W",
+     "O",
+     "T"
+    ]
+   },
+   "StrategyTows": {
+    "type": "object",
+    "properties": {
+     "SO": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/StrategyStrategy"
+      }
+     },
+     "WO": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/StrategyStrategy"
+      }
+     },
+     "ST": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/StrategyStrategy"
+      }
+     },
+     "WT": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/StrategyStrategy"
+      }
+     }
+    },
+    "required": [
+     "SO",
+     "WO",
+     "ST",
+     "WT"
+    ]
+   },
+   "StrategyLogic": {
+    "type": "object",
+    "properties": {
+     "inputs": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/StrategyCell"
+      }
+     },
+     "activities": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/StrategyCell"
+      }
+     },
+     "outputs": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/StrategyCell"
+      }
+     },
+     "short": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/StrategyCell"
+      }
+     },
+     "mid": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/StrategyCell"
+      }
+     },
+     "impact": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/StrategyCell"
+      }
+     },
+     "assumptions": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/StrategyItem"
+      }
+     },
+     "external": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/StrategyItem"
+      }
+     }
+    },
+    "required": [
+     "inputs",
+     "activities",
+     "outputs",
+     "short",
+     "mid",
+     "impact",
+     "assumptions",
+     "external"
+    ]
+   },
+   "StrategyDoc": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "created": {
+      "type": "string"
+     },
+     "updated": {
+      "type": "string"
+     },
+     "subject": {
+      "type": "string"
+     },
+     "notes": {
+      "$ref": "#/components/schemas/StrategyNotes"
+     },
+     "files": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "name": {
+         "type": "string"
+        },
+        "chars": {
+         "type": "integer"
+        },
+        "added": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "id",
+        "name",
+        "chars",
+        "added"
+       ]
+      }
+     },
+     "target": {
+      "type": "string",
+      "description": "분석 대상·목적 한 줄(AI)"
+     },
+     "swot": {
+      "$ref": "#/components/schemas/StrategySwot"
+     },
+     "tows": {
+      "$ref": "#/components/schemas/StrategyTows"
+     },
+     "priorities": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/StrategyPriority"
+      }
+     },
+     "tows_basis": {
+      "type": "string",
+      "description": "전략을 만들 때의 SWOT 지문"
+     },
+     "tows_stale": {
+      "type": "boolean",
+      "description": "전략을 만든 뒤 SWOT 를 고침 → 다시 만들기 권함"
+     },
+     "logic": {
+      "$ref": "#/components/schemas/StrategyLogic"
+     },
+     "questions": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "insufficient": {
+      "anyOf": [
+       {
+        "type": "object",
+        "properties": {
+         "questions": {
+          "type": "array",
+          "items": {
+           "type": "string"
+          }
+         },
+         "example": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "questions",
+         "example"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "revs": {
+      "type": "object",
+      "properties": {
+       "meta": {
+        "type": "integer"
+       },
+       "swot": {
+        "type": "integer"
+       },
+       "tows": {
+        "type": "integer"
+       },
+       "logic": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "meta",
+       "swot",
+       "tows",
+       "logic"
+      ],
+      "description": "부분별 판 번호 — 저장할 때 그대로 보냄"
+     },
+     "gen": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "object",
+       "properties": {
+        "at": {
+         "type": "string"
+        },
+        "model": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "at",
+        "model"
+       ]
+      },
+      "description": "부분별 마지막 AI 초안 시각·모델"
+     },
+     "undo": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "enum": [
+        "swot",
+        "tows",
+        "logic"
+       ]
+      },
+      "description": "AI 가 덮기 전으로 되돌릴 수 있는 부분"
+     },
+     "job": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/StrategyJob"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "created",
+     "updated",
+     "subject",
+     "notes",
+     "files",
+     "target",
+     "swot",
+     "tows",
+     "priorities",
+     "tows_stale",
+     "logic",
+     "questions",
+     "insufficient",
+     "revs",
+     "undo"
+    ]
+   },
+   "StrategySave": {
+    "type": "object",
+    "properties": {
+     "part": {
+      "type": "string",
+      "enum": [
+       "meta",
+       "swot",
+       "tows",
+       "logic"
+      ]
+     },
+     "rev": {
+      "type": "integer",
+      "description": "받은 doc.revs[part]"
+     },
+     "data": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "meta: {title?, subject, notes, questions?} · swot: StrategySwot · tows: {tows: StrategyTows, priorities} · logic: StrategyLogic"
+     }
+    },
+    "required": [
+     "part",
+     "rev",
+     "data"
+    ]
+   },
+   "StrategyConflict": {
+    "type": "object",
+    "properties": {
+     "error": {
+      "type": "string"
+     },
+     "code": {
+      "type": "string",
+      "const": "conflict"
+     },
+     "doc": {
+      "$ref": "#/components/schemas/StrategyDoc"
+     }
+    },
+    "required": [
+     "error",
+     "code",
+     "doc"
+    ]
+   },
+   "StrategyFileUpload": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "maxLength": 120
+     },
+     "b64": {
+      "type": "string",
+      "description": "파일 base64(최대 20MB) — md·txt·docx·hwp·hwpx·pdf"
+     }
+    },
+    "required": [
+     "name",
+     "b64"
+    ]
+   },
+   "StrategyGenerate": {
+    "type": "object",
+    "properties": {
+     "part": {
+      "type": "string",
+      "enum": [
+       "swot",
+       "tows",
+       "logic",
+       "all"
+      ],
+      "default": "all"
+     }
+    },
+    "required": []
+   },
+   "StrategyUndo": {
+    "type": "object",
+    "properties": {
+     "part": {
+      "type": "string",
+      "enum": [
+       "swot",
+       "tows",
+       "logic"
+      ]
+     }
+    },
+    "required": [
+     "part"
+    ]
+   },
+   "StrategyJob": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "aid": {
+      "type": "string"
+     },
+     "part": {
+      "type": "string",
+      "enum": [
+       "swot",
+       "tows",
+       "logic",
+       "all"
+      ]
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "running",
+       "done",
+       "failed"
+      ]
+     },
+     "stage": {
+      "type": "string",
+      "enum": [
+       "swot",
+       "tows",
+       "logic",
+       "done"
+      ]
+     },
+     "done": {
+      "type": "integer"
+     },
+     "total": {
+      "type": "integer"
+     },
+     "msg": {
+      "type": "string"
+     },
+     "started": {
+      "type": "string"
+     },
+     "finished": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "elapsed": {
+      "type": "integer"
+     },
+     "note": {
+      "type": "string",
+      "description": "입력이 부족해 질문만 냈을 때 등"
+     }
+    },
+    "required": [
+     "id",
+     "aid",
+     "part",
+     "status",
+     "stage",
+     "done",
+     "total",
+     "msg",
+     "started",
+     "finished",
+     "error",
+     "elapsed",
+     "note"
+    ]
+   },
+   "StrategyJobWrap": {
+    "type": "object",
+    "properties": {
+     "job": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/StrategyJob"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "job"
+    ]
+   },
+   "StrategyKpiHandoff": {
+    "type": "object",
+    "properties": {
+     "to": {
+      "type": "string",
+      "const": "kpi-local"
+     },
+     "path": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string",
+      "description": "'전략 수립: <분석 이름> 논리모형'"
+     },
+     "question": {
+      "type": "string",
+      "description": "목표 한 줄(= logic-model.json 의 goal)"
+     },
+     "file": {
+      "type": "object",
+      "properties": {
+       "name": {
+        "type": "string",
+        "const": "logic-model.json"
+       },
+       "type": {
+        "type": "string",
+        "const": "application/json"
+       },
+       "text": {
+        "type": "string",
+        "description": "JSON {goal, context, items: [{level: 투입|활동|산출|단기성과|중기성과|영향, text}]} — kpi-local 과 정한 약속"
+       }
+      },
+      "required": [
+       "name",
+       "type",
+       "text"
+      ]
+     },
+     "count": {
+      "type": "integer",
+      "description": "items 수"
+     }
+    },
+    "required": [
+     "to",
+     "path",
+     "title",
+     "question",
+     "file",
+     "count"
+    ]
    }
   },
   "responses": {
@@ -57250,7 +59144,8 @@
     "meetplan-local",
     "labnote-local",
     "proposal-local",
-    "kpi-local"
+    "kpi-local",
+    "strategy-local"
    ]
   }
  ]

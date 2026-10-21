@@ -544,5 +544,24 @@
     "author": "dongju",
     "cat": "기획/전략",
     "icon": "Target"
+  },
+  {
+    "dir": "strategy-local",
+    "port": 8810,
+    "name": "SWOT·로직모델",
+    "desc": "사업·과제 설명(첨부 가능)으로 SWOT 표·SO/WO/ST/WT 교차 전략·로직모델(투입→활동→산출→성과→영향) 초안을 만들고, 칸을 끌어 옮기며 고친 뒤 PNG·PPTX·HWPX 로 내보내기",
+    "group": "기획",
+    "title": "SWOT·로직모델 — 사업 설명 → SWOT 표·교차 전략·로직모델",
+    "tags": [
+      "#SWOT",
+      "#로직모델",
+      "#교차전략",
+      "#성과체계"
+    ],
+    "added": "2026-10-21",
+    "dept": "인공지능응용연구실",
+    "author": "dongju",
+    "cat": "기획/전략",
+    "icon": "Lightbulb"
   }
 ]
