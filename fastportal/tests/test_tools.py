@@ -1,5 +1,5 @@
 """도구 시작 막기(tools.claim_start) — 동시에 눌러도 한 번만, start_s 동안 다시 못 켬, 중지하면 풀림."""
-import threading, unittest
+import json, os, tempfile, threading, unittest
 from unittest import mock
 
 from fastportal import jobs, tools
@@ -34,6 +34,19 @@ class ToolHeadersTest(unittest.TestCase):
         self.assertEqual(hd["X-Agent-Auth"], jobs.sign("kim", int(ts)), "도구가 확인하는 서명과 같음")
         with mock.patch.object(jobs.config, "TOOL_AUTH", False):
             self.assertEqual(jobs.tool_headers("kim"), {"X-Agent-User": "kim"})
+
+
+class AddToolTest(unittest.TestCase):
+    def test_writes_whole_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = os.path.join(d, "tools.json")
+            json.dump([{"dir": "a-local", "port": 9001}], open(f, "w"))
+            with mock.patch.object(tools.config, "TOOLS_FILE", f), mock.patch.dict(tools._TOOLS, {"m": None, "v": []}):
+                tools.add_tool({"dir": "b-local", "port": "9002", "title": "<b>"})
+                self.assertEqual([t["dir"] for t in json.load(open(f))], ["a-local", "b-local"])
+                self.assertEqual(os.listdir(d), ["tools.json"], "임시 파일이 남지 않음")
+                with self.assertRaises(ValueError):
+                    tools.add_tool({"dir": "c-local", "port": "9001"})   # 포트 겹침
 
 
 if __name__ == "__main__":

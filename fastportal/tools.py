@@ -175,7 +175,10 @@ def add_tool(t):
                "added": datetime.date.today().isoformat()}
         row["tags"] = ["#" + x for x in row["tags"]]
         ts.append(row)
-        json.dump(ts, open(config.TOOLS_FILE, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+        tmp = config.TOOLS_FILE + ".tmp"   # 다른 요청이 쓰는 중인 반쪽 파일을 읽거나, 쓰다 죽어 깨진 tools.json 으로 포털이 못 뜨지 않게
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(ts, f, ensure_ascii=False, indent=1)
+        os.replace(tmp, config.TOOLS_FILE)
         return row
 
 
