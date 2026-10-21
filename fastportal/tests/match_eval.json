@@ -411,6 +411,30 @@
    "expect": [
     "promptlab-local"
    ]
+  },
+  {
+   "q": "연구 산출물 찾기",
+   "expect": [
+    "yield-local"
+   ]
+  },
+  {
+   "q": "논문 거리",
+   "expect": [
+    "yield-local"
+   ]
+  },
+  {
+   "q": "git log 분석",
+   "expect": [
+    "yield-local"
+   ]
+  },
+  {
+   "q": "연구일지에서 성과 뽑기",
+   "expect": [
+    "yield-local"
+   ]
   }
  ],
  "hard": [
@@ -595,6 +619,12 @@
    "q": "한글 문서 내용 빨리 파악",
    "expect": [
     "kordoc-local"
+   ]
+  },
+  {
+   "q": "예전에 해 둔 실험 중에 아직 발표 안 한 것",
+   "expect": [
+    "yield-local"
    ]
   }
  ],

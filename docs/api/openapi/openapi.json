@@ -527,6 +527,26 @@
    "x-external-network": false,
    "x-external-network-note": "LLM 서버(내부)만 호출",
    "x-response-style": "json"
+  },
+  {
+   "name": "yield-local",
+   "description": "연구 산출물 발굴 — git 이력(zip·bundle·log 글)·연구일지에서 따로 낼 만한 중간 산출물 후보(LLM)를 찾고, 근거 인용을 서버가 원문에서 확인(없으면 탈락), 중복 합치기, 기존 산출물과 비교(bge-m3 + LLM: 이미 냄·일부·아직 안 냄), kordoc 초안 넘기기·Markdown 보고서. 문서: docs/api/yield-local.md",
+   "x-tool-id": "yield",
+   "x-name": "연구 산출물 발굴",
+   "x-description": "git 이력·연구일지 → 따로 낼 만한 중간 연구 산출물 후보 + 확인된 근거 + 기존 산출물 대비 판정",
+   "x-kind": "agent",
+   "x-kind-note": "읽기·근거 검증·합치기 일부·보고서·넘기기는 결정론 코드, LLM 은 후보 찾기·묶기·비교 판정(analyze 작업)에만",
+   "x-category": "연구/실험",
+   "x-category-note": "연구 기록에서 산출물 거리를 찾는 도구",
+   "x-entry": "/t/yield-local/",
+   "x-health-path": "/t/yield-local/healthz",
+   "x-long-running": true,
+   "x-long-running-note": "분석은 작업으로 받아 …/job 을 2초마다 확인(덩어리 1개 약 1분, 10개면 수 분)",
+   "x-docs-input": "files",
+   "x-docs-input-note": "zip·bundle·txt·md·docx·hwp·hwpx·pdf 를 base64 JSON 으로(또는 붙여 넣은 글)",
+   "x-external-network": false,
+   "x-external-network-note": "LLM·임베딩 서버(내부)만 호출",
+   "x-response-style": "json"
   }
  ],
  "paths": {
@@ -25487,6 +25507,727 @@
      }
     }
    }
+  },
+  "/t/yield-local/api/health": {
+   "get": {
+    "tags": [
+     "yield-local"
+    ],
+    "operationId": "yieldHealth",
+    "summary": "살아 있는지",
+    "description": "가벼운 확인(LLM 연결 여부 포함).",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/YieldHealth"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/yield-local/api/meta": {
+   "get": {
+    "tags": [
+     "yield-local"
+    ],
+    "operationId": "yieldMeta",
+    "summary": "LLM·임베딩·자료 읽기 상태, 종류·형태·판정, 안내 문구, 제한",
+    "description": "LLM 확인은 60초 기억. llm.ok 가 거짓이면 화면은 '후보 찾기'를 끄고 자료 올리기·결과 보기·내보내기만. notice 는 새로움 판단 범위 안내 — 화면에 늘 보임.",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/YieldMeta"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/yield-local/api/projects": {
+   "get": {
+    "tags": [
+     "yield-local"
+    ],
+    "operationId": "yieldProjects",
+    "summary": "과제 목록(최근 고친 순)",
+    "description": "사용자별(X-Agent-User → WORKSPACE/u/<id>/projects/).",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/YieldProjects"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "yield-local"
+    ],
+    "operationId": "yieldProjectCreate",
+    "summary": "과제 만들기 · 연습 과제",
+    "description": "sample: true 면 가상 과제 heat1d(git log 30커밋·연구일지·논문 초안)를 넣은 연습 과제. 사용자당 과제 30개.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/YieldCreate"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "만듦",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/YieldProject"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/yield-local/api/projects/{pid}": {
+   "get": {
+    "tags": [
+     "yield-local"
+    ],
+    "operationId": "yieldProject",
+    "summary": "과제 하나(자료·마지막 결과·작업)",
+    "description": "result 는 마지막 분석 결과(없으면 null), job 은 이 서버가 기억하는 마지막 작업(재시작하면 null).",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "과제 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/YieldProject"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "yield-local"
+    ],
+    "operationId": "yieldProjectRename",
+    "summary": "과제 이름 바꾸기",
+    "description": "",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "과제 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/YieldRename"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/YieldProject"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/yield-local/api/projects/{pid}/delete": {
+   "post": {
+    "tags": [
+     "yield-local"
+    ],
+    "operationId": "yieldProjectDelete",
+    "summary": "과제 지우기",
+    "description": "자료·결과 모두. 분석이 도는 중이면 409.",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "과제 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ok"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "분석 중(code: busy)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/yield-local/api/projects/{pid}/sources": {
+   "post": {
+    "tags": [
+     "yield-local"
+    ],
+    "operationId": "yieldSourceAdd",
+    "summary": "자료 올리기(git 이력·연구일지·기존 산출물)",
+    "description": "git: zip(.git 포함)·git bundle 은 서버가 임시 폴더에서 git log 를 돌려 읽음(올린 저장소의 설정은 무시 — 외부 diff·서명 프로그램 실행 막기, zip 경로 탈출·심볼릭 링크 막기), log 글은 그대로. 커밋 1,500개까지(넘으면 최근 것). log: 날짜 줄(## 2026-04-06·2026.04.06·2026년 4월 6일)로 항목을 나눔(ref '파일#L줄'). output: 600자 안팎 구절(P번호). 문서 변환: pdf 는 pdftotext, docx·hwp·hwpx 는 kordoc. 같은 이름의 일지·산출물은 ' (2)' 를 붙임.",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "과제 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/YieldSourceUpload"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "만듦",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/YieldSource"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "413": {
+      "description": "파일이 너무 큼(code: too_large)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/yield-local/api/projects/{pid}/sources/{sid}/delete": {
+   "post": {
+    "tags": [
+     "yield-local"
+    ],
+    "operationId": "yieldSourceDelete",
+    "summary": "자료 빼기",
+    "description": "",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "과제 id"
+     },
+     {
+      "name": "sid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{8}$"
+      },
+      "description": "자료 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/YieldProject"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/yield-local/api/projects/{pid}/analyze": {
+   "post": {
+    "tags": [
+     "yield-local"
+    ],
+    "operationId": "yieldAnalyze",
+    "summary": "분석 시작(작업)",
+    "description": "① 시간순 덩어리(12,000자 × 10개)마다 LLM 이 후보 JSON(스키마 안내 디코딩) ② 근거 ref·인용을 서버가 원문에서 확인(비슷함 0.85 이상 + 인용 속 숫자가 원문에 있어야, 확인된 근거가 없으면 후보 탈락·stats.dropped) ③ 같은 후보 합치기(임베딩·제목·같은 근거 + LLM 묶음) ④ 기존 산출물 구절 검색(bge-m3, TOP 4) + LLM 판정(이미 냄·일부·아직 안 냄, 근거 구절 없는 '이미 냄·일부'는 '아직 안 냄'으로 낮추고 note). 202 로 작업을 돌려주고 …/job 을 2초마다 확인. 사용자당 동시 1·1시간 6번, 도구 전체 동시 2.",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "과제 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/YieldAnalyzeRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "202": {
+      "description": "시작함",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/YieldJobWrap"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "이미 분석 중이거나 자리가 없음(code: busy)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "503": {
+      "description": "LLM 이 연결되지 않음(code: unavailable)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    },
+    "x-llm": true,
+    "x-long-running": true
+   }
+  },
+  "/t/yield-local/api/projects/{pid}/job": {
+   "get": {
+    "tags": [
+     "yield-local"
+    ],
+    "operationId": "yieldJob",
+    "summary": "분석 작업 상태",
+    "description": "stage: mine(덩어리 i/N)·verify·merge·novelty(묶음 i/N)·done. 메모리에만(서버 재시작 시 null).",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "과제 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/YieldJobWrap"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/yield-local/api/projects/{pid}/item": {
+   "get": {
+    "tags": [
+     "yield-local"
+    ],
+    "operationId": "yieldItem",
+    "summary": "근거 항목 원문",
+    "description": "커밋(메시지·변경 파일·줄인 diff)·일지 항목·산출물 구절.",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "과제 id"
+     },
+     {
+      "name": "ref",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "maxLength": 200
+      },
+      "description": "항목 ref(커밋 해시 12자·'파일#L줄'·P번호)"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/YieldItem"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/yield-local/api/projects/{pid}/report.md": {
+   "get": {
+    "tags": [
+     "yield-local"
+    ],
+    "operationId": "yieldReport",
+    "summary": "Markdown 보고서 내려받기",
+    "description": "안내 문구(새로움은 올린 산출물하고만 비교)·통계(탈락 수 포함)·후보(주장·이유·근거·비교 구절·근거 원문 발췌)·탈락 목록. ids 를 주면 그 후보만. Content-Disposition attachment.",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "과제 id"
+     },
+     {
+      "name": "ids",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "description": "쉼표로 K1,K2"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "파일",
+      "content": {
+       "text/markdown": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
+  "/t/yield-local/api/projects/{pid}/handoff": {
+   "post": {
+    "tags": [
+     "yield-local"
+    ],
+    "operationId": "yieldHandoff",
+    "summary": "초안 쓰기(kordoc)로 넘길 자료",
+    "description": "아직 안 냄·일부 후보(3개까지) → kordoc '공문서 초안 → HWPX' 화면에 채울 요청 글(제안 형태별 구성, 지어내기·문헌 대비 새로움 주장 금지)과 자료 파일(Markdown). 포털 화면이 받는 쪽 화면에 채우고 실행은 사용자가 누름. 이미 냄 후보는 400.",
+    "parameters": [
+     {
+      "name": "pid",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{10}$"
+      },
+      "description": "과제 id"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/YieldHandoffRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/YieldHandoff"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
   }
  },
  "components": {
@@ -44370,6 +45111,1105 @@
       ]
      }
     }
+   },
+   "YieldHealth": {
+    "type": "object",
+    "properties": {
+     "ok": {
+      "type": "boolean"
+     },
+     "llm": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "ok",
+     "llm"
+    ]
+   },
+   "YieldMeta": {
+    "type": "object",
+    "properties": {
+     "llm": {
+      "type": "object",
+      "properties": {
+       "ok": {
+        "type": "boolean"
+       },
+       "model": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "ok",
+       "model"
+      ]
+     },
+     "embed": {
+      "type": "object",
+      "properties": {
+       "ok": {
+        "type": "boolean"
+       },
+       "model": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "ok",
+       "model"
+      ],
+      "description": "임베딩(bge-m3) — 꺼져 있으면 글자 2-gram 비교"
+     },
+     "tools": {
+      "type": "object",
+      "properties": {
+       "git": {
+        "type": "boolean"
+       },
+       "pdftotext": {
+        "type": "boolean"
+       },
+       "kordoc": {
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "git",
+       "pdftotext",
+       "kordoc"
+      ],
+      "description": "자료 읽기 프로그램(git 없으면 log 글만, kordoc 없으면 hwp 불가)"
+     },
+     "notice": {
+      "type": "string",
+      "description": "새로움 판단 범위 안내(올린 산출물하고만 비교 — 문헌 조사 아님). 화면에 늘 보임"
+     },
+     "types": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string",
+         "enum": [
+          "formula",
+          "method",
+          "negative-result",
+          "dataset",
+          "tool",
+          "analysis",
+          "other"
+         ]
+        },
+        "name": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "id",
+        "name"
+       ]
+      }
+     },
+     "forms": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "enum": [
+        "논문 short paper",
+        "기술보고서",
+        "특허 아이디어",
+        "학회 발표",
+        "내부 메모"
+       ]
+      }
+     },
+     "statuses": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "enum": [
+        "이미 냄",
+        "일부",
+        "아직 안 냄"
+       ]
+      }
+     },
+     "handoff": {
+      "type": "object",
+      "properties": {
+       "to": {
+        "type": "string",
+        "const": "kordoc-local"
+       },
+       "ids_max": {
+        "type": "integer"
+       },
+       "forms": {
+        "type": "object",
+        "additionalProperties": {
+         "type": "string",
+         "enum": [
+          "보고서",
+          "개조식"
+         ]
+        },
+        "description": "제안 형태 → kordoc 프리셋"
+       }
+      },
+      "required": [
+       "to",
+       "ids_max",
+       "forms"
+      ]
+     },
+     "limits": {
+      "type": "object",
+      "properties": {
+       "file_mb": {
+        "type": "integer"
+       },
+       "zip_mb": {
+        "type": "integer"
+       },
+       "commits": {
+        "type": "integer"
+       },
+       "projects": {
+        "type": "integer"
+       },
+       "sources": {
+        "type": "integer"
+       },
+       "items": {
+        "type": "integer"
+       },
+       "analyses_per_hour": {
+        "type": "integer"
+       },
+       "chunk_chars": {
+        "type": "integer"
+       },
+       "max_chunks": {
+        "type": "integer"
+       },
+       "quote_min": {
+        "type": "number"
+       }
+      },
+      "required": [
+       "file_mb",
+       "zip_mb",
+       "commits",
+       "projects",
+       "sources",
+       "items",
+       "analyses_per_hour",
+       "chunk_chars",
+       "max_chunks",
+       "quote_min"
+      ]
+     },
+     "accept": {
+      "type": "object",
+      "properties": {
+       "git": {
+        "type": "string"
+       },
+       "log": {
+        "type": "string"
+       },
+       "output": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "git",
+       "log",
+       "output"
+      ],
+      "description": "파일 고르기 accept 값"
+     }
+    },
+    "required": [
+     "llm",
+     "embed",
+     "tools",
+     "notice",
+     "types",
+     "forms",
+     "statuses",
+     "handoff",
+     "limits",
+     "accept"
+    ]
+   },
+   "YieldProjectBrief": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "created": {
+      "type": "string"
+     },
+     "updated": {
+      "type": "string"
+     },
+     "sources": {
+      "type": "object",
+      "properties": {
+       "git": {
+        "type": "integer"
+       },
+       "log": {
+        "type": "integer"
+       },
+       "output": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "git",
+       "log",
+       "output"
+      ]
+     },
+     "analyzed": {
+      "type": "string",
+      "description": "마지막 분석 시각(UTC ISO, 없으면 빈 글)"
+     },
+     "candidates": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "created",
+     "updated",
+     "sources",
+     "analyzed",
+     "candidates"
+    ]
+   },
+   "YieldProjects": {
+    "type": "object",
+    "properties": {
+     "items": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/YieldProjectBrief"
+      }
+     }
+    },
+    "required": [
+     "items"
+    ]
+   },
+   "YieldCreate": {
+    "type": "object",
+    "properties": {
+     "title": {
+      "type": "string",
+      "maxLength": 80
+     },
+     "sample": {
+      "type": "boolean",
+      "description": "참이면 연습 과제(가상 heat1d: git log·연구일지·논문 초안)"
+     }
+    },
+    "required": []
+   },
+   "YieldRename": {
+    "type": "object",
+    "properties": {
+     "title": {
+      "type": "string",
+      "maxLength": 80
+     }
+    },
+    "required": [
+     "title"
+    ]
+   },
+   "YieldSourceSummary": {
+    "type": "object",
+    "properties": {
+     "items": {
+      "type": "integer"
+     },
+     "commits": {
+      "type": "integer"
+     },
+     "via": {
+      "type": "string",
+      "enum": [
+       "zip",
+       "bundle",
+       "log"
+      ]
+     },
+     "from": {
+      "type": "string"
+     },
+     "to": {
+      "type": "string"
+     },
+     "truncated": {
+      "type": "boolean"
+     },
+     "entries": {
+      "type": "integer"
+     },
+     "dated": {
+      "type": "integer"
+     },
+     "chars": {
+      "type": "integer"
+     },
+     "passages": {
+      "type": "integer"
+     },
+     "pages": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "items"
+    ],
+    "description": "git: commits·via·from·to·truncated / log: entries·dated·from·to·chars / output: passages·chars·pages"
+   },
+   "YieldSource": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "git",
+       "log",
+       "output"
+      ]
+     },
+     "name": {
+      "type": "string"
+     },
+     "added": {
+      "type": "string"
+     },
+     "summary": {
+      "$ref": "#/components/schemas/YieldSourceSummary"
+     }
+    },
+    "required": [
+     "id",
+     "kind",
+     "name",
+     "added",
+     "summary"
+    ]
+   },
+   "YieldSourceUpload": {
+    "type": "object",
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "git",
+       "log",
+       "output"
+      ]
+     },
+     "name": {
+      "type": "string",
+      "maxLength": 120
+     },
+     "b64": {
+      "type": "string",
+      "description": "파일 base64(최대 40MB)"
+     },
+     "text": {
+      "type": "string",
+      "description": "붙여 넣은 글(git log -p --stat 등, 최대 8MB)"
+     }
+    },
+    "required": [
+     "kind"
+    ],
+    "description": "b64 나 text 중 하나. git: zip(.git 포함)·git bundle·log 글 / log·output: md·txt·docx·hwp·hwpx·hml·pdf"
+   },
+   "YieldJob": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "pid": {
+      "type": "string"
+     },
+     "stage_req": {
+      "type": "string",
+      "enum": [
+       "all",
+       "novelty"
+      ]
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "running",
+       "done",
+       "failed"
+      ]
+     },
+     "stage": {
+      "type": "string",
+      "enum": [
+       "start",
+       "mine",
+       "verify",
+       "merge",
+       "novelty",
+       "done"
+      ]
+     },
+     "done": {
+      "type": "integer"
+     },
+     "total": {
+      "type": "integer"
+     },
+     "msg": {
+      "type": "string"
+     },
+     "started": {
+      "type": "string"
+     },
+     "finished": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "elapsed": {
+      "type": "integer"
+     },
+     "stats": {
+      "$ref": "#/components/schemas/YieldStats"
+     }
+    },
+    "required": [
+     "id",
+     "status",
+     "stage",
+     "done",
+     "total",
+     "msg",
+     "started",
+     "finished",
+     "error",
+     "elapsed"
+    ]
+   },
+   "YieldJobWrap": {
+    "type": "object",
+    "properties": {
+     "job": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/YieldJob"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "job"
+    ]
+   },
+   "YieldEvidence": {
+    "type": "object",
+    "properties": {
+     "source": {
+      "type": "string",
+      "enum": [
+       "commit",
+       "log"
+      ]
+     },
+     "ref": {
+      "type": "string",
+      "description": "LLM 이 쓴 참조"
+     },
+     "item": {
+      "type": "string",
+      "description": "서버가 확인한 항목(커밋 해시 12자·'파일#L줄')"
+     },
+     "quote": {
+      "type": "string"
+     },
+     "score": {
+      "type": "number",
+      "description": "인용 일치(1 = 그대로, 기준 0.85 이상만 남음)"
+     },
+     "date": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "ok": {
+      "type": "boolean"
+     },
+     "why": {
+      "type": "string"
+     },
+     "ref_fixed": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "source",
+     "ref",
+     "item",
+     "quote",
+     "score",
+     "ok"
+    ]
+   },
+   "YieldNovelty": {
+    "type": "object",
+    "properties": {
+     "status": {
+      "type": "string",
+      "enum": [
+       "이미 냄",
+       "일부",
+       "아직 안 냄"
+      ]
+     },
+     "compared": {
+      "type": "boolean",
+      "description": "거짓 = 비교할 산출물이 없거나 판정 실패"
+     },
+     "passage": {
+      "type": "string",
+      "description": "근거 구절 P번호(아직 안 냄이면 빈 글)"
+     },
+     "passage_label": {
+      "type": "string"
+     },
+     "passage_text": {
+      "type": "string"
+     },
+     "score": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "reason": {
+      "type": "string"
+     },
+     "note": {
+      "type": "string",
+      "description": "근거 없는 판정을 낮췄을 때 등"
+     },
+     "hits": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "ref": {
+         "type": "string"
+        },
+        "label": {
+         "type": "string"
+        },
+        "score": {
+         "type": "number"
+        }
+       },
+       "required": [
+        "ref",
+        "label",
+        "score"
+       ]
+      }
+     }
+    },
+    "required": [
+     "status",
+     "compared",
+     "passage",
+     "reason",
+     "note"
+    ]
+   },
+   "YieldCandidate": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "pattern": "^K\\d+$"
+     },
+     "title": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "formula",
+       "method",
+       "negative-result",
+       "dataset",
+       "tool",
+       "analysis",
+       "other"
+      ]
+     },
+     "claim": {
+      "type": "string"
+     },
+     "why": {
+      "type": "string"
+     },
+     "form": {
+      "type": "string",
+      "enum": [
+       "논문 short paper",
+       "기술보고서",
+       "특허 아이디어",
+       "학회 발표",
+       "내부 메모"
+      ]
+     },
+     "evidence": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/YieldEvidence"
+      }
+     },
+     "evidence_dropped": {
+      "type": "integer",
+      "description": "확인하지 못해 뺀 근거 수"
+     },
+     "merged": {
+      "type": "integer",
+      "description": "합친 후보 수"
+     },
+     "chunks": {
+      "type": "array",
+      "items": {
+       "type": "integer"
+      }
+     },
+     "novelty": {
+      "$ref": "#/components/schemas/YieldNovelty"
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "type",
+     "claim",
+     "why",
+     "form",
+     "evidence",
+     "novelty"
+    ]
+   },
+   "YieldDropped": {
+    "type": "object",
+    "properties": {
+     "title": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string"
+     },
+     "claim": {
+      "type": "string"
+     },
+     "why": {
+      "type": "string"
+     },
+     "evidence": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/YieldEvidence"
+      }
+     }
+    },
+    "required": [
+     "title",
+     "type",
+     "claim",
+     "why",
+     "evidence"
+    ]
+   },
+   "YieldStats": {
+    "type": "object",
+    "properties": {
+     "raw": {
+      "type": "integer",
+      "description": "LLM 이 낸 후보 수"
+     },
+     "verified": {
+      "type": "integer"
+     },
+     "kept": {
+      "type": "integer",
+      "description": "합친 뒤 후보 수"
+     },
+     "dropped": {
+      "type": "integer",
+      "description": "확인된 근거가 없어 뺀 후보 수"
+     },
+     "evidence": {
+      "type": "integer"
+     },
+     "evidence_ok": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "raw",
+     "verified",
+     "kept",
+     "dropped",
+     "evidence",
+     "evidence_ok"
+    ]
+   },
+   "YieldResult": {
+    "type": "object",
+    "properties": {
+     "at": {
+      "type": "string"
+     },
+     "model": {
+      "type": "string"
+     },
+     "chunks": {
+      "type": "integer"
+     },
+     "chunk_fails": {
+      "type": "integer"
+     },
+     "skipped_items": {
+      "type": "integer",
+      "description": "덩어리 상한을 넘어 읽지 않은 오래된 항목 수"
+     },
+     "outputs": {
+      "type": "integer",
+      "description": "비교한 산출물 파일 수"
+     },
+     "embed": {
+      "type": "boolean"
+     },
+     "merge_embed": {
+      "type": "boolean"
+     },
+     "merge_llm": {
+      "type": "boolean"
+     },
+     "novelty_errors": {
+      "type": "integer"
+     },
+     "novelty_at": {
+      "type": "string"
+     },
+     "candidates": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/YieldCandidate"
+      }
+     },
+     "dropped": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/YieldDropped"
+      }
+     },
+     "stats": {
+      "$ref": "#/components/schemas/YieldStats"
+     }
+    },
+    "required": [
+     "at",
+     "model",
+     "chunks",
+     "outputs",
+     "candidates",
+     "dropped",
+     "stats"
+    ]
+   },
+   "YieldProject": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "created": {
+      "type": "string"
+     },
+     "updated": {
+      "type": "string"
+     },
+     "sources": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/YieldSource"
+      }
+     },
+     "result": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/YieldResult"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "job": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/YieldJob"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "created",
+     "updated",
+     "sources",
+     "result",
+     "job"
+    ]
+   },
+   "YieldAnalyzeRequest": {
+    "type": "object",
+    "properties": {
+     "stage": {
+      "type": "string",
+      "enum": [
+       "all",
+       "novelty"
+      ],
+      "default": "all",
+      "description": "all = 후보 찾기부터, novelty = 기존 산출물과 다시 비교만(산출물을 더 올린 뒤)"
+     }
+    },
+    "required": []
+   },
+   "YieldItem": {
+    "type": "object",
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "commit",
+       "log",
+       "output"
+      ]
+     },
+     "ref": {
+      "type": "string"
+     },
+     "date": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "title": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "label": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "file": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "text": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind",
+     "ref",
+     "text"
+    ]
+   },
+   "YieldHandoffRequest": {
+    "type": "object",
+    "properties": {
+     "ids": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "pattern": "^K\\d+$"
+      },
+      "minItems": 1,
+      "maxItems": 3
+     }
+    },
+    "required": [
+     "ids"
+    ]
+   },
+   "YieldHandoff": {
+    "type": "object",
+    "properties": {
+     "to": {
+      "type": "string",
+      "const": "kordoc-local"
+     },
+     "path": {
+      "type": "string",
+      "description": "받는 화면(라우터 경로)"
+     },
+     "params": {
+      "type": "object",
+      "properties": {
+       "task": {
+        "type": "string",
+        "const": "draft"
+       },
+       "preset": {
+        "type": "string",
+        "enum": [
+         "보고서",
+         "개조식"
+        ]
+       }
+      },
+      "required": [
+       "task",
+       "preset"
+      ]
+     },
+     "form": {
+      "type": "string",
+      "enum": [
+       "논문 short paper",
+       "기술보고서",
+       "특허 아이디어",
+       "학회 발표",
+       "내부 메모"
+      ]
+     },
+     "question": {
+      "type": "string",
+      "description": "kordoc 요청 칸에 넣을 글"
+     },
+     "file": {
+      "type": "object",
+      "properties": {
+       "name": {
+        "type": "string"
+       },
+       "text": {
+        "type": "string",
+        "description": "자료 파일(Markdown, 11,000자 안 — kordoc 이 앞 12,000자를 읽음)"
+       }
+      },
+      "required": [
+       "name",
+       "text"
+      ]
+     },
+     "ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "chars": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "to",
+     "path",
+     "params",
+     "form",
+     "question",
+     "file",
+     "ids",
+     "chars"
+    ]
    }
   },
   "responses": {
@@ -44549,7 +46389,8 @@
     "padong-local",
     "agent-builder-local",
     "codingtest-local",
-    "promptlab-local"
+    "promptlab-local",
+    "yield-local"
    ]
   }
  ]
