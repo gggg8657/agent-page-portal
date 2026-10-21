@@ -420,6 +420,11 @@ def manage_post(ctx, c, p, req):
             b = auth.backend()
             if not b.supports_password_change:
                 raise auth.Unsupported(b.guide)
+            # 새 PIN 을 응답으로 주므로 관리자 본인 PIN 을 한 번 더 — 같은 출처 도구의 XSS 가 관리자 화면에서 이 API 를 불러 계정을 가져가지 못하게.
+            # 로컬 토큰(스크립트)은 계정·PIN 이 없음
+            if not ctx.local_owner() and (sessions.limited(c, uid, ctx.client or "") or not b.verify(c, uid, str(req.get("my_pin", "")))):
+                sessions.add_fail(uid, ctx.client or "")
+                raise ValueError("내 PIN 이 틀립니다 — PIN 초기화는 관리자 PIN 을 한 번 더 확인합니다 (10분에 5번까지)")
             pin = f"{secrets.randbelow(10**6):06d}"
             b.set_password(c, u, pin); sessions.drop_user_sessions(c, u); audit(c, uid, "pin_reset", u)
             return ctx.send({"ok": True, "pin": pin})

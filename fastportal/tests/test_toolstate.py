@@ -98,6 +98,13 @@ class HTTP(unittest.TestCase):
         except ValueError:
             return st, b
 
+    def test_admin_reset_needs_my_pin(self):
+        self.P.login("carol", signup=True)
+        self.assertEqual(self.j("POST", "/api/admin/reset", self.boss, {"uid": "carol"})[0], 400, "내 PIN 없이는 거절")
+        self.assertEqual(self.j("POST", "/api/admin/reset", self.boss, {"uid": "carol", "my_pin": "0000"})[0], 400)
+        st, b = self.j("POST", "/api/admin/reset", self.boss, {"uid": "carol", "my_pin": "4821"})
+        self.assertEqual(st, 200); self.assertRegex(b["pin"], r"^[0-9]{6}$")
+
     def dirs(self, cookie):
         return [t["dir"] for t in self.j("GET", "/api/tools", cookie)[1]["tools"]]
 

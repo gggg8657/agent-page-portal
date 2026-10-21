@@ -2359,7 +2359,7 @@
     "operationId": "portalAdminReset",
     "summary": "PIN 초기화(무작위 6자리, 응답에 한 번만)",
     "x-permission": "admin",
-    "description": "관리자만(아니면 403). 감사 기록에 남음.",
+    "description": "관리자만(아니면 403). 관리자 본인 PIN(my_pin)을 한 번 더 확인 — 틀리면 400, 10분에 5번까지(로컬 토큰 요청은 필요 없음). 감사 기록에 남음.",
     "requestBody": {
      "required": true,
      "content": {
@@ -2372,6 +2372,10 @@
         "properties": {
          "uid": {
           "type": "string"
+         },
+         "my_pin": {
+          "type": "string",
+          "description": "관리자 본인 PIN(확인용)"
          }
         }
        }

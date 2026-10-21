@@ -136,8 +136,8 @@ async function viewAdmin() {
       (j.audit.map(a => `<tr><td>${T(a.ts)}</td><td>${E(a.actor)}</td><td>${E(a.action)}</td><td>${E(a.target)}</td><td>${E(a.detail)}</td></tr>`).join('') || '<tr><td colspan=5 class="empty">없음</td></tr>') + '</table></div></div>';
 }
 async function setHead(op, d, uid) { if (op === 'revoke' && !confirm(`${uid} 의 ${d} 부서장 권한을 회수할까요?`)) return; const j = await api('/api/admin/head', { op, dept: d, uid }); if (j.error) alert(j.error); render(); }
-async function resetPin(uid) { if (!confirm(`${uid} 의 PIN 을 무작위 6자리로 초기화할까요? (그 계정의 로그인은 모두 풀립니다)`)) return;
-  const j = await api('/api/admin/reset', { uid }); const m = document.getElementById('userMsg');
+async function resetPin(uid) { const my_pin = prompt(`${uid} 의 PIN 을 무작위 6자리로 초기화합니다 (그 계정의 로그인은 모두 풀립니다).\n확인을 위해 내(관리자) PIN 을 입력하세요:`, ''); if (my_pin === null) return;
+  const j = await api('/api/admin/reset', { uid, my_pin }); const m = document.getElementById('userMsg');
   if (msg(m, j, '')) m.innerHTML = `${E(uid)} 새 PIN: <span class="pin">${E(j.pin)}</span> — 지금 한 번만 보입니다. 본인에게 전하고 계정 설정에서 바꾸게 하세요.`; }
 async function disable(uid, off) { if (!confirm(`${uid} 계정을 ${off ? '정지' : '정지 해제'}할까요?`)) return; const j = await api('/api/admin/disable', { uid, disabled: off }); if (j.error) alert(j.error); render(); }
 async function acct(op, uid) {
