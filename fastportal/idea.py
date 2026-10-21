@@ -14,7 +14,7 @@
 API: POST /api/idea/plan {text, route?, id?} · GET /api/idea/recent · GET /api/idea/<id> · POST /api/idea/made {id, kind, ref} · /api/idea/delete {id} · /api/idea/zip {id}"""
 import ast, io, json, os, re, secrets, sys, threading, time, urllib.error, urllib.request, zipfile
 
-from . import accounts, community, config, flows, tools, toolstate
+from . import accounts, community, config, flows, pkgindex, tools, toolstate
 from .db import db, own_row
 
 ROUTES = ("existing", "builder", "flow", "newtool")
@@ -491,7 +491,6 @@ def make_flow(text):
 
 
 # ── 2-c) 새 도구(데모 — 실행 안 함) ────────────────────────────────────────
-_PKG = {"t": 0.0, "v": None, "src": ""}
 IMPORT_DIST = {"sklearn": "scikit-learn", "cv2": "opencv-python", "PIL": "pillow", "yaml": "pyyaml", "bs4": "beautifulsoup4", "dateutil": "python-dateutil",
                "docx": "python-docx", "pptx": "python-pptx", "skimage": "scikit-image", "Crypto": "pycryptodome", "dotenv": "python-dotenv",
                "jwt": "pyjwt", "serial": "pyserial", "magic": "python-magic", "fitz": "pymupdf", "attr": "attrs", "google": "protobuf"}
@@ -500,33 +499,14 @@ SUGGEST = ["numpy", "pandas", "scipy", "matplotlib", "openpyxl", "xlrd", "scikit
            "beautifulsoup4", "regex", "tqdm", "orjson"]
 
 
-def norm(n):
-    return re.sub(r"[-_.]+", "-", str(n).strip().lower())
-
-
 def closed_packages():
-    """폐쇄망에서 받을 수 있는 패키지 이름(정규화) 집합과 출처. 포털 pkg_index 표(fastportal/pkgindex.py — 관리자가 갱신)가 있으면 그것,
-    없거나 비면 _data/pkg-index/closed-pypi-*.txt 최신 파일(대체)"""
-    if _PKG["v"] is not None and time.time() - _PKG["t"] < 300:
-        return _PKG["v"], _PKG["src"]
-    names, src = set(), ""
-    try:
-        from . import pkgindex
-        with db() as c:
-            if c.execute("SELECT 1 FROM sqlite_master WHERE name='pkg_index'").fetchone():
-                names = {r[0] for r in c.execute("SELECT name FROM pkg_index")}
-                src = (pkgindex.meta(c).get("source") or "pkg_index") if names else ""
-    except ImportError:
-        pass
-    if not names:
-        d = os.path.join(config.DATA, "pkg-index")
-        fs = sorted(f for f in (os.listdir(d) if os.path.isdir(d) else []) if re.fullmatch(r"closed-pypi-[0-9-]+\.txt", f))
-        if fs:
-            with open(os.path.join(d, fs[-1]), encoding="utf-8") as fh:
-                names = {norm(x.split("==")[0].split()[0]) for x in fh if x.strip() and not x.startswith("#")}
-            src = fs[-1]
-    _PKG.update(t=time.time(), v=names, src=src or "목록 없음")
-    return _PKG["v"], _PKG["src"]
+    """폐쇄망에서 받을 수 있는 패키지 이름(정규화) 집합과 출처 — 제출 검사와 같은 포털 pkg_index 표(pkgindex.py: 관리자가 올림,
+    비어 있으면 _data/pkg-index 의 최신 목록 파일로 채움). 캐시 없음 — 관리자가 목록을 올리면 다음 판정부터 바로"""
+    with db() as c:
+        pkgindex.init(c)
+        names = {r[0] for r in c.execute("SELECT name FROM pkg_index")}
+        src = (pkgindex.meta(c).get("source") or "pkg_index") if names else ""
+    return names, src or "목록 없음"
 
 
 def newtool_schema(groups):
@@ -549,7 +529,7 @@ def newtool_schema(groups):
 def make_newtool(text):
     closed, src = closed_packages()
     q = _tokens(text)
-    offer = [p for p in SUGGEST if norm(p) in closed] + sorted(p for p in closed if any(t in p for t in q if re.fullmatch(r"[a-z0-9]{3,}", t)))[:30]
+    offer = [p for p in SUGGEST if pkgindex.norm(p) in closed] + sorted(p for p in closed if any(t in p for t in q if re.fullmatch(r"[a-z0-9]{3,}", t)))[:30]
     groups = sorted({t.get("group") for t in tools.tools() if t.get("group") and not t.get("hidden") and not toolstate.is_off(t["dir"])} | {"기타"})
     system = ("너는 사내 포털 도구 개발 도우미다. 사용자 아이디어로 '<이름>-local' 포털 도구의 처리 코드를 쓴다. 서버 뼈대(HTTP·포털 인증·/healthz·화면)는 이미 있고, "
               "너는 다음만 쓴다:\n- logic: 파이썬 3.11 코드를 줄 단위 목록으로(한 항목 = 코드 한 줄, 들여쓰기 공백 그대로, 빈 줄은 \"\"). f-string 안에서 바깥과 같은 따옴표를 쓰지 않는다. 반드시 `def process(inputs: dict) -> dict:` 를 정의한다. inputs 는 fields 의 key → 글(문자열; number 도 글, file_text 는 파일 내용 글). "
@@ -656,11 +636,11 @@ def package_check(logic, declared, closed, src):
         if m in std:
             items.append({"name": m, "status": "stdlib", "from": "import"})
             continue
-        dist = norm(IMPORT_DIST.get(m, m))
+        dist = pkgindex.norm(IMPORT_DIST.get(m, m))
         seen.add(dist)
         items.append({"name": dist, "import": m, "status": "ok" if dist in closed else "missing", "from": "import"})
     for p in declared:
-        dist = norm(re.split(r"[<>=!~\[ ;]", p.strip())[0] or "")
+        dist = pkgindex.norm(re.split(r"[<>=!~\[ ;]", p.strip())[0] or "")
         if not dist or dist in seen or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,60}", dist) or dist.replace("-", "_") in std:
             continue
         seen.add(dist)

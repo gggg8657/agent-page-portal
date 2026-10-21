@@ -3,7 +3,7 @@
 import io, json, os, tempfile, unittest, zipfile
 from unittest.mock import patch
 
-from fastportal import config, flows, idea
+from fastportal import config, flows, idea, pkgindex
 from fastportal.db import db
 
 TOOLS = [{"dir": "meeting-local", "port": 1, "name": "회의록", "desc": "녹음으로 회의록 정리", "tags": ["#회의록"], "group": "문서"},
@@ -45,6 +45,7 @@ class IdeaTest(unittest.TestCase):
             f.write("numpy\npandas\nscipy\n")
         self.p = [patch.object(config, "DB_FILE", os.path.join(self.tmp.name, "portal.db")),
                   patch.object(config, "DATA", self.tmp.name),
+                  patch.object(pkgindex, "SEED_DIR", os.path.join(self.tmp.name, "pkg-index")),
                   patch.object(idea.tools, "tool", side_effect=lambda d: T.get(d)),
                   patch.object(idea.tools, "tools", return_value=[dict(t) for t in TOOLS]),
                   patch.object(idea.community, "_builder", return_value=(502, None))]
@@ -53,7 +54,7 @@ class IdeaTest(unittest.TestCase):
         with db() as c:
             idea.init(c); flows.init(c)
             c.execute("CREATE TABLE IF NOT EXISTS audit(ts TEXT, actor TEXT, action TEXT, target TEXT, detail TEXT)")
-        idea._BUSY.clear(); idea._CALLS.clear(); idea._PKG.update(t=0.0, v=None, src="")
+        idea._BUSY.clear(); idea._CALLS.clear()
 
     def tearDown(self):
         for x in reversed(self.p):
@@ -251,11 +252,9 @@ class IdeaTest(unittest.TestCase):
         names, src = idea.closed_packages()
         self.assertEqual(names, {"numpy", "pandas", "scipy"})
         self.assertTrue(src.startswith("closed-pypi-"))
-        from fastportal import pkgindex
         with db() as c:
             c.execute("CREATE TABLE IF NOT EXISTS pkg_index(name TEXT PRIMARY KEY, versions TEXT, source TEXT, updated TEXT)")
             pkgindex.replace(c, {"polars": None, "scikit-learn": ["1.5.0"]}, "관리자-목록.txt")
-        idea._PKG.update(t=0.0, v=None, src="")
         names, src = idea.closed_packages()
         self.assertEqual(names, {"polars", "scikit-learn"}); self.assertEqual(src, "관리자-목록.txt")
 
