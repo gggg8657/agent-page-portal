@@ -7,6 +7,7 @@
 | GET | `api/status` | GPU 작업 프로세스 상태 + 스타일·비율·품질 목록 | 아니오 | 아니오 |
 | GET | `api/runs` | 내 그림 기록(끝난 것만, 최근 80개 폴더) | 아니오 | 예 |
 | GET | `api/runs/<run_id>/<img_N.png \| src_N.png>` | 그림 파일(PNG). `?download=1` 이면 받기 | 아니오 | 예 |
+| POST | `api/refine` | 다듬기만: 요청 → 그림 모델용 영어 프롬프트·한 줄 설명(그리지 않음) | 예 — LLM(보통 3~5초) | 아니오 |
 | POST | `api/generate` | 글 → 그림 (SSE 스트림) | 예 — GPU, 선택적으로 LLM | 예 |
 | POST | `api/edit` | 그림 + 지시 → 고친 그림 (SSE 스트림) | 예 — GPU | 예 |
 | POST | `api/delete` | 그림 묶음 하나를 휴지통으로 | 아니오 | 예 |
@@ -53,6 +54,19 @@
 - 응답: `image/png` 바이트. 쿼리에 `download` 가 있으면(`?download=1`) `Content-Disposition: attachment; filename*=UTF-8''<run_id>_<파일>` 를 붙임.
 - 오류: 파일이 없으면 `404 {"error": "없음"}`. 형식이 안 맞는 경로는 404 가 아니라 화면 HTML 이 돌아옴(아래 주의).
 
+### POST api/refine
+- 그리지 않고 다듬은 프롬프트만 돌려줌(화면의 '다듬기만 보기'). GPU 안 씀.
+- 요청: `{"prompt": "2026년 12월 3일 대한민국에서 일어난 비상계엄 상황을 그려줘", "style": "none"}` — `style` 은 `api/status` 의 키(모르면 `none`)
+- 응답:
+```json
+{"final_prompt": "A realistic photograph of armed soldiers in South Korean military uniforms ...",
+ "summary_ko": "추가한 것: 장소 디테일·조명·구도", "negative": "text, watermark"}
+```
+  - `final_prompt` 를 그대로(또는 고쳐서) 그리려면 `api/generate` 에 `enhance: false, exact: true` 로 보냄. `negative` 는 빼고 싶은 것에 더하면 좋은 것.
+  - 사용자가 따옴표로 준 문구만 그림 글자로 남김(지어낸 문구는 서버가 지움).
+  - LLM 이 실패해도 200: `{"final_prompt": <원문 + 스타일 꼬리>, "summary_ko": "다듬기를 못 했습니다(…) …", "negative": "", "fallback": true}`.
+  - 오류: `prompt` 가 비면 `400 {"error": "무엇을 그릴지 써 주세요"}`.
+
 ### POST api/generate
 - 요청 JSON:
 
@@ -65,7 +79,8 @@
 | `quality` | string | 아니오 | `fast`·`normal`·`high`. 기본 `normal` |
 | `seed` | int/string | 아니오 | 정수면 고정, 비어 있으면 무작위. 같은 seed·설정이면 같은 그림 |
 | `negative` | string | 아니오 | 빼고 싶은 것(서버가 안전 네거티브를 항상 덧붙임) |
-| `enhance` | bool | 아니오 | 기본 `true`. LLM 으로 영어 그림 프롬프트로 다듬음. LLM 실패 시 원문 그대로 진행 |
+| `enhance` | bool | 아니오 | 기본 `true`. LLM 이 장면 계획 → 영어 한 문단(40~80단어)으로 다듬고, 빼야 할 것은 네거티브에 더함(메타 `auto_negative`). LLM 실패 시 다듬기를 끈 것과 같은 문장으로 진행 |
+| `exact` | bool | 아니오 | 기본 `false`. `true` 면 `prompt` 를 다듬기·꼬리말 없이 그대로 보냄(`api/refine` 결과를 고쳐 그릴 때). `enhance` 보다 우선 |
 
 - 응답: **`text/event-stream`**, 상태 코드는 항상 200. 각 이벤트는 `data: <JSON>\n\n`. 이벤트 종류(순서대로 나올 수 있는 것):
 

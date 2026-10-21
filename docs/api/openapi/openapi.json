@@ -12528,6 +12528,88 @@
     }
    }
   },
+  "/t/image-local/api/refine": {
+   "post": {
+    "tags": [
+     "image-local"
+    ],
+    "operationId": "imageRefine",
+    "summary": "다듬기만 보기 — 그리지 않고 다듬은 프롬프트·한 줄 설명",
+    "description": "LLM 이 요청을 그림 모델용 영어 한 문단으로 다듬어 돌려줌(GPU 안 씀, 보통 3~5초). 사용자가 따옴표로 준 문구만 그림 글자로 남김. LLM 이 실패하면 200 으로 `fallback: true` 와 다듬기 없는 문장(원문 + 스타일 꼬리). 400 {\"error\":\"무엇을 그릴지 써 주세요\"}.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "prompt": {
+          "type": "string",
+          "description": "그림 요청(한국어 가능). 그림에 넣을 글자는 따옴표로",
+          "example": "2026년 12월 3일 대한민국에서 일어난 비상계엄 상황을 그려줘"
+         },
+         "style": {
+          "type": "string",
+          "default": "none",
+          "description": "api/status styles 키. 모르는 값이면 none",
+          "example": "photo"
+         }
+        },
+        "required": [
+         "prompt"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "final_prompt": {
+           "type": "string",
+           "description": "그림 모델에 보낼 영어 프롬프트. 이대로 그리려면 api/generate 에 enhance:false, exact:true"
+          },
+          "summary_ko": {
+           "type": "string",
+           "description": "무엇을 보탰는지 한 줄",
+           "example": "추가한 것: 장소 디테일·조명·구도"
+          },
+          "negative": {
+           "type": "string",
+           "description": "네거티브 프롬프트에 더하면 좋은 것(쉼표로 구분, 없으면 빈 문자열)",
+           "example": "text, watermark"
+          },
+          "fallback": {
+           "type": "boolean",
+           "description": "LLM 실패로 다듬지 못했을 때만 true"
+          }
+         },
+         "required": [
+          "final_prompt",
+          "summary_ko",
+          "negative"
+         ]
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "502": {
+      "$ref": "#/components/responses/BadGateway"
+     }
+    }
+   }
+  },
   "/t/sql-local/api/models": {
    "get": {
     "tags": [
@@ -34242,7 +34324,12 @@
      "enhance": {
       "type": "boolean",
       "default": true,
-      "description": "LLM 으로 영어 그림 프롬프트로 다듬기(실패하면 원문 그대로)"
+      "description": "LLM 으로 영어 그림 프롬프트로 다듬기 — 장면 계획 → 영어 한 문단(40~80단어), 빼야 할 것은 네거티브에 더함(meta.auto_negative). LLM 이 실패하면 끈 것과 같은 문장(원문 + 스타일 꼬리)."
+     },
+     "exact": {
+      "type": "boolean",
+      "default": false,
+      "description": "true 면 prompt 를 다듬기·꼬리말 없이 그대로 그림 모델에 보냄('다듬기만 보기'로 받은 문장을 고쳐 그릴 때). enhance 보다 우선."
      }
     },
     "required": [
