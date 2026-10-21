@@ -41,7 +41,7 @@ def init(c):
 
 # ── 속도 제한 ────────────────────────────────────────────────────────────
 _LOCK = threading.Lock()
-_BUSY, _CALLS = set(), {}
+_BUSY, _CALLS = set(), {}   # shortcut: 프로세스 메모리 — 포털 프로세스를 여러 개 띄워 일반 사용자가 나눠 쓰면 프로세스 수만큼 느슨해짐, 그때 DB 로
 
 
 class Busy(Exception):

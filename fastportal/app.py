@@ -225,7 +225,7 @@ class Busy(Exception):
 
 
 _HASH_SLOTS = threading.BoundedSemaphore(config.LOGIN_SLOTS)   # PIN 해시 동시 계산 수(로그인 폭주가 스레드 풀을 다 잡지 않게)
-_SIGNUPS = {}   # 접속지 → 최근 가입 시각들(한 시간에 SIGNUP_PER_IP 번까지)
+_SIGNUPS = {}   # 접속지 → 최근 가입 시각들(한 시간에 SIGNUP_PER_IP 번까지). shortcut: 프로세스 메모리 — 재시작하면 0, 포털이 여럿이면 그만큼 느슨
 SIGNUP_PER_IP = 5
 
 

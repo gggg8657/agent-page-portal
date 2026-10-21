@@ -40,7 +40,7 @@ def init(c):
 
 
 # ── 속도 제한 ────────────────────────────────────────────────────────────
-_RATE, _RATE_LOCK = {}, threading.Lock()
+_RATE, _RATE_LOCK = {}, threading.Lock()   # shortcut: 프로세스 메모리 — 포털 프로세스가 여럿이면 글쓰기 제한이 그만큼 느슨, 그때 DB 로
 
 
 def _rate(uid):

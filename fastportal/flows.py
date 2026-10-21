@@ -422,7 +422,7 @@ def get_run(c, uid, rid):
 
 # ── 실행 ─────────────────────────────────────────────────────────────────
 _LOCK = threading.Lock()
-_ACTIVE = {}   # uid → run id
+_ACTIVE = {}   # uid → run id. shortcut: 프로세스 메모리 — 포털 프로세스가 여럿이면 사용자당 1개 실행이 프로세스 수만큼, 그때 DB 로
 
 
 def _resolve_inputs(flow_steps, given):
