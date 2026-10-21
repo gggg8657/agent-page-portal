@@ -44,7 +44,7 @@
 
 ## 넘기기 (`api/analyses/{aid}/handoff/kpi`)
 - 응답 `{to: "kpi-local", path: "/tool/kpi-local", title: "전략 수립: <분석 이름> 논리모형", question: <목표 한 줄>, file: {name: "logic-model.json", type: "application/json", text}, count}`.
-  `text` 는 kpi-local 과 정한 약속 JSON `{goal, context, items: [{level, text}]}` — level 은 투입·활동·산출·단기성과·중기성과·영향(로직모델 여섯 단계 그대로, 빈 칸 제외). goal = 분석 대상 한 줄(없으면 설명 첫 줄), context = 대상 설명(2,000자). **자료만 만들고 다른 도구를 부르지 않습니다.** 포털 화면이 `src/lib/handoff.ts` 로 받는 화면에 넘김(받는 도구가 등록돼 있을 때만 단추가 보임).
+  `text` 는 kpi-local 과 정한 약속 JSON `{goal, context, items: [{level, text}]}` — level 은 투입·활동·산출·단기성과·중기성과·영향(로직모델 여섯 단계 그대로, 빈 칸 제외). goal = 설명에 적힌 목표·목적 문장(없으면 분석 대상 한 줄), context = 대상 설명(2,000자). **자료만 만들고 다른 도구를 부르지 않습니다.** 포털 화면이 `src/lib/handoff.ts` 로 받는 화면에 넘김(받는 도구가 등록돼 있을 때만 단추가 보임).
 
 ## 제한·오류
 - 사용자당 초안 동시 1(409 `busy`)·1시간 30번(429 `rate_limited`, `Retry-After`), 도구 전체 동시 2(409), LLM 호출 동시 2, 호출 시간 제한 240초.
