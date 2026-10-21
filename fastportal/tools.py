@@ -186,7 +186,7 @@ def landing_groups():
     order, g = [], {}
     from . import toolstate
     for t in tools():
-        if t.get("hidden") or toolstate.is_off(t["dir"]):   # 관리자가 끈 도구도 랜딩 분류에서 뺌
+        if t.get("hidden") or toolstate.unlisted(t):   # 관리자가 끄거나 숨긴 도구도 랜딩 분류에서 뺌
             continue
         k = t.get("group") or "기타"
         if k not in g:
@@ -260,11 +260,12 @@ def user_rank(c):
 
 def tool_list(c, up, uid, u=None):
     """/api/tools 의 tools 목록(켜짐·설치·사용 횟수 포함). u: 미리 센 usage(없으면 지금 셈).
-    관리자가 끈 도구(toolstate)는 누구에게나 빠짐 — 관리자는 관리 화면 '에이전트 관리'(/api/admin/tools)에서만 봄"""
+    관리자가 끈 도구(toolstate)는 누구에게나 빠짐 — 관리자는 관리 화면 '에이전트 관리'(/api/admin/tools)에서만 봄.
+    관리자가 숨긴 도구는 hidden=true 로 남김 — 화면이 목록에서는 거르고 즐겨찾기·최근 사용·도구 화면(링크)에서는 찾음"""
     from . import toolstate
     u = usage(c) if u is None else u
-    off = toolstate.off()
-    return [{**t, "up": up.get(tool_addr(t), False), "installed": is_remote(t) or os.path.isdir(os.path.join(BASE, t["dir"])),
+    off, hid = toolstate.off(), toolstate.admin_hidden()
+    return [{**t, "hidden": bool(t.get("hidden")) or t["dir"] in hid, "up": up.get(tool_addr(t), False), "installed": is_remote(t) or os.path.isdir(os.path.join(BASE, t["dir"])),
              "url": f"/t/{t['dir']}/", "usage": u.get(t["dir"], {"recent": 0, "total": 0, "users": 0, "likes": 0})}
             for t in tools() if (config.SHOW_HIDDEN or not t.get("hidden")) and t["dir"] not in off]
 

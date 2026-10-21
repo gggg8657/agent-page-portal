@@ -259,7 +259,7 @@ def candidates(ctx, text, limit_tools=10, limit_agents=6):
     q = _tokens(text)
     cands = []
     for t in tools.tools():
-        if t.get("hidden") or t["dir"] == BUILDER or toolstate.is_off(t["dir"]):   # 관리자가 끈 도구는 추천하지 않음
+        if t.get("hidden") or t["dir"] == BUILDER or toolstate.unlisted(t):   # 관리자가 끄거나 숨긴 도구는 추천하지 않음
             continue
         tags = " ".join(t.get("tags") or []) if isinstance(t.get("tags"), list) else str(t.get("tags") or "")
         cands.append({"id": "tool:" + t["dir"], "kind": "tool", "name": str(t.get("name") or t["dir"])[:60],
@@ -532,7 +532,7 @@ def make_newtool(text):
     closed, src = closed_packages()
     q = _tokens(text)
     offer = [p for p in SUGGEST if pkgindex.norm(p) in closed] + sorted(p for p in closed if any(t in p for t in q if re.fullmatch(r"[a-z0-9]{3,}", t)))[:30]
-    groups = sorted({t.get("group") for t in tools.tools() if t.get("group") and not t.get("hidden") and not toolstate.is_off(t["dir"])} | {"기타"})
+    groups = sorted({t.get("group") for t in tools.tools() if t.get("group") and not t.get("hidden") and not toolstate.unlisted(t)} | {"기타"})
     system = ("너는 사내 포털 도구 개발 도우미다. 사용자 아이디어로 '<이름>-local' 포털 도구의 처리 코드를 쓴다. 서버 뼈대(HTTP·포털 인증·/healthz·화면)는 이미 있고, "
               "너는 다음만 쓴다:\n- logic: 파이썬 3.11 코드를 줄 단위 목록으로(한 항목 = 코드 한 줄, 들여쓰기 공백 그대로, 빈 줄은 \"\"). f-string 안에서 바깥과 같은 따옴표를 쓰지 않는다. 반드시 `def process(inputs: dict) -> dict:` 를 정의한다. inputs 는 fields 의 key → 글(문자열; number 도 글, file_text 는 파일 내용 글). "
               "돌려주는 dict: {\"text\": 사람이 읽을 요약(필수), \"table\": [[머리줄...], [행...], ...](선택)}. 입력이 틀리면 ValueError(한국어 문장)를 낸다. "

@@ -879,7 +879,7 @@
    "get": {
     "operationId": "portalTools",
     "summary": "도구 목록·사용자 랭킹·노하우 글·나",
-    "description": "숨김 도구(hidden)는 빠짐. up = 도구 포트가 응답함. 관리자가 끈 도구(/api/admin/tool)는 누구에게나 빠짐 — 관리자는 /api/admin/tools 에서 봄.",
+    "description": "숨김 도구(tools.json hidden)는 빠짐. 관리자가 숨긴 도구(/api/admin/tool visible=false)는 hidden=true 로 남음 — 화면이 목록에서 거르고 즐겨찾기·최근·도구 화면(링크)에서는 찾음. up = 도구 포트가 응답함. 관리자가 끈 도구(/api/admin/tool)는 누구에게나 빠짐 — 관리자는 /api/admin/tools 에서 봄.",
     "responses": {
      "200": {
       "description": "목록",
@@ -24980,7 +24980,7 @@
      "portal"
     ],
     "x-permission": "admin",
-    "description": "tools.json 의 도구 전부(숨김 포함)와 관리자 켜기·끄기 상태(tool_state 표). /api/tools 는 꺼진 도구를 누구에게나 빼므로 관리자는 이 목록으로 봄.",
+    "description": "tools.json 의 도구 전부(숨김 포함)와 관리자 켜기·끄기(enabled)·숨기기(visible) 상태(tool_state 표). /api/tools 는 꺼진 도구를 누구에게나 빼므로 관리자는 이 목록으로 봄.",
     "responses": {
      "200": {
       "description": "성공",
@@ -25015,12 +25015,12 @@
   "/api/admin/tool": {
    "post": {
     "operationId": "portalAdminToolToggle",
-    "summary": "도구 켜기·끄기",
+    "summary": "도구 켜기·끄기 · 숨기기·보이기",
     "tags": [
      "portal"
     ],
     "x-permission": "admin",
-    "description": "끄면: /api/tools·랜딩 분류·즐겨찾기·최근(/api/lists — 저장된 항목은 그대로)·내 작업 목록·흐름 어댑터·아이디어 후보·리뷰/요청 대상·파동이 펫 추천(데이터 폴더 tools-disabled.json)에서 빠지고, /t/<dir>/… 는 일반 계정 403 code=tool_disabled('관리자가 이 에이전트를 잠시 껐습니다' — 관리자는 그대로 열림), /api/open·/api/like·/api/start 도 일반 계정 403 tool_disabled. 저장한 흐름은 실행 때 그 단계에서 같은 문구로 멈춤. 사용자 데이터는 지우지 않음. stop=true(끌 때만) 면 프로세스도 멈춤 — 진행 중 작업이 있으면 confirm=true 없이는 409 code=jobs_running(active_jobs). 원격 도구(host)는 멈추지 않음. 감사: tool_disable·tool_enable(내용 = 이유), 멈추면 tool_stop.",
+    "description": "끄면: /api/tools·랜딩 분류·즐겨찾기·최근(/api/lists — 저장된 항목은 그대로)·내 작업 목록·흐름 어댑터·아이디어 후보·리뷰/요청 대상·파동이 펫 추천(데이터 폴더 tools-disabled.json)에서 빠지고, /t/<dir>/… 는 일반 계정 403 code=tool_disabled('관리자가 이 에이전트를 잠시 껐습니다' — 관리자는 그대로 열림), /api/open·/api/like·/api/start 도 일반 계정 403 tool_disabled. 저장한 흐름은 실행 때 그 단계에서 같은 문구로 멈춤. 사용자 데이터는 지우지 않음. stop=true(끌 때만) 면 프로세스도 멈춤 — 진행 중 작업이 있으면 confirm=true 없이는 409 code=jobs_running(active_jobs). 원격 도구(host)는 멈추지 않음. 감사: tool_disable·tool_enable(내용 = 이유), 멈추면 tool_stop. 숨기기(visible=false, 끄기와 따로): 도구는 그대로 돌고 링크(/tool/<dir>·/t/<dir>/)로는 누구나 열림. 목록(랜딩 분류·match/ask·아이디어 후보·흐름 어댑터·파동이 추천 — tools-disabled.json 의 hidden)에서만 빠지고, /api/tools 에는 hidden=true 로 남아 화면이 탐색·홈·광장·분류·검색·Ctrl+K 에서 거르고 즐겨찾기·최근 사용·도구 화면에서는 찾음. 이미 저장한 흐름은 실행됨. tools.json 에서 숨긴 도구는 409 code=file_hidden. 감사: tool_hide·tool_show(내용 = 이유). enabled·visible 중 하나 이상.",
     "requestBody": {
      "required": true,
      "content": {
@@ -25028,15 +25028,19 @@
        "schema": {
         "type": "object",
         "required": [
-         "dir",
-         "enabled"
+         "dir"
         ],
         "properties": {
          "dir": {
           "type": "string"
          },
          "enabled": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "켜기·끄기(없으면 그대로)"
+         },
+         "visible": {
+          "type": "boolean",
+          "description": "보이기·숨기기(없으면 그대로)"
          },
          "reason": {
           "type": "string",
@@ -25066,6 +25070,7 @@
           "ok",
           "dir",
           "enabled",
+          "visible",
           "changed",
           "stopped"
          ],
@@ -25078,6 +25083,10 @@
           },
           "enabled": {
            "type": "boolean"
+          },
+          "visible": {
+           "type": "boolean",
+           "description": "관리자 숨김이 아님(tools.json hidden 은 반영 안 함)"
           },
           "changed": {
            "type": "boolean",
@@ -25104,7 +25113,7 @@
       "description": "없는 도구 {error, code: not_found}"
      },
      "409": {
-      "description": "진행 중 작업 {error, code: jobs_running, active_jobs}"
+      "description": "진행 중 작업 {error, code: jobs_running, active_jobs} · tools.json 에서 숨긴 도구의 visible {error, code: file_hidden}"
      }
     }
    }
@@ -32916,7 +32925,8 @@
       "type": "string"
      },
      "hidden": {
-      "type": "boolean"
+      "type": "boolean",
+      "description": "관리자가 숨김(목록에서는 빼고 즐겨찾기·최근·링크로만). SHOW_HIDDEN 포털에서는 tools.json hidden 도"
      },
      "up": {
       "type": "boolean"
@@ -51098,7 +51108,9 @@
      "reason",
      "usage_30d",
      "users_30d",
-     "active_jobs"
+     "active_jobs",
+     "visible",
+     "hidden_src"
     ],
     "properties": {
      "dir": {
@@ -51122,7 +51134,7 @@
      },
      "hidden": {
       "type": "boolean",
-      "description": "tools.json hidden(숨김 도구)"
+      "description": "tools.json hidden(숨김 도구 — 파일에서만 바꿈)"
      },
      "installed": {
       "type": "boolean"
@@ -51150,6 +51162,39 @@
      "reason": {
       "type": "string",
       "description": "끈 이유(감사 기록에도)"
+     },
+     "visible": {
+      "type": "boolean",
+      "description": "목록(탐색·홈·광장·분류·검색·Ctrl+K·match/ask·추천·아이디어 후보·흐름 어댑터)에 보임. 거짓 = tools.json hidden 또는 관리자 숨김(링크로는 열림)"
+     },
+     "hidden_src": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "enum": [
+       "file",
+       "admin",
+       null
+      ],
+      "description": "숨김 출처 — file(tools.json, 여기서 못 바꿈)·admin(관리자)·null(보임)"
+     },
+     "hide_by": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "마지막으로 숨기기·보이기를 바꾼 관리자"
+     },
+     "hide_ts": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "hide_reason": {
+      "type": "string",
+      "description": "숨긴 이유(감사 기록에도)"
      },
      "usage_30d": {
       "type": "integer",

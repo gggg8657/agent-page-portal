@@ -142,6 +142,8 @@ class MatchTest(unittest.TestCase):
             self.assertTrue(got)
             f = match.chain("녹음해서 공문으로 만들고 메일로 보내기")
             self.assertTrue(f is None or all(st["tool"] not in ("meeting-local", "mail-local") for st in f["steps"]), "끈 도구는 흐름 제안에서도 빠짐")
+        with patch.object(toolstate, "admin_hidden", return_value=frozenset({"meeting-local"})):
+            self.assertNotIn("meeting-local", self.dirs("회의록", owner=True), "관리자가 숨긴 도구도 검색에서 빠짐(링크로는 열림)")
 
     def test_file_ext(self):
         got = match.rank("", False, ext=".mp3")

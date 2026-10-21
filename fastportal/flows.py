@@ -291,7 +291,7 @@ def adapter_list(up=None):
     out = []
     for aid, a in ADAPTERS.items():
         t = tools.tool(a["tool"])
-        if not t or t.get("hidden") or toolstate.is_off(a["tool"]):   # 관리자가 끈 도구의 어댑터는 목록에서 뺌
+        if not t or t.get("hidden") or toolstate.unlisted(t):   # 관리자가 끄거나 숨긴 도구의 어댑터는 목록에서 뺌
             continue
         out.append({"id": aid, "tool": a["tool"], "tool_name": t.get("name") or a["tool"], "title": a["title"], "desc": a["desc"],
                     "inputs": a["inputs"], "heavy": bool(a.get("heavy")), "timeout": a["timeout"],
@@ -309,7 +309,7 @@ def _clean_steps(steps):
             raise ValueError(f"{i + 1}단계: 연결할 수 없는 작업입니다")
         a = ADAPTERS[s["adapter"]]
         t = tools.tool(a["tool"])
-        if not t or t.get("hidden") or toolstate.is_off(a["tool"]):
+        if not t or t.get("hidden") or toolstate.unlisted(t):   # 숨긴 도구로 새 흐름은 못 만듦(저장된 흐름은 실행됨 — 위 _tool 은 꺼짐만 막음)
             raise ValueError(f"{i + 1}단계: 목록에 없는 도구입니다")
         m = s.get("inputs") or {}
         if not isinstance(m, dict):

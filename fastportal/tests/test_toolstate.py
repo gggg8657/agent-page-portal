@@ -43,6 +43,40 @@ class Unit(unittest.TestCase):
         toolstate.reset()
         self.assertFalse(toolstate.is_off("a-local"))
 
+    def test_hide_independent_of_off(self):
+        with db() as c:
+            self.assertTrue(toolstate.set_visible(c, "boss", "a-local", False, "정리 중"))
+            self.assertFalse(toolstate.set_visible(c, "boss", "a-local", False), "같은 상태면 바뀐 것 없음")
+        toolstate.reset()
+        self.assertEqual((toolstate.admin_hidden(), toolstate.off()), (frozenset({"a-local"}), frozenset()), "숨김은 꺼짐과 따로")
+        self.assertTrue(toolstate.is_hidden({"dir": "a-local"}))
+        self.assertTrue(toolstate.unlisted({"dir": "a-local"}))
+        self.assertFalse(toolstate.user_hidden({"dir": "a-local"}), "숨김은 링크로 열림")
+        self.assertTrue(toolstate.is_hidden({"dir": "b-local", "hidden": True}), "tools.json hidden 도 숨김")
+        with db() as c:
+            toolstate.set_state(c, "boss", "a-local", False)
+        toolstate.reset()
+        self.assertTrue(toolstate.is_off("a-local") and toolstate.is_hidden({"dir": "a-local"}))
+        toolstate.write_file()
+        f = json.load(open(os.path.join(self.tmp, "tools-disabled.json")))
+        self.assertEqual((f["disabled"], f["hidden"]), (["a-local"], ["a-local"]))
+        with db() as c:
+            toolstate.set_visible(c, "boss", "a-local", True)
+            toolstate.set_state(c, "boss", "a-local", True)
+            rows = [tuple(r) for r in c.execute("SELECT action, detail FROM audit ORDER BY rowid")]
+        self.assertEqual(rows, [("tool_hide", "정리 중"), ("tool_disable", ""), ("tool_show", ""), ("tool_enable", "")])
+
+    def test_migrate_old_table(self):
+        with db() as c:
+            c.execute("DROP TABLE tool_state")
+            c.execute("CREATE TABLE tool_state(dir TEXT PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 1, by TEXT, ts TEXT, reason TEXT)")
+            c.execute("INSERT INTO tool_state(dir, enabled) VALUES('a-local', 0)")
+            toolstate.init(c)
+            toolstate.init(c)
+            self.assertEqual(tuple(c.execute("SELECT enabled, visible FROM tool_state").fetchone()), (0, 1))
+        toolstate.reset()
+        self.assertEqual((toolstate.off(), toolstate.admin_hidden()), (frozenset({"a-local"}), frozenset()))
+
     def test_idea_candidates_skip_disabled(self):
         ts = [{"dir": "sql-local", "name": "SQL", "desc": "데이터 질의"}, {"dir": "chart-local", "name": "그래프", "desc": "데이터 그래프"}]
         with db() as c:
@@ -179,6 +213,45 @@ class HTTP(unittest.TestCase):
         self.assertEqual(json.load(open(os.path.join(self.P.data, "tools-disabled.json")))["disabled"], [])
         aud = self.j("GET", "/api/admin", B)[1]["audit"]
         self.assertEqual(aud[0]["action"], "tool_enable")
+
+    def hide(self, visible, reason="", cookie=None, **kw):
+        return self.j("POST", "/api/admin/tool", cookie or self.boss, {"dir": self.D, "visible": visible, "reason": reason, **kw})
+
+    def test_hide(self):
+        D, A, B = self.D, self.alice, self.boss
+        self.assertEqual(self.j("POST", "/api/lists", A, {"kind": "recent", "items": [D]})[0], 200)
+        self.assertEqual(self.hide(False, cookie=A)[0], 403)
+        self.assertEqual(self.j("POST", "/api/admin/tool", B, {"dir": D})[0], 400, "enabled·visible 둘 다 없음")
+        self.assertEqual(self.j("POST", "/api/admin/tool", B, {"dir": D, "visible": "no"})[0], 400)
+
+        st, r = self.hide(False, "정리 중")
+        self.assertEqual((st, r["visible"], r["enabled"], r["changed"]), (200, False, True, True), r)
+        ts = {t["dir"]: t for t in self.j("GET", "/api/tools", A)[1]["tools"]}
+        self.assertTrue(ts[D]["hidden"], "/api/tools 에는 hidden=true 로 남음(화면이 목록에서 거르고 즐겨찾기·최근·링크에서 찾음)")
+        self.assertNotIn(D, [a["tool"] for a in self.j("GET", "/api/flows/adapters", A)[1]["adapters"]])
+        self.assertEqual(self.j("GET", "/api/lists", A)[1]["recent"], [D], "최근 사용에는 남음")
+        self.assertEqual(self.P.req("GET", f"/t/{D}/healthz", cookie=A)[0], 200, "링크로는 일반 계정도 열림")
+        self.assertNotEqual(self.j("POST", "/api/open", A, {"dir": D})[1].get("code"), "tool_disabled")
+        self.assertNotEqual(self.P.req("GET", f"/api/guide/{D}", cookie=A)[2], b"")
+        adm = {t["dir"]: t for t in self.j("GET", "/api/admin/tools", B)[1]["tools"]}
+        self.assertEqual((adm[D]["visible"], adm[D]["hidden_src"], adm[D]["enabled"], adm[D]["hide_reason"], adm[D]["hide_by"]), (False, "admin", True, "정리 중", "boss"))
+        self.assertEqual((adm["other-local"]["visible"], adm["other-local"]["hidden_src"]), (True, None))
+        self.assertEqual(json.load(open(os.path.join(self.P.data, "tools-disabled.json")))["hidden"], [D])
+
+        # 숨김 + 꺼짐 — 꺼짐이 이김(403), 켜면 숨김만 남음
+        self.assertEqual(self.toggle(False)[0], 200)
+        self.assertNotIn(D, self.dirs(A))
+        self.assertEqual(self.P.req("GET", f"/t/{D}/healthz", cookie=A)[0], 403)
+        self.assertEqual(self.toggle(True)[1]["visible"], False)
+        self.assertEqual(self.P.req("GET", f"/t/{D}/healthz", cookie=A)[0], 200)
+
+        st, r = self.hide(True)
+        self.assertEqual((st, r["visible"], r["changed"]), (200, True, True))
+        self.assertFalse({t["dir"]: t for t in self.j("GET", "/api/tools", A)[1]["tools"]}[D].get("hidden"))
+        self.assertIn(D, [a["tool"] for a in self.j("GET", "/api/flows/adapters", A)[1]["adapters"]])
+        self.assertEqual(json.load(open(os.path.join(self.P.data, "tools-disabled.json")))["hidden"], [])
+        acts = [(a["action"], a["target"], a["detail"]) for a in self.j("GET", "/api/admin", B)[1]["audit"][:4]]
+        self.assertEqual(acts, [("tool_show", D, ""), ("tool_enable", D, ""), ("tool_disable", D, ""), ("tool_hide", D, "정리 중")])
 
     def test_builder_agents_admin_only(self):
         self.assertEqual(self.j("GET", "/api/admin/agents", self.alice)[0], 403)

@@ -293,9 +293,9 @@ def _contains(field, wj):
 
 
 def user_hidden(t):
-    """사용자 화면에서 빠지는 도구 — 숨김(hidden), 관리자가 끈 도구(toolstate.py 가 있으면 그 판정, 관리자에게도 안 보임)"""
+    """사용자 화면에서 빠지는 도구 — 숨김(tools.json hidden·관리자 숨김), 관리자가 끈 도구(관리자에게도 안 보임)"""
     from . import toolstate
-    return bool(toolstate.user_hidden(t))
+    return bool(toolstate.unlisted(t))
 
 
 def visible_dirs(is_owner):
@@ -497,9 +497,9 @@ def agents_for(user):
     hit = _AG.get(user)
     if hit and time.time() - hit[0] < AGENTS_TTL:
         return hit[1]
-    from . import community
+    from . import community, toolstate
     t = tools.tool(community.BUILDER)
-    if not t or user_hidden(t):   # 빌더를 관리자가 끄면 공유 에이전트도 안 보임
+    if not t or toolstate.user_hidden(t):   # 빌더를 관리자가 끄면 공유 에이전트도 안 보임(숨김은 빌더 카드만 빠지고 공유 에이전트는 그대로)
         out = []
     else:
         out, seen = [], set()
