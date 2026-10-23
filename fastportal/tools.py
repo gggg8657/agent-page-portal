@@ -239,8 +239,10 @@ def home_data(c, up, uid):
 
 
 def _posts_common(c):
-    return [dict(r) | {"tags": json.loads(r["tags"] or "[]")} for r in
-            c.execute("SELECT p.*, (SELECT COUNT(*) FROM post_likes WHERE post=p.id) likes FROM posts p ORDER BY id DESC LIMIT 50")]
+    """광장 공지·사례 칸 — 초안·숨긴 글은 뺌. 쓴 사람 계정 id(uid)는 내보내지 않음. 마크다운 글(fmt=md)은 body 가 마크다운(그림 주소 포함)"""
+    return [{k: r[k] for k in ("id", "title", "body", "author", "dept", "ts", "likes")} | {"tags": json.loads(r["tags"] or "[]"), "agents": json.loads(r["agents"] or "[]"),
+                                                                                         "fmt": r["fmt"] or "text"} for r in
+            c.execute("SELECT p.*, (SELECT COUNT(*) FROM post_likes WHERE post=p.id) likes FROM posts p WHERE draft=0 AND hidden=0 ORDER BY id DESC LIMIT 50")]
 
 
 def usage(c):

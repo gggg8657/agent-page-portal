@@ -33013,6 +33013,21 @@
      },
      "liked": {
       "type": "boolean"
+     },
+     "agents": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "관련 에이전트(tool:<dir>|agent:<id>) — 2026-10-23 추가"
+     },
+     "fmt": {
+      "type": "string",
+      "enum": [
+       "md",
+       "text"
+      ],
+      "description": "md 면 body 가 마크다운(그림 주소 포함) — 2026-10-23 추가"
      }
     }
    },

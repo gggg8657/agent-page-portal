@@ -189,12 +189,14 @@ class ToolsStatsCacheTest(unittest.TestCase):
         self.assertFalse(b["posts"][0]["liked"], "liked 는 계정마다(캐시된 공통 부분과 섞이지 않음)")
         self.assertEqual(a["posts"][0]["likes"], 1)
         self.assertEqual(a["posts"][0]["tags"], ["#x"])
-        with dbm.db() as c:   # 예전 계산과 같은 모양·값
-            old = [dict(r) | {"tags": json.loads(r["tags"] or "[]"), "liked": bool(r["liked"])} for r in
+        with dbm.db() as c:   # 예전 계산과 같은 값 — 2026-10-23부터 정해진 키만(쓴 사람 uid·초안·숨김 열은 안 나감) + agents·fmt
+            old = [{k: r[k] for k in ("id", "title", "body", "author", "dept", "ts", "likes")} | {"tags": json.loads(r["tags"] or "[]"), "agents": [], "fmt": "text",
+                                                                                                 "liked": bool(r["liked"])} for r in
                    c.execute("SELECT p.*, (SELECT COUNT(*) FROM post_likes WHERE post=p.id) likes, "
                              "(SELECT COUNT(*) FROM post_likes WHERE post=p.id AND user=?) liked FROM posts p ORDER BY id DESC LIMIT 50", ("u2",))]
         self.assertEqual(b["posts"], old)
         self.assertEqual(list(b["posts"][0]), list(old[0]), "키 순서도 같음")
+        self.assertNotIn("uid", b["posts"][0])
         self.assertEqual(a["tools"][0]["usage"]["total"], 1)
 
     def test_cache_and_reset(self):

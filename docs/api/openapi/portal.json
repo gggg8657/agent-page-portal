@@ -4631,6 +4631,675 @@
     }
    }
   },
+  "/api/community/posts": {
+   "get": {
+    "operationId": "communityPosts",
+    "summary": "커뮤니티 글 목록",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "초안 빼고, 숨긴 글은 쓴 사람·관리자만. hot_agents = 글에 많이 달린 관련 에이전트(숨김 빼고)",
+    "parameters": [
+     {
+      "name": "cat",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "enum": [
+        "활용사례",
+        "활용팁",
+        "질문",
+        "공지"
+       ]
+      },
+      "description": "분류"
+     },
+     {
+      "name": "q",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string"
+      },
+      "description": "제목·본문·쓴 사람 검색"
+     },
+     {
+      "name": "agent",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string"
+      },
+      "description": "tool:<dir>|agent:<id> 가 달린 글만"
+     },
+     {
+      "name": "sort",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "enum": [
+        "new",
+        "hot"
+       ]
+      },
+      "description": "최신순(기본)·좋아요순"
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer"
+      },
+      "description": "1~100(기본 30)"
+     },
+     {
+      "name": "offset",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer"
+      },
+      "description": "건너뛸 수"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CommunityPostList"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·분류·태그·그림 종류·장 수·속도 제한)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "남의 글·공지(관리자만)·볼 수 없는 에이전트"
+     },
+     "404": {
+      "description": "없는 글(초안은 쓴 사람만, 숨긴 글은 쓴 사람·관리자만)"
+     }
+    }
+   }
+  },
+  "/api/community/post": {
+   "get": {
+    "operationId": "communityPost",
+    "summary": "커뮤니티 글 하나",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "integer"
+      },
+      "description": "글 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CommunityPostDetail"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·분류·태그·그림 종류·장 수·속도 제한)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "남의 글·공지(관리자만)·볼 수 없는 에이전트"
+     },
+     "404": {
+      "description": "없는 글(초안은 쓴 사람만, 숨긴 글은 쓴 사람·관리자만)"
+     }
+    }
+   }
+  },
+  "/api/community/recent": {
+   "get": {
+    "operationId": "communityRecent",
+    "summary": "최근 리뷰·요청(요청/리뷰 칸)",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "도구·공유 에이전트에 달린 최근 리뷰·요청 30개 — 볼 수 있는 대상만(흐름 제외), 숨긴 것 제외",
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "items"
+         ],
+         "properties": {
+          "items": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/CommunityRecentItem"
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·분류·태그·그림 종류·장 수·속도 제한)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "남의 글·공지(관리자만)·볼 수 없는 에이전트"
+     },
+     "404": {
+      "description": "없는 글(초안은 쓴 사람만, 숨긴 글은 쓴 사람·관리자만)"
+     }
+    }
+   }
+  },
+  "/api/community/img/{post}/{name}": {
+   "get": {
+    "operationId": "communityImage",
+    "summary": "글 그림 보기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "로그인한 계정만. 초안의 그림은 쓴 사람만, 숨긴 글은 쓴 사람·관리자만. Content-Type image/png|jpeg|gif|webp, nosniff, Content-Disposition inline, CSP sandbox",
+    "parameters": [
+     {
+      "name": "post",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer"
+      }
+     },
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{16}\\.(png|jpg|gif|webp)$"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "그림",
+      "content": {
+       "image/png": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       },
+       "image/jpeg": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       },
+       "image/gif": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       },
+       "image/webp": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "404": {
+      "description": "없음·볼 수 없음"
+     }
+    }
+   }
+  },
+  "/api/community/post/draft": {
+   "post": {
+    "operationId": "communityPostDraft",
+    "summary": "글 초안 만들기(그림을 먼저 올릴 자리)",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "빈 초안(나만 봄) id. 하루 지난 내 초안은 지우고 초안은 사람당 5개까지(넘으면 오래된 것부터 지움)",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [],
+        "properties": {}
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "ok"
+         ],
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "id": {
+           "type": "integer"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·분류·태그·그림 종류·장 수·속도 제한)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "남의 글·공지(관리자만)·볼 수 없는 에이전트"
+     },
+     "404": {
+      "description": "없는 글(초안은 쓴 사람만, 숨긴 글은 쓴 사람·관리자만)"
+     }
+    }
+   }
+  },
+  "/api/community/post/save": {
+   "post": {
+    "operationId": "communityPostSave",
+    "summary": "글 올리기·고치기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "쓴 사람만(관리자도 남의 글은 못 고침, 예전 글은 고칠 수 없음). 본문은 마크다운(HTML 은 글자로 보임), 그림은 ![설명](/api/community/img/<id>/<이름>). 본문에서 뺀 그림 파일은 지움. 공지는 관리자만. 쓴 사람·부서는 계정 정보로",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id",
+         "title",
+         "body",
+         "cat"
+        ],
+        "properties": {
+         "id": {
+          "type": "integer"
+         },
+         "title": {
+          "type": "string",
+          "maxLength": 80
+         },
+         "body": {
+          "type": "string",
+          "maxLength": 20000
+         },
+         "cat": {
+          "type": "string",
+          "enum": [
+           "활용사례",
+           "활용팁",
+           "질문",
+           "공지"
+          ]
+         },
+         "agents": {
+          "type": "array",
+          "maxItems": 5,
+          "items": {
+           "type": "string",
+           "pattern": "^(tool|agent):[A-Za-z0-9_-]{1,60}$"
+          },
+          "description": "쓴 사람이 볼 수 있는 도구·에이전트만"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "ok"
+         ],
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "id": {
+           "type": "integer"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·분류·태그·그림 종류·장 수·속도 제한)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "남의 글·공지(관리자만)·볼 수 없는 에이전트"
+     },
+     "404": {
+      "description": "없는 글(초안은 쓴 사람만, 숨긴 글은 쓴 사람·관리자만)"
+     }
+    }
+   }
+  },
+  "/api/community/post/delete": {
+   "post": {
+    "operationId": "communityPostDelete",
+    "summary": "글 지우기(그림까지)",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "쓴 사람·관리자",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id"
+        ],
+        "properties": {
+         "id": {
+          "type": "integer"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "ok"
+         ],
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "id": {
+           "type": "integer"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·분류·태그·그림 종류·장 수·속도 제한)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "남의 글·공지(관리자만)·볼 수 없는 에이전트"
+     },
+     "404": {
+      "description": "없는 글(초안은 쓴 사람만, 숨긴 글은 쓴 사람·관리자만)"
+     }
+    }
+   }
+  },
+  "/api/community/post/hide": {
+   "post": {
+    "operationId": "communityPostHide",
+    "summary": "글 숨기기·풀기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "admin",
+    "description": "관리자만",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id"
+        ],
+        "properties": {
+         "id": {
+          "type": "integer"
+         },
+         "hidden": {
+          "type": "boolean"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "hidden": {
+           "type": "boolean"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·분류·태그·그림 종류·장 수·속도 제한)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "남의 글·공지(관리자만)·볼 수 없는 에이전트"
+     },
+     "404": {
+      "description": "없는 글(초안은 쓴 사람만, 숨긴 글은 쓴 사람·관리자만)"
+     }
+    }
+   }
+  },
+  "/api/community/post/report": {
+   "post": {
+    "operationId": "communityPostReport",
+    "summary": "글 신고",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "남의 글에 한 사람 한 번(두 번째부터 already=true) — 관리자 알림함에 작업 알림",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id"
+        ],
+        "properties": {
+         "id": {
+          "type": "integer"
+         },
+         "reason": {
+          "type": "string",
+          "maxLength": 300
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "already": {
+           "type": "boolean"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·분류·태그·그림 종류·장 수·속도 제한)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "남의 글·공지(관리자만)·볼 수 없는 에이전트"
+     },
+     "404": {
+      "description": "없는 글(초안은 쓴 사람만, 숨긴 글은 쓴 사람·관리자만)"
+     }
+    }
+   }
+  },
+  "/api/community/image": {
+   "post": {
+    "operationId": "communityImageUpload",
+    "summary": "글 그림 올리기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "본문 = 그림 바이트(Content-Type 은 안 봄 — 앞 바이트로 png·jpeg·webp·gif 만, SVG 거절). 한 장 5MB(넘으면 413)·글 하나 10장·10분에 40장. 내 글(초안 포함)만. EXIF·XMP·글 조각은 걷어 내고 저장",
+    "parameters": [
+     {
+      "name": "post",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "integer"
+      },
+      "description": "글 id(초안)"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/octet-stream": {
+       "schema": {
+        "type": "string",
+        "format": "binary"
+       }
+      },
+      "image/*": {
+       "schema": {
+        "type": "string",
+        "format": "binary"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CommunityImage"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·분류·태그·그림 종류·장 수·속도 제한)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "남의 글·공지(관리자만)·볼 수 없는 에이전트"
+     },
+     "404": {
+      "description": "없는 글(초안은 쓴 사람만, 숨긴 글은 쓴 사람·관리자만)"
+     },
+     "413": {
+      "description": "5MB 초과"
+     }
+    }
+   }
+  },
   "/api/idea/plan": {
    "post": {
     "operationId": "portalIdeaPlan",
@@ -6191,6 +6860,21 @@
      },
      "liked": {
       "type": "boolean"
+     },
+     "agents": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "관련 에이전트(tool:<dir>|agent:<id>) — 2026-10-23 추가"
+     },
+     "fmt": {
+      "type": "string",
+      "enum": [
+       "md",
+       "text"
+      ],
+      "description": "md 면 body 가 마크다운(그림 주소 포함) — 2026-10-23 추가"
      }
     }
    },
@@ -8374,6 +9058,323 @@
      "orbit",
      "icons"
     ]
+   },
+   "CommunityPost": {
+    "type": "object",
+    "description": "커뮤니티 글 — 목록은 excerpt·thumb 만, 상세(GET /api/community/post)는 body·reported 도. 쓴 사람 계정 id 는 안 나감",
+    "required": [
+     "id",
+     "title",
+     "author",
+     "dept",
+     "tags",
+     "cat",
+     "ts",
+     "updated",
+     "likes",
+     "liked",
+     "agents",
+     "fmt",
+     "mine",
+     "can_edit",
+     "can_delete",
+     "hidden",
+     "draft",
+     "thumb",
+     "excerpt"
+    ],
+    "properties": {
+     "id": {
+      "type": "integer"
+     },
+     "title": {
+      "type": "string"
+     },
+     "author": {
+      "type": "string"
+     },
+     "dept": {
+      "type": "string"
+     },
+     "tags": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "cat": {
+      "type": "string",
+      "description": "분류 키(활용사례|활용팁|질문|공지, 예전 글은 빈 값일 수 있음)"
+     },
+     "ts": {
+      "type": "string",
+      "description": "올린 시각(UTC ISO)"
+     },
+     "updated": {
+      "type": "string"
+     },
+     "likes": {
+      "type": "integer"
+     },
+     "liked": {
+      "type": "boolean"
+     },
+     "agents": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "관련 에이전트 tool:<dir>|agent:<빌더 id> — 이름은 화면이 자기 목록에서 찾음"
+     },
+     "fmt": {
+      "type": "string",
+      "enum": [
+       "md",
+       "text"
+      ],
+      "description": "md = 마크다운(+그림), text = 예전 글(글자 그대로)"
+     },
+     "mine": {
+      "type": "boolean"
+     },
+     "can_edit": {
+      "type": "boolean"
+     },
+     "can_delete": {
+      "type": "boolean"
+     },
+     "hidden": {
+      "type": "boolean"
+     },
+     "draft": {
+      "type": "boolean"
+     },
+     "thumb": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "본문 첫 그림 주소(/api/community/img/…)"
+     },
+     "excerpt": {
+      "type": "string",
+      "description": "본문 앞 200자(마크다운 기호 뺌)"
+     },
+     "body": {
+      "type": "string",
+      "description": "상세만"
+     },
+     "reported": {
+      "type": "boolean",
+      "description": "상세만 — 내가 신고했는지"
+     },
+     "reports": {
+      "type": "integer",
+      "description": "관리자에게만 — 신고 수"
+     }
+    }
+   },
+   "CommunityPostList": {
+    "type": "object",
+    "required": [
+     "posts",
+     "counts",
+     "cats",
+     "total",
+     "hot_agents",
+     "can_notice",
+     "limits"
+    ],
+    "properties": {
+     "posts": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/CommunityPost"
+      }
+     },
+     "counts": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "description": "''(전체)·분류별 글 수(검색어·에이전트 조건 반영)"
+     },
+     "cats": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "string"
+      }
+     },
+     "total": {
+      "type": "integer"
+     },
+     "can_notice": {
+      "type": "boolean"
+     },
+     "hot_agents": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "id",
+        "posts"
+       ],
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "posts": {
+         "type": "integer"
+        }
+       }
+      }
+     },
+     "limits": {
+      "type": "object",
+      "required": [
+       "title",
+       "body",
+       "agents",
+       "img_bytes",
+       "img_n"
+      ],
+      "properties": {
+       "title": {
+        "type": "integer"
+       },
+       "body": {
+        "type": "integer"
+       },
+       "agents": {
+        "type": "integer"
+       },
+       "img_bytes": {
+        "type": "integer"
+       },
+       "img_n": {
+        "type": "integer"
+       }
+      }
+     }
+    }
+   },
+   "CommunityPostDetail": {
+    "type": "object",
+    "required": [
+     "post",
+     "images"
+    ],
+    "properties": {
+     "post": {
+      "$ref": "#/components/schemas/CommunityPost"
+     },
+     "images": {
+      "type": [
+       "array",
+       "null"
+      ],
+      "items": {
+       "type": "string"
+      },
+      "description": "쓴 사람에게만 — 이 글에 올린 그림 파일 이름"
+     }
+    }
+   },
+   "CommunityRecentItem": {
+    "type": "object",
+    "required": [
+     "type",
+     "id",
+     "kind",
+     "target",
+     "target_name",
+     "name",
+     "created",
+     "updated",
+     "body"
+    ],
+    "properties": {
+     "type": {
+      "type": "string",
+      "enum": [
+       "review",
+       "request"
+      ]
+     },
+     "id": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "tool",
+       "agent"
+      ]
+     },
+     "target": {
+      "type": "string"
+     },
+     "target_name": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "created": {
+      "type": "string"
+     },
+     "updated": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "body": {
+      "type": "string"
+     },
+     "stars": {
+      "type": "integer"
+     },
+     "title": {
+      "type": "string"
+     },
+     "status": {
+      "type": "string"
+     },
+     "status_label": {
+      "type": "string"
+     },
+     "type_label": {
+      "type": "string"
+     }
+    }
+   },
+   "CommunityImage": {
+    "type": "object",
+    "required": [
+     "ok",
+     "url",
+     "name",
+     "size",
+     "type"
+    ],
+    "properties": {
+     "ok": {
+      "type": "boolean"
+     },
+     "url": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "size": {
+      "type": "integer"
+     },
+     "type": {
+      "type": "string"
+     }
+    }
    }
   },
   "responses": {

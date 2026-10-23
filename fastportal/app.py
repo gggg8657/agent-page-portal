@@ -30,7 +30,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from starlette.concurrency import run_in_threadpool
 
-from . import accounts, admintools, ask, auth, community, config, db, relay, devsubmit, dwell, flows, idea, jobs, lists, match, pages, pkgindex, probe, proxy, sessions, tools, toolstate, workspace
+from . import accounts, admintools, ask, auth, community, config, db, relay, devsubmit, dwell, flows, idea, jobs, lists, match, pages, pkgindex, posts, probe, proxy, sessions, tools, toolstate, workspace
 from .config import OWNERS, TLS
 from .ctx import Ctx, TooBig, drain, length, not_implemented, parse_json, read_body, too_big
 
@@ -393,9 +393,11 @@ def post_sync(ctx, body):
             if path == "/api/post":
                 if not (req.get("title") or "").strip():
                     raise ValueError("제목이 비었습니다")
-                c.execute("INSERT INTO posts(title,body,author,dept,tags,ts) VALUES(?,?,?,?,?,?)",
-                          (req["title"].strip(), req.get("body", "").strip(), ctx.uname, req.get("dept", ""),
-                           json.dumps(["#" + x.strip("#") for x in (req.get("tags") or "").split() if x]), db.now()))
+                tags = ["#" + x.strip("#") for x in (req.get("tags") or "").split() if x]
+                if "#공지" in tags and not ctx.is_owner:   # 공지는 관리자만(새 쓰기 화면 posts.save 와 같은 규칙)
+                    raise PermissionError("공지는 관리자만 쓸 수 있습니다")
+                c.execute("INSERT INTO posts(title,body,author,dept,tags,ts,uid) VALUES(?,?,?,?,?,?,?)",   # 예전 글쓰기(글자만) — 새 화면은 /api/community/post/*
+                          (req["title"].strip(), req.get("body", "").strip(), ctx.uname, req.get("dept", ""), json.dumps(tags), db.now(), ctx.uid))
                 return ctx.send({"ok": True})
             if path == "/api/post_like":
                 c.execute("INSERT OR IGNORE INTO post_likes(post,user) VALUES(?,?)", (int(req["id"]), ctx.uid))
@@ -559,6 +561,22 @@ async def route(ctx, request):
             except TooBig:
                 return too_big(ctx, devsubmit.PKG_LIST_MAX)
             return await run_slow(devsubmit.pkg_upload, ctx, body)
+        if ctx.p == "/api/community/image":   # 커뮤니티 글 그림(본문 = 그림 바이트, 상한 posts.IMG_MAX) — 내 글·장 수·속도를 본문보다 먼저 확인
+            try:
+                pid = await run_in_threadpool(posts.upload_target, ctx)
+            except (PermissionError, FileNotFoundError, ValueError) as e:
+                code = 403 if isinstance(e, PermissionError) else 404 if isinstance(e, FileNotFoundError) else 400
+                r = ctx.send({"error": str(e), "code": {403: "forbidden", 404: "not_found", 400: "bad_request"}[code]}, code=code)
+                r.raw_headers.append((b"connection", b"close"))   # 본문은 읽지 않고 끊음
+                return r
+            try:
+                body = await read_body(ctx, posts.IMG_MAX)
+            except TooBig:
+                return too_big(ctx, posts.IMG_MAX)
+            try:
+                return await run_in_threadpool(lambda: ctx.send(posts.upload(ctx, pid, body)))
+            except ValueError as e:
+                return ctx.send({"error": str(e), "code": "bad_request"}, code=400)
         if ctx.raw == "/api/ask/send":   # 물어보기 — 답을 SSE 로(비동기 httpx, 사용자당 동시 1·10분 ASK_RATE_N 번). 본문은 글 + 파일 정보만(64KB)
             try:
                 body = await read_body(ctx, 64 * 1024)
