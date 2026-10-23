@@ -473,7 +473,7 @@
   "/api/depts": {
    "get": {
     "operationId": "portalDepts",
-    "summary": "부서 목록(로그인 전에도)",
+    "summary": "소속 이름 목록(로그인 전에도, 예전 화면 호환)",
     "security": [],
     "responses": {
      "200": {
@@ -500,7 +500,8 @@
     },
     "tags": [
      "portal"
-    ]
+    ],
+    "description": "고를 수 있는 조직 단위의 이름(가나다순). 계층은 /api/org"
    }
   },
   "/api/auth": {
@@ -1431,18 +1432,19 @@
   "/api/account/dept": {
    "post": {
     "operationId": "portalAccountDept",
-    "summary": "부서 소속 요청(부서장 승인)",
+    "summary": "소속 요청 — 예전 화면(이름). 새 화면은 /api/account/unit",
     "requestBody": {
      "required": true,
      "content": {
       "application/json": {
        "schema": {
         "type": "object",
-        "required": [
-         "dept"
-        ],
         "properties": {
          "dept": {
+          "type": "string",
+          "description": "단위 이름"
+         },
+         "unit_id": {
           "type": "string"
          }
         }
@@ -1469,7 +1471,7 @@
   "/api/account/head": {
    "post": {
     "operationId": "portalAccountHead",
-    "summary": "부서장 권한 요청(관리자 승인)",
+    "summary": "소속 장 권한 요청(관리자 승인) — 내 소속 단위의 장",
     "requestBody": {
      "required": true,
      "content": {
@@ -1875,9 +1877,9 @@
   "/api/approvals": {
    "get": {
     "operationId": "portalApprovals",
-    "summary": "부서 승인 화면 자료(부서장·관리자)",
+    "summary": "승인 화면 자료(소속 장·관리자)",
     "x-permission": "dept-head",
-    "description": "부서장 또는 관리자만. 아니면 403. members: 내가 부서장인 부서별 구성원.",
+    "description": "어느 단위든 장이거나 관리자만. 아니면 403. members: 내가 장인 단위 이름 → 그 단위와 하위 단위 소속(예전 호환), units: 같은 내용을 단위 정보와 함께.",
     "responses": {
      "200": {
       "description": "성공",
@@ -1914,6 +1916,27 @@
             "$ref": "#/components/schemas/AccountRequest"
            },
            "description": "내가 처리한 최근 20건"
+          },
+          "units": {
+           "type": "array",
+           "items": {
+            "allOf": [
+             {
+              "$ref": "#/components/schemas/UnitInfo"
+             },
+             {
+              "type": "object",
+              "properties": {
+               "members": {
+                "type": "array",
+                "items": {
+                 "$ref": "#/components/schemas/DeptMember"
+                }
+               }
+              }
+             }
+            ]
+           }
           }
          }
         }
@@ -1937,7 +1960,7 @@
     "operationId": "portalApprovalsDecide",
     "summary": "요청 승인·반려(부서장·관리자)",
     "x-permission": "dept-head",
-    "description": "그 요청을 처리할 권한이 없으면 403. 부서 소속 요청은 그 부서장(없으면 관리자), 부서장 요청은 관리자.\n\nkind=withdraw(탈퇴 요청)는 관리자만 처리 — 승인하면 그 계정이 비활성화됨(/api/admin/account deactivate 와 같음).",
+    "description": "그 요청을 처리할 권한이 없으면 403. 소속 요청(dept_join)은 고른 단위의 장 — 없으면 상위 단위의 장, … 끝내 관리자(요청한 본인은 빼고). 소속 장 권한·조직 추가(org_add)·탈퇴 요청은 관리자만.\n\nkind=withdraw(탈퇴 요청) 승인 = 그 계정 비활성화(/api/admin/account deactivate 와 같음). kind=org_add 승인 = 단위를 만들고 요청한 사람을 소속으로.",
     "requestBody": {
      "required": true,
      "content": {
@@ -2090,9 +2113,9 @@
   "/api/admin/dept": {
    "post": {
     "operationId": "portalAdminDept",
-    "summary": "부서 추가·이름 바꾸기·숨기기·보이기·보관·되살리기",
+    "summary": "예전 부서 표 숨기기·보이기·보관·되살리기(add·rename 은 400 — /api/admin/org)",
     "x-permission": "admin",
-    "description": "관리자만(아니면 403). 감사 기록에 남음.\n\n- archive(보관): 소속 인원(비활성·익명화 계정 제외)이나 대기 요청이 있으면 400 + 이유(예: '소속 인원 2명(김○○, 이○○) · 대기 요청 1건 이 있어 보관할 수 없습니다'). 보관하면 가입·변경 목록(/api/depts)에서 빠지고(hidden=1) 그 부서의 부서장 권한은 회수.\n- restore(되살리기): 보관을 풂(다시 목록에). 보관된 부서에 add·show·부서장 지정은 400.",
+    "description": "소속은 이제 조직(/api/admin/org)이 정함 — add·rename 은 400 으로 안내. 나머지는 예전 depts 표에만(가입 목록 /api/depts 는 조직 단위 이름).\n\n관리자만(아니면 403). 감사 기록에 남음.\n\n- archive(보관): 소속 인원(비활성·익명화 계정 제외)이나 대기 요청이 있으면 400 + 이유(예: '소속 인원 2명(김○○, 이○○) · 대기 요청 1건 이 있어 보관할 수 없습니다'). 보관하면 가입·변경 목록(/api/depts)에서 빠지고(hidden=1) 그 부서의 부서장 권한은 회수.\n- restore(되살리기): 보관을 풂(다시 목록에). 보관된 부서에 add·show·부서장 지정은 400.",
     "requestBody": {
      "required": true,
      "content": {
@@ -2151,9 +2174,9 @@
   "/api/admin/head": {
    "post": {
     "operationId": "portalAdminHead",
-    "summary": "부서장 권한 부여·회수",
+    "summary": "소속 장 권한 부여·회수",
     "x-permission": "admin",
-    "description": "관리자만(아니면 403). 감사 기록에 남음.",
+    "description": "관리자만(아니면 403). 감사 기록에 남음. 그 단위에 직접 소속된 계정만 장이 될 수 있음(실장 → 실, 부장 → 부). 예전 화면은 unit_id 대신 dept(이름).",
     "requestBody": {
      "required": true,
      "content": {
@@ -2162,7 +2185,6 @@
         "type": "object",
         "required": [
          "op",
-         "dept",
          "uid"
         ],
         "properties": {
@@ -2173,8 +2195,12 @@
            "revoke"
           ]
          },
-         "dept": {
+         "unit_id": {
           "type": "string"
+         },
+         "dept": {
+          "type": "string",
+          "description": "예전: 단위 이름"
          },
          "uid": {
           "type": "string"
@@ -6480,6 +6506,364 @@
      }
     }
    }
+  },
+  "/api/org": {
+   "get": {
+    "operationId": "portalOrg",
+    "summary": "조직 단위 목록(로그인 전에도 — 가입 화면)",
+    "security": [],
+    "tags": [
+     "portal"
+    ],
+    "description": "살아 있는 단위 전부(계층은 parent). 화면은 원장·부원장(skip_types)을 건너뛰어 그 하위를 첫 단계로 보이고, 단계마다 '하위 소속 없음'을 고를 수 있게 함(그 단위 자체 소속).",
+    "responses": {
+     "200": {
+      "description": "단위",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "units",
+          "skip_types"
+         ],
+         "properties": {
+          "units": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/OrgUnit"
+           }
+          },
+          "skip_types": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           },
+           "description": "경로·첫 단계에서 건너뛰는 종류(원장·부원장)"
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/account/unit": {
+   "post": {
+    "operationId": "portalAccountUnit",
+    "summary": "소속 변경 요청(고른 단위의 장 → 없으면 위로 → 관리자 승인)",
+    "tags": [
+     "portal"
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "unit_id"
+        ],
+        "properties": {
+         "unit_id": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "description": "어느 단계든(실·부·연구소…). 이미 그 소속이거나 대기 요청이 있으면 400. 승인되면 다른 단위의 장 권한은 회수.",
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    }
+   }
+  },
+  "/api/account/org-request": {
+   "post": {
+    "operationId": "portalAccountOrgRequest",
+    "summary": "목록에 없는 조직 추가 요청(관리자 승인)",
+    "tags": [
+     "portal"
+    ],
+    "description": "관리자가 승인하면 그 단위를 만들고(note '사용자 요청 #id') 요청한 사람을 소속으로 — 대기 중인 소속 요청은 취소됨. 같은 이름이 이미 있으면 400.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "name",
+         "parent"
+        ],
+        "description": "목록에 없음 → 조직 추가 요청(관리자 승인 시 단위를 만들고 소속으로)",
+        "properties": {
+         "name": {
+          "type": "string",
+          "maxLength": 60
+         },
+         "parent": {
+          "type": "string",
+          "description": "상위 단위 id"
+         },
+         "type": {
+          "type": "string",
+          "enum": [
+           "원장",
+           "본부",
+           "부원장",
+           "연구소",
+           "사업단",
+           "단",
+           "센터",
+           "부",
+           "실",
+           "팀",
+           "기타"
+          ],
+          "default": "실"
+         },
+         "note": {
+          "type": "string",
+          "maxLength": 200
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    }
+   }
+  },
+  "/api/admin/org": {
+   "get": {
+    "operationId": "portalAdminOrg",
+    "summary": "조직 관리 자료(관리자)",
+    "x-permission": "admin",
+    "tags": [
+     "portal"
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "units",
+          "imports",
+          "unassigned",
+          "types"
+         ],
+         "properties": {
+          "units": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/AdminOrgUnit"
+           },
+           "description": "비활성 포함 전부"
+          },
+          "imports": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/OrgImport"
+           },
+           "description": "최근 가져오기 10번"
+          },
+          "unassigned": {
+           "type": "integer",
+           "description": "소속 없는 계정 수(비활성·익명화 제외)"
+          },
+          "types": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    }
+   },
+   "post": {
+    "operationId": "portalAdminOrgEdit",
+    "summary": "조직 단위 더하기·고치기·옮기기·비활성·되살리기(관리자)",
+    "x-permission": "admin",
+    "tags": [
+     "portal"
+    ],
+    "description": "감사 기록에 남음. 이름은 전체에서 겹치면 400. 이름을 바꾸면 소속·장의 예전 dept 열도 같이 바뀜.\n- deactivate: 살아 있는 하위나 이 단위로 온 대기 요청이 있으면 400. 고르기 목록에서 빠지고 소속·장은 그대로.\n- move: 자기 하위로는 400.\n- 공개 조직도 가져오기는 서버에서 `python -m fastportal.org import <json>`(몇 번 돌려도 같음, 걸린 단위는 지우지 않고 비활성).",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "op"
+        ],
+        "properties": {
+         "op": {
+          "type": "string",
+          "enum": [
+           "add",
+           "update",
+           "move",
+           "deactivate",
+           "activate"
+          ]
+         },
+         "id": {
+          "type": "string",
+          "description": "add 말고 모두"
+         },
+         "name": {
+          "type": "string",
+          "maxLength": 60
+         },
+         "type": {
+          "type": "string",
+          "enum": [
+           "원장",
+           "본부",
+           "부원장",
+           "연구소",
+           "사업단",
+           "단",
+           "센터",
+           "부",
+           "실",
+           "팀",
+           "기타"
+          ]
+         },
+         "parent": {
+          "type": "string",
+          "description": "add·move"
+         },
+         "note": {
+          "type": "string",
+          "maxLength": 200
+         },
+         "sort": {
+          "type": "integer"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공(add 는 새 id)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "ok"
+         ],
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "id": {
+           "type": "string"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     }
+    }
+   }
+  },
+  "/api/admin/member": {
+   "post": {
+    "operationId": "portalAdminMember",
+    "summary": "계정 소속 바로 정하기(관리자)",
+    "x-permission": "admin",
+    "tags": [
+     "portal"
+    ],
+    "description": "unit_id 를 비우면 소속 없음. 다른 단위의 장 권한은 회수, 대기 중인 소속 요청은 취소. 감사 기록 member_set.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "uid"
+        ],
+        "properties": {
+         "uid": {
+          "type": "string"
+         },
+         "unit_id": {
+          "type": [
+           "string",
+           "null"
+          ]
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     }
+    }
+   }
   }
  },
  "components": {
@@ -6613,7 +6997,51 @@
       "pattern": "^[0-9]{4,8}$"
      },
      "dept": {
-      "type": "string"
+      "type": "string",
+      "description": "예전 화면: 단위 이름(/api/depts). 새 화면은 unit_id"
+     },
+     "unit_id": {
+      "type": "string",
+      "description": "소속 요청할 단위(/api/org). 어느 단계든 — 고른 단위의 장, 없으면 위로 올라가며 첫 장, 끝내 관리자가 승인"
+     },
+     "org_request": {
+      "type": "object",
+      "required": [
+       "name",
+       "parent"
+      ],
+      "description": "목록에 없음 → 조직 추가 요청(관리자 승인 시 단위를 만들고 소속으로)",
+      "properties": {
+       "name": {
+        "type": "string",
+        "maxLength": 60
+       },
+       "parent": {
+        "type": "string",
+        "description": "상위 단위 id"
+       },
+       "type": {
+        "type": "string",
+        "enum": [
+         "원장",
+         "본부",
+         "부원장",
+         "연구소",
+         "사업단",
+         "단",
+         "센터",
+         "부",
+         "실",
+         "팀",
+         "기타"
+        ],
+        "default": "실"
+       },
+       "note": {
+        "type": "string",
+        "maxLength": 200
+       }
+      }
      }
     }
    },
@@ -6660,19 +7088,22 @@
      },
      "role": {
       "type": "string",
-      "description": "관리자·부서장·일반"
+      "description": "관리자·부서장(어느 단위든 장)·일반"
      },
      "dept": {
-      "type": "string"
+      "type": "string",
+      "description": "소속 단위 이름(예전 도구 호환). 경로는 unit.path"
      },
      "dept_pending": {
-      "type": "string"
+      "type": "string",
+      "description": "대기 중인 소속 요청의 단위 이름"
      },
      "heads": {
       "type": "array",
       "items": {
        "type": "string"
-      }
+      },
+      "description": "내가 장인 단위 이름(예전 호환). 새 화면은 head_units"
      },
      "approvals": {
       "type": "integer",
@@ -6712,6 +7143,35 @@
      "developer": {
       "type": "boolean",
       "description": "개발자 권한(개발자 업로드 탭 사용 가능)"
+     },
+     "unit": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/UnitInfo"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "소속(없으면 null)"
+     },
+     "unit_pending": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/UnitInfo"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "대기 중인 소속 요청 단위"
+     },
+     "head_units": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/UnitInfo"
+      },
+      "description": "내가 장인 단위(실장 → 실, 부장 → 부 …)"
      }
     }
    },
@@ -7093,16 +7553,18 @@
       "enum": [
        "dept_join",
        "dept_head",
-       "withdraw"
+       "withdraw",
+       "org_add"
       ],
-      "description": "withdraw = 본인 탈퇴 요청(관리자만 처리, 승인하면 비활성화)"
+      "description": "dept_join 소속 · dept_head 소속 장 권한(관리자) · withdraw 본인 탈퇴 요청(관리자만 처리, 승인하면 비활성화) · org_add 목록에 없는 조직 추가(관리자)"
      },
      "uid": {
       "type": "string",
       "description": "요청한 계정(익명화된 계정은 deleted-…)"
      },
      "dept": {
-      "type": "string"
+      "type": "string",
+      "description": "단위 이름(org_add 는 새 조직 이름)"
      },
      "status": {
       "type": "string",
@@ -7145,7 +7607,58 @@
      },
      "route": {
       "type": "string",
-      "description": "요청이 간 곳(관리자 / 부서장 이름)"
+      "description": "요청이 간 곳 — '관리자' 또는 '<단위 경로> 장 <이름>'(고른 단위부터 위로 첫 장)"
+     },
+     "unit_id": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "대상 단위(org_add 는 상위 단위 → 승인 뒤 새 단위)"
+     },
+     "detail": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "org_add 의 원본 JSON(proposal 을 쓰세요)"
+     },
+     "unit": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/UnitInfo"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "proposal": {
+      "type": [
+       "object",
+       "null"
+      ],
+      "description": "org_add 만: {name, type, parent, parent_path, note}",
+      "properties": {
+       "name": {
+        "type": "string"
+       },
+       "type": {
+        "type": "string"
+       },
+       "parent": {
+        "type": "string"
+       },
+       "parent_path": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       "note": {
+        "type": "string"
+       }
+      }
      }
     }
    },
@@ -7164,13 +7677,21 @@
       "type": "array",
       "items": {
        "type": "string"
-      }
+      },
+      "description": "예전 화면 호환: 고를 수 있는 단위 이름"
      },
      "requests": {
       "type": "array",
       "items": {
        "$ref": "#/components/schemas/AccountRequest"
       }
+     },
+     "units": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/OrgUnit"
+      },
+      "description": "고를 수 있는 단위(/api/org 와 같음)"
      }
     }
    },
@@ -7211,7 +7732,17 @@
        0,
        1
       ],
-      "description": "부서장이면 1"
+      "description": "자기 소속 단위의 장이면 1"
+     },
+     "unit_id": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "unit": {
+      "type": "string",
+      "description": "소속 경로(' › ' 로 이음)"
      }
     }
    },
@@ -7235,7 +7766,8 @@
       "type": [
        "string",
        "null"
-      ]
+      ],
+      "description": "소속 단위 이름(예전 호환)"
      },
      "ts": {
       "type": "string"
@@ -7292,6 +7824,22 @@
      "developer": {
       "type": "boolean",
       "description": "개발자 역할"
+     },
+     "unit_id": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "unit": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/UnitInfo"
+       },
+       {
+        "type": "null"
+       }
+      ]
      }
     }
    },
@@ -7330,7 +7878,8 @@
       ],
       "description": "보관한 시각(가입·변경 목록에서 빠짐, hidden=1). 없으면 null"
      }
-    }
+    },
+    "description": "예전 부서 표(depts) — 소속은 이제 조직(/api/admin/org)이 정함. 보관·숨기기만 남음"
    },
    "JobStatus": {
     "type": "string",
@@ -9450,6 +9999,260 @@
      "hidden",
      "pins"
     ]
+   },
+   "OrgUnit": {
+    "type": "object",
+    "required": [
+     "id",
+     "name",
+     "type",
+     "parent",
+     "sort"
+    ],
+    "description": "조직 단위(고를 수 있는 것 — 살아 있는 것만). 계층은 parent 로(최상위 = 원장, parent null)",
+    "properties": {
+     "id": {
+      "type": "string",
+      "description": "공개 조직도 단위는 k-<코드>, 포털에서 더한 단위는 u-…, 공개 조직도에 없는 단위는 x-…"
+     },
+     "name": {
+      "type": "string",
+      "description": "전체에서 겹치지 않음(예전 users.dept·dept_heads.dept 에도 이 이름)"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "원장",
+       "본부",
+       "부원장",
+       "연구소",
+       "사업단",
+       "단",
+       "센터",
+       "부",
+       "실",
+       "팀",
+       "기타"
+      ]
+     },
+     "parent": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "sort": {
+      "type": "integer",
+      "description": "같은 상위 안 표시 순서"
+     },
+     "branch": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "분원(경주·정읍 등)"
+     }
+    }
+   },
+   "UnitInfo": {
+    "type": "object",
+    "required": [
+     "id",
+     "name",
+     "type",
+     "path",
+     "ids",
+     "active"
+    ],
+    "description": "소속 단위와 경로. path 는 위→아래 이름(원장·부원장은 건너뜀), 화면 표시는 ' › ' 로 이음",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "원장",
+       "본부",
+       "부원장",
+       "연구소",
+       "사업단",
+       "단",
+       "센터",
+       "부",
+       "실",
+       "팀",
+       "기타"
+      ]
+     },
+     "path": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "예: [\"선진원자로연구소\", \"경수형SMR계통기술개발부\"]"
+     },
+     "ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "path 와 같은 순서의 단위 id"
+     },
+     "active": {
+      "type": "boolean",
+      "description": "false = 관리자가 비활성(고르기 목록에서 빠짐 — 소속은 그대로)"
+     }
+    }
+   },
+   "AdminOrgUnit": {
+    "type": "object",
+    "required": [
+     "id",
+     "name",
+     "type",
+     "parent",
+     "sort",
+     "active",
+     "heads",
+     "members",
+     "src"
+    ],
+    "properties": {
+     "id": {
+      "type": "string",
+      "description": "공개 조직도 단위는 k-<코드>, 포털에서 더한 단위는 u-…, 공개 조직도에 없는 단위는 x-…"
+     },
+     "name": {
+      "type": "string",
+      "description": "전체에서 겹치지 않음(예전 users.dept·dept_heads.dept 에도 이 이름)"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "원장",
+       "본부",
+       "부원장",
+       "연구소",
+       "사업단",
+       "단",
+       "센터",
+       "부",
+       "실",
+       "팀",
+       "기타"
+      ]
+     },
+     "parent": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "sort": {
+      "type": "integer",
+      "description": "같은 상위 안 표시 순서"
+     },
+     "branch": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "분원(경주·정읍 등)"
+     },
+     "active": {
+      "type": "boolean"
+     },
+     "note": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "src": {
+      "type": "string",
+      "enum": [
+       "import",
+       "local",
+       "admin"
+      ],
+      "description": "import = 공개 조직도 가져오기(가져오기가 정리) · local = 공개 조직도에 없는 단위(가져오기가 건드리지 않음) · admin = 관리자가 더함"
+     },
+     "ts": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "members": {
+      "type": "integer",
+      "description": "직접 소속 인원(비활성·익명화 계정 제외, 하위 단위 제외)"
+     },
+     "heads": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "uid",
+        "name"
+       ],
+       "properties": {
+        "uid": {
+         "type": "string"
+        },
+        "name": {
+         "type": "string"
+        }
+       }
+      }
+     }
+    }
+   },
+   "OrgImport": {
+    "type": "object",
+    "description": "조직도 가져오기 한 번(python -m fastportal.org import)",
+    "properties": {
+     "ts": {
+      "type": "string"
+     },
+     "actor": {
+      "type": "string"
+     },
+     "src": {
+      "type": "string"
+     },
+     "sha": {
+      "type": "string"
+     },
+     "units": {
+      "type": "integer"
+     },
+     "added": {
+      "type": "integer"
+     },
+     "updated": {
+      "type": "integer"
+     },
+     "deactivated": {
+      "type": "integer",
+      "description": "목록에서 사라졌지만 소속·장·대기 요청·하위가 걸려 비활성으로 둔 수"
+     },
+     "deleted": {
+      "type": "integer"
+     },
+     "detail": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      }
+     }
+    }
    }
   },
   "responses": {

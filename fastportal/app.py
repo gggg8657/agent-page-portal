@@ -30,7 +30,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from starlette.concurrency import run_in_threadpool
 
-from . import accounts, admintools, ask, auth, community, config, db, relay, devsubmit, dwell, flows, idea, jobs, lists, match, pages, pkgindex, posts, probe, proxy, sessions, tools, toolstate, workspace
+from . import accounts, admintools, ask, auth, community, config, db, relay, devsubmit, dwell, flows, idea, jobs, lists, match, org, pages, pkgindex, posts, probe, proxy, sessions, tools, toolstate, workspace
 from .config import OWNERS, TLS
 from .ctx import Ctx, TooBig, drain, length, not_implemented, parse_json, read_body, too_big
 
@@ -117,6 +117,9 @@ def get_sync(ctx):
     if p == "/api/depts":
         with db.db() as c:
             return ctx.send({"depts": accounts.visible_depts(c)})
+    if p == "/api/org":   # 로그인 전에도(가입 화면) — 고를 수 있는 조직 단위(계층). 공개 조직도 + 포털에서 더한 단위
+        with db.db() as c:
+            return ctx.send({"units": org.public(c), "skip_types": sorted(org.SKIP)})
     if p == "/api/version":   # 로그인 전에도 — 화면이 이 서버와 맞는 API 계약인지 확인(docs/api/README.md '버전')
         return ctx.send(version_info())
     if p == "/api/landing":   # 로그인 전 랜딩의 분류·도구 수(WEB_DIST 와 상관없이 늘)
@@ -266,12 +269,13 @@ def _login(ctx, req):
                 if not _signup_ok(ip) and not ctx.local_owner():
                     return ctx.send({"error": "이 접속지에서 가입을 너무 많이 했습니다. 한 시간 뒤에 다시 해 주세요", "code": "rate_limited"}, code=429, headers=[("Retry-After", "3600")])
                 b.check_new(c, uid, str(req.get("name", "")), pin, ctx.local_owner())   # 관리자 아이디 가입은 진짜 로컬(토큰)에서만
-                d = str(req.get("dept") or "")
-                if d and d not in accounts.visible_depts(c):
-                    raise ValueError("목록에 있는 부서를 고르세요 (목록에 없으면 관리자에게 요청)")
+                d = accounts.unit_arg(c, req)   # unit_id(새) 또는 dept 이름(예전)
+                orq = req.get("org_request") if isinstance(req.get("org_request"), dict) else None   # 목록에 없음 → 조직 추가 요청
                 b.create_user(c, uid, str(req["name"]).strip()[:40], pin)
                 if d:
                     accounts.new_request(c, uid, "dept_join", d)
+                if orq:
+                    accounts.org_request(c, uid, orq)
                 _SIGNUPS.setdefault(ip, []).append(time.time())
                 accounts.audit(c, uid, "signup", uid, ip)
             else:

@@ -42,13 +42,15 @@ ORDER BY "예산합계" DESC LIMIT 500
 - **사용법 팝업** — 프록시하는 도구 첫 화면에 `guides/<도구폴더>.md` 를 오른쪽 위 **?** 팝업으로 붙임(포털 자체는 `guides/portal.md`).
 - **로그인** — 계정은 `portal.db` 의 `users`(아이디·이름·부서·PIN 의 pbkdf2-sha256 해시 + 사용자별 salt, 60만 회 — 예전 20만 회 계정은 다음 로그인 때 자동으로 다시 해시). 세션은 무작위 32바이트 토큰(DB 에는 sha256 만), 쿠키 `agsid`(HttpOnly·SameSite=Lax, 30일, 쓰면 연장 — 로그인 화면의 '이 PC에서 로그인 유지'를 끄면 Max-Age 없는 쿠키 + 서버 만료 12시간·연장 없음, `sess_short` 표). 로그인 실패는 아이디당 10분에 5번까지. 로그인 안 한 화면 요청은 `/login?next=…` 로, API 는 401. 접속 IP 는 NAT 뒤라 모두 서버 주소로 보이므로 사람 구분에 쓰지 않습니다 — 단, 이 서버 안(127.0.0.1)에서 쿠키 없이 + 비밀 헤더 `X-Local-Owner`(값 = `_data/.local_owner_token`)를 붙인 요청(스크립트·내부 호출)만 서버 주인으로 봅니다 — 헤더 없는 브라우저(SSH 포트포워딩 포함)는 늘 로그인 필요(무효 쿠키가 있으면 다시 로그인). 아래 'FastAPI 포털' 의 `PORTAL_LOCAL_OWNER`. 계정 만들기·PIN 초기화: `agent-page-portal` 폴더에서 `~/.local/fastportal-venv/bin/python -m fastportal add-user <id> --name <이름> [--dept 부서] [--pin 숫자]`(PIN 을 안 주면 무작위 6자리를 화면에만 출력, 있던 계정이면 PIN 만 바꾸고 세션을 끊음).
 - **통계·피드** — `AGENT_DATA/portal.db` sqlite 하나(WAL)에 열기·좋아요·피드 글·사용자 랭킹(계정 id 기준, 랭킹은 이름으로 표시). 즐겨찾기·최근 사용은 계정에 저장(`portal.db` — `GET·POST /api/lists`, 다른 PC·브라우저에서도 같음). 펫 상태·사용법 팝업 '다시 띄우지 않기'는 브라우저 localStorage(계정별 키).
-- **계정·부서·권한** — 역할은 관리자(`AGENT_OWNERS` 계정) · 부서장(부서마다, 여럿 가능) · 일반. 오른쪽 위 **계정 설정**(`/account`)에서 이름 바꾸기, 부서 소속 요청, 부서장 권한 요청, PIN 바꾸기, 내 요청 보기·취소.
-  - 부서는 관리자가 만든 목록에서만 고름(`depts` — 처음엔 기존 계정·`tools.json` 의 부서로 채움). 목록에 없으면 관리자에게 요청.
-  - 부서 소속(가입 때 고른 부서 포함)은 **요청 → 그 부서 부서장 승인**(부서장이 없으면 관리자) 뒤에 반영, 그 전엔 '승인 대기'. 대기 요청은 종류마다 하나. 다른 부서로 옮기면 예전 부서의 부서장 권한은 내려놓음.
-  - 부서장 권한은 **관리자에게** 요청 → 승인. 관리자는 직접 지정·회수도 함.
+- **계정·소속·권한** — 역할은 관리자(`AGENT_OWNERS` 계정) · 부서장(어느 조직 단위든 장, 여럿 가능) · 일반. 오른쪽 위 **계정 설정**(`/account`)에서 이름 바꾸기, 소속 변경 요청, 소속 장 권한 요청, PIN 바꾸기, 내 요청 보기·취소.
+  - **소속은 계층 조직**(`org_units` — 원장 → 본부·연구소·사업단·센터 → 부 → 실, `fastportal/org.py`). 위에서부터 고르고 단계마다 '하위 소속 없음'(부장은 부, 연구소 직속은 연구소에 소속). 검색은 경로 어디든(예: '계통' → `선진원자로연구소 › 경수형SMR계통기술개발부`). 목록에 없으면 '조직 추가 요청'(관리자 승인 시 단위를 만들고 소속으로).
+  - 처음 기동 때 `org_units` 가 비어 있으면 `fastportal/org_data/kaeri-org.json`(KAERI 공개 조직도, 2026-10-23) + `local-units.json`(공개 조직도에 없는 단위 — 인공지능응용연구실은 디지털원자로·AI연구센터 아래, note "공개 조직도에 없음")을 넣고, 예전 부서 이름(`users.dept`·`dept_heads.dept`·대기 요청)을 같은 이름 단위로 옮김. 다시 가져오기: `python -m fastportal.org import <json> [--local <json>] [--dry-run]`(몇 번 돌려도 같음 — 바뀐 것만 감사 기록·`org_imports`, 사라진 단위는 소속·장·대기 요청·하위가 걸려 있으면 지우지 않고 비활성), 상태 `python -m fastportal.org status`.
+  - 소속(가입 때 고른 것 포함)은 **요청 → 고른 단위의 장 승인, 없으면 상위 단위의 장, … 끝내 관리자**(요청한 본인은 빼고) 뒤에 반영, 그 전엔 '승인 대기'. 대기 요청은 종류마다 하나. 다른 단위로 옮기면 예전 단위의 장 권한은 내려놓음.
+  - 장은 자기가 속한 단위를 대표(실장 → 실, 부장 → 부, 소장 → 연구소). 소속 장 권한은 **관리자에게** 요청 → 승인. 관리자는 직접 지정·회수·소속 지정도 함.
+  - 예전 도구 호환: `users.dept`·`dept_heads.dept` 에 단위 이름을 같이 적음(이름은 전체에서 겹치지 않음), 새 열은 `users.unit_id`·`dept_heads.unit_id`·`requests.unit_id`. `/api/me` 의 `dept` 는 단위 이름, `unit.path` 가 경로.
   - 승인할 사람은 위쪽 막대의 **요청 N** 배지와 화면 알림으로 알고 **승인**(`/approvals`)에서 승인·거절(메모 선택). 요청한 사람은 다음 화면을 열 때 결과 알림을 받음.
-  - **부서장이 할 수 있는 것**: 자기 부서 소속 요청 승인·거절, 자기 부서 구성원 목록과 각자 포털에서 도구를 연 횟수(최근 30일·누적)·마지막 접속 보기. 그 밖에는 일반 사용자와 같고, 도구 쪽 권한·기록 공유는 바뀌지 않음.
-  - **관리**(`/admin`, 관리자만): 계정 목록(부서·역할·가입·마지막 접속), 부서 추가·이름 바꾸기·숨기기, 부서장 지정·회수, 모든 대기 요청, PIN 초기화(무작위 6자리를 한 번만 보여 줌), 계정 정지·해제, 감사 기록.
+  - **부서장(소속 장)이 할 수 있는 것**: 자기 단위(위로 올라와 자기에게 온 것 포함) 소속 요청 승인·거절, 자기 단위와 하위 단위 구성원 목록과 각자 포털에서 도구를 연 횟수(최근 30일·누적)·마지막 접속 보기. 그 밖에는 일반 사용자와 같고, 도구 쪽 권한·기록 공유는 바뀌지 않음.
+  - **관리**(`/admin`, 관리자만): 계정 목록(소속 경로·역할·가입·마지막 접속), 조직 관리(단위 검색·더하기·이름·옮기기·비활성, 장 지정·회수, 소속 지정, 가져오기 기록), 소속 장 지정·회수, 모든 대기 요청, PIN 초기화(무작위 6자리를 한 번만 보여 줌), 계정 정지·해제, 감사 기록.
   - API 는 `/api/account/*` · `/api/approvals/*` · `/api/admin/*` — 모든 호출에서 서버가 역할을 확인(아니면 403). 승인·거절·부서장 지정/회수·PIN 초기화·정지·부서 변경은 `audit` 표에 남김.
 - **사용자 구분** — 도구로 넘길 때 `X-Agent-User` 헤더를 포털이 붙임(클라이언트가 보낸 `X-Agent-User`·`X-Forwarded-User`·`X-User` 와 포털 세션 쿠키는 버림): 값은 계정 id(관리자 계정 `AGENT_OWNERS` 도 자기 id → 도구 작업 폴더 `u/<id>`), `owner` 는 로컬 주인 토큰(`X-Local-Owner`, 스크립트·운영)뿐. 관리자 계정이면 서명된 `X-Agent-Role: admin`(+ `X-Agent-Role-Auth`)도 붙고, 도구는 `portal_auth.is_admin(h)`(owner 또는 서명된 admin)로 관리자 권한을 판정(밖에서 온 역할 헤더는 포털이 버리고, 서명이 안 맞는 역할은 도구 관문이 지움). 도구는 이 값으로 기록을 사용자별 폴더에 나눠 저장하고, 포털은 도구를 `BIND=127.0.0.1` 로 띄워 포털을 거쳐서만 열리게 함. `/api/me` → `{id, name, owner, role, dept, dept_pending, heads, approvals}`.
 - **화면 테마** — 위쪽 막대 **🎨 테마** 또는 계정 설정에서 클래식·트렌디·v2 × 밝게·어둡게(+ 컴퓨터 설정 따라 자동). v2 는 포털 화면 배치도 다름(왼쪽 메뉴·현황 타일·Ctrl+K 명령 팔레트 — `v2/home.html`·`v2/account.html` 마크업(로그인 화면 `login.html` 은 모든 테마가 한 배치, 색·모양만 토큰) + `theme/portal-v2.css`, 스크립트는 원래 화면 것 그대로), v2 ↔ 다른 계열로 바꾸면 포털 화면은 자동 새로고침. 계정에 저장(`users.theme`, 로그인 전·로컬 접속은 쿠키 `agtheme`), `GET/POST /api/account/theme`. 포털이 모든 화면(포털·설명서·도구 첫 화면) `<head>` 앞에 `theme/boot.js` 와 `/theme/*.css` 를 붙임 — 클래식 밝게는 CSS 를 안 붙여 예전 화면 그대로. 어둡게는 `theme/dark.js` 가 도구 CSS 의 고정 색을 명도만 바꿔 맞춤(그림·캔버스는 그대로). 도구별 손질은 `theme/tools/<도구>.css` — 방법은 `theme/THEME_GUIDE.md`.
@@ -180,7 +182,8 @@ openssl x509 -req -in portal.csr -CA ca.crt -CAkey ca.key -CAcreateserial -days 
 | `db.py` | portal.db 연결·표 만들기·마이그레이션·매일 백업 |
 | `auth/` | **계정 저장소**: `base.py` 공통 틀(`AuthBackend` — verify·get_user·create_user·set_password·supports_*), `local.py` 지금 동작(포털 내부 DB, PBKDF2 60만 번), `external.py` 챗봇 계정 DB 틀(TODO) — 바꾸는 법 [`fastportal/auth/README.md`](fastportal/auth/README.md) |
 | `sessions.py` | 세션·쿠키·로그인 유지·실패 잠금·로컬 주인 토큰·접속지 판정(`resolve` = 누가 요청했나) |
-| `accounts.py` | 부서·부서장·요청/승인·관리·감사·비활성화/익명화·탈퇴·보관 + `/api/account`·`/api/approvals`·`/api/admin` |
+| `accounts.py` | 소속·소속 장·요청/승인·관리·감사·비활성화/익명화·탈퇴·보관 + `/api/account`·`/api/approvals`·`/api/admin` |
+| `org.py` | 계층 조직 `org_units` — 가져오기(`python -m fastportal.org import`)·경로·조상/하위·장·승인 경로(위로)·관리자 단위 편집 |
 | `tools.py` | tools.json·시작·중지·등록·켜짐 캐시·혼합형 host·GPU 현황·홈 목록 자료 |
 | `proxy.py` | `/t/<도구>/` 중계(헤더 규칙·스트리밍·리디렉트·첫 화면 끼워 넣기·오래 걸리는 POST 자동 기록) |
 | `pages.py` | 화면·테마·저작자 표기·랜딩·사용법·정적 파일(`/guide`·`/theme`)·React 빌드(`WEB_DIST`·`WEB_ROOT`) |

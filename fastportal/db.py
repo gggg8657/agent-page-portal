@@ -134,6 +134,8 @@ def init_db(seed_depts=()):
         if not c.execute("SELECT 1 FROM depts").fetchone():
             seed = {r[0] for r in c.execute("SELECT DISTINCT dept FROM users")} | set(seed_depts)
             c.executemany("INSERT OR IGNORE INTO depts(name, ts) VALUES(?, datetime('now'))", [(d.strip(),) for d in seed if d and d.strip() and d.strip() != "개인"])
+        from . import org   # 계층 조직(org_units·users.unit_id·dept_heads.unit_id) — 비어 있으면 기본 조직도 넣고 예전 부서 이름을 옮김
+        org.init(c)
 
 
 # ── 매일 백업 — 기본 꺼짐(BACKUP=1 로 켬; 운영 포털 하나만 돌려야 함) ─────────

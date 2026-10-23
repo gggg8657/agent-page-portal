@@ -177,7 +177,7 @@ same("가입 규칙 위반(이미 있음)", "POST", "/api/signup", "anon", body=
 for th in ("", "classic-light", "v2-dark", "trendy-auto", "classic-dark", "bogus"):
     same(f"랜딩 /login 테마={th or '없음'}", "GET", "/login", "anon", headers={"Cookie": f"agtheme={th}"} if th else {})
 same("랜딩 /login?next=…", "GET", "/login?next=/account", "anon")
-same("/api/depts", "GET", "/api/depts", "anon")
+# /api/depts 는 비교 안 함 — 새 포털은 계층 조직(org_units)의 단위 이름(2026-10-23), 예전 portal.py 는 depts 표
 same("로그인 필요 API(401)", "GET", "/api/me", "anon")
 same("로그인 필요 화면(302 next)", "GET", "/account?x=1&y=/t/a", "anon", headers={"Accept": "text/html"})
 same("로그인 필요 홈(302)", "GET", "/", "anon", headers={"Accept": "text/html,application/xhtml+xml"})

@@ -38,14 +38,14 @@
 | 호출 | 설명 |
 |---|---|
 | `POST /api/login` `{"id": "아이디", "pin": "PIN", "remember": true}` | 성공 `{"ok": true, "id": …}` + 쿠키 `agsid` (HttpOnly, SameSite=Lax — 바꾸기는 아래 3절). `remember`(로그인 유지, 없으면 `true`): `true` = 30일, 쓰는 동안 하루에 한 번 연장 · `false` = 쿠키에 Max-Age 없음(브라우저 닫으면 끝) + 서버 만료 12시간, 연장 없음. 틀리면 400 `{"error", "code": "bad_credentials"}`. 같은 아이디를 같은 접속지에서 10분에 5번 틀리면 **429** `code: "locked"`(10분), 한 접속지가 아이디를 바꿔 가며 10분에 30번 넘게 틀리면 429 `code: "ip_locked"`, 로그인이 몰리면 429 `code: "busy"` — 모두 `Retry-After`(초) 머리 |
-| `POST /api/signup` `{"id", "name", "pin", "dept"}` | 가입. id 는 영문 소문자·숫자·`_.-` 2~32자, PIN 은 숫자 4~8자리. 부서는 `GET /api/depts` 목록 중 하나(부서장 승인 뒤 반영). 계정 저장소가 포털 밖(`AUTH_BACKEND=external`)이면 403 `code: "unsupported"` + 안내. 한 접속지에서 한 시간에 5번까지(넘으면 429 `code: "rate_limited"`) |
+| `POST /api/signup` `{"id", "name", "pin", "unit_id"?, "org_request"?}` | 가입. id 는 영문 소문자·숫자·`_.-` 2~32자, PIN 은 숫자 4~8자리. 소속은 `GET /api/org` 의 단위 하나(어느 단계든 — 고른 단위의 장, 없으면 위로 올라가며 첫 장, 끝내 관리자 승인 뒤 반영). 목록에 없으면 `org_request {name, parent, type?, note?}`(관리자에게 조직 추가 요청). 예전 화면의 `dept`(단위 이름)도 받음. 계정 저장소가 포털 밖(`AUTH_BACKEND=external`)이면 403 `code: "unsupported"` + 안내. 한 접속지에서 한 시간에 5번까지(넘으면 429 `code: "rate_limited"`) |
 | `GET /api/auth` | 로그인 전에도: `{"signup", "password_change", "guide"}` — 지금(포털 내부 DB)은 둘 다 `true`. `false` 면 가입·PIN 바꾸기 화면을 숨기고 `guide` 를 보여 주세요 |
 | `GET /login` | 로그인 화면(랜딩). 이미 로그인했으면 `next`(같은 사이트 경로만, 아니면 `/`)로 302 |
 | `POST /api/logout` | **새 화면은 이것**: 세션 삭제 + 쿠키 지움 → `{"ok": true}`(로그인 안 돼 있어도 200) |
 | `GET /logout` | (예전 화면용) 세션 삭제 후 `/login` 으로 302. 다른 사이트에서 건 링크(`Sec-Fetch-Site: cross-site`)로는 로그아웃하지 않고 `/` 로 |
 | `GET /api/version` | 로그인 전에도: `{"api": "2026.10.19", "build": "<포털 git describe>", "auth": {…/api/auth 와 같음}, "cors": false}` — [10. 버전](#10-버전호환) |
 | `GET /api/landing` | 로그인 전에도: 랜딩의 분류·도구 수 `{"groups": [{name, n, names}], "tools"}` |
-| `GET /api/me` | 지금 사용자 `{"id", "name", "role", "dept", "owner", "onboarded", …}` — `onboarded`: 첫 로그인 둘러보기를 봤거나 건너뜀 |
+| `GET /api/me` | 지금 사용자 `{"id", "name", "role", "dept", "unit", "owner", "onboarded", …}` — `dept` 는 소속 단위 이름(예전 도구 호환), `unit` `{id, name, type, path, ids, active}` 은 경로(`path` 위→아래 이름, 원장·부원장 건너뜀 — 화면은 `' › '` 로 이어 보임), `unit_pending`·`head_units`(내가 장인 단위). `onboarded`: 첫 로그인 둘러보기를 봤거나 건너뜀 |
 
 - **현재 계정 저장소는 임시**(포털 내부 DB)이며, 운영 시 **사내 챗봇 계정 DB 로 대체 예정**입니다(같은 아이디·비밀번호). 그때도 세션 쿠키·`/api/me`·부서·권한은 그대로이고, 가입·PIN 변경만 막힙니다(`GET /api/auth`). 외부 저장소가 응답하지 않으면 `/api/login` 이 503.
 - 로그인 안 된 요청: API 는 **401** `{"error": "로그인이 필요합니다", "login": "/login"}`, 화면 요청(`Accept: text/html` 인 GET)은 `/login?next=…` 로 302.
@@ -145,7 +145,8 @@ const g  = await (await fetch('/t/saju-local/api/graph?dept=' + encodeURICompone
 | `POST /api/internal/jobs` | **도구 전용**(화면 X) — 아래 '도구가 작업 상태를 알리는 법' | 127.0.0.1 + 도구 토큰 |
 | `GET /api/guide/<도구>` | 도구 사용법(마크다운 텍스트) | 로그인 |
 | `GET /api/readme/<도구>` | 도구 README(마크다운 텍스트) | 로그인 |
-| `GET /api/depts` | 부서 목록 | 누구나 |
+| `GET /api/org` | 조직 단위 `units[{id, name, type, parent, sort, branch}]`(살아 있는 것, 계층은 parent) + `skip_types`(원장·부원장 — 첫 단계·경로에서 건너뜀) | 누구나 |
+| `GET /api/depts` | 소속 단위 이름 목록(예전 화면 호환) | 누구나 |
 | `POST /api/start` `{"dir"}` | 꺼진 도구 켜기(켜진 도구 재시작은 관리자만, 같은 도구를 60초 안에 다시 누르면 409 `starting`). 숨긴 도구는 관리자만(일반 사용자는 404) | 로그인 |
 | `POST /api/stop` `{"dir"}` | 도구 끄기 | 관리자 |
 | `POST /api/open` · `/api/like` `{"dir"}` | 사용·좋아요 기록(순위에 반영). 좋아요는 계정당 도구마다 1회 — 두 번째부터는 `{"ok":true,"liked":true,"already":true}` 로 무시(취소 없음) | 로그인 |
@@ -166,7 +167,9 @@ const g  = await (await fetch('/t/saju-local/api/graph?dept=' + encodeURICompone
 | `/api/account…` · `/api/approvals…` · `/api/admin…` | 계정 설정·부서 승인·관리. `GET /api/admin` 의 `auth_backend` `{name, label, signup, password_change, guide}` = 계정 저장소(지금 `local` "임시(포털 내부 DB)") | 본인·부서장·관리자 |
 | `POST /api/account/withdraw` `{"reason"?}` | 탈퇴 요청 — 바로 지우지 않고 관리자 승인 목록(kind `withdraw`)으로. 승인하면 비활성화, 본인은 `/api/account/cancel` 로 취소 | 본인 |
 | `POST /api/admin/account` `{"op", "uid", "reason"?, "confirm"?}` | 삭제 대신: `deactivate`(로그인 불가·세션 끊김·부서장 회수·대기 요청 취소, 되살릴 수 있음) · `reactivate` · `anonymize`(**되돌릴 수 없음** — 비활성 계정만, `reason` 필수, `confirm` = uid 그대로. 이름·부서·PIN 을 지우고 화면·API 에는 `deleted-…` 로만, 아이디는 내부 키로 남아 감사 기록·도구 데이터의 만든 사람 연결 유지·재가입 불가). 자동 정리 `PORTAL_ANON_AUTO=1`(기한 `PORTAL_ANON_AFTER_DAYS`, 기본 365일·기본 꺼짐) | 관리자 |
-| `POST /api/admin/dept` `{"op": "archive" \| "restore", "name"}` | 부서 보관·되살리기 — 소속 인원(비활성·익명화 제외)·대기 요청이 있으면 400 + 이유. 보관하면 가입·변경 목록에서 빠짐(`/api/admin` 의 `archived`) | 관리자 |
+| `GET /api/admin/org` · `POST /api/admin/org` `{"op": "add"\|"update"\|"move"\|"deactivate"\|"activate", …}` | 조직 관리 — 전체 단위(비활성 포함)·장·직접 소속 수·최근 가져오기(`imports`)·소속 없는 계정 수. 이름은 전체에서 겹치지 않게(바꾸면 예전 `dept` 열도 같이). 비활성은 고르기 목록에서만 빠짐(소속·장 그대로, 살아 있는 하위·대기 요청이 있으면 400). 공개 조직도 가져오기는 서버에서 `python -m fastportal.org import <json>`(몇 번 돌려도 같음, 사라진 단위는 걸린 것이 있으면 비활성) | 관리자 |
+| `POST /api/admin/member` `{"uid", "unit_id"}` · `POST /api/admin/head` `{"op", "uid", "unit_id"}` | 소속 바로 정하기(빈 값 = 소속 없음) · 소속 장 지정·회수(그 단위에 직접 소속된 계정만 — 실장 → 실, 부장 → 부) | 관리자 |
+| `POST /api/admin/dept` `{"op": "archive" \| "restore", "name"}` | 예전 부서 표(`depts`) 보관·되살리기. `add`·`rename` 은 400(조직 관리로) | 관리자 |
 | `GET /api/community/summary?t=agent:<id>,tool:<dir>` · `/api/community/reviews?kind=&id=` · `/api/community/requests?kind=&id=` \| `?box=received\|sent` · `/api/community/ranking` | **모두의 에이전트 커뮤니티**: 카드용 평균 별점·리뷰 수(수만), 대상 리뷰·요청(볼 수 있는 대상만 — 도구=숨김 아님, 흐름=만든 사람, 에이전트=빌더가 보여 주는 것), 내 요청함, 이달의 제작자(질문+10×복제+5×리뷰+20×반영, 계정 id 없음) | 로그인 |
 | `POST /api/community/review` `{kind,id,stars 1~5,body≤500}` · `/review/delete` · `/review/hide`(관리자) | 리뷰(대상마다 1개, 자기 것 금지 403, 남의 리뷰 지우기 403). 10분에 쓰기 20번 | 로그인·관리자 |
 | `POST /api/community/request` `{kind,id,type improve\|bug\|feature,title≤80,body≤2000}` — 도구 요청은 관리자 알림함 + tools.json author 계정이 받고, 관리자의 받은 요청에 도구 요청 전부가 보임. 숨긴 도구는 관리자도 403 — · `/request/status` `{id,status open\|review\|done\|hold,note}` · `/request/vote` `{id,on}` · `/request/delete` · `/request/hide`(관리자) | 개선·요청. 상태는 대상 주인·관리자만(요청자도 403), 주인·요청자에게 작업 알림(tool `community`), +1 은 한 사람 1표·내 요청 금지. 화면은 텍스트로만 그림 | 로그인·주인·관리자 |
@@ -302,7 +305,7 @@ npx @redocly/cli lint docs/api/openapi/openapi.json                             
 ```
 
 읽는 법:
-- **보안**: `cookieAuth`(쿠키 `agsid`)가 전역. 로그인 전에 열린 경로(`/api/login`·`/api/signup`·`/api/logout`·`/api/depts`·`/api/auth`·`/api/version`·`/api/landing`·`/login`·`/logout`)만 `security: []`. 오류 `Error` 의 `code` enum 과 공통 응답 `TooManyRequests`(429, `Retry-After`)도 있습니다. 도구 태그의 `x-health-path` 는 표준 헬스 `/t/<도구>/healthz`.
+- **보안**: `cookieAuth`(쿠키 `agsid`)가 전역. 로그인 전에 열린 경로(`/api/login`·`/api/signup`·`/api/logout`·`/api/depts`·`/api/org`·`/api/auth`·`/api/version`·`/api/landing`·`/login`·`/logout`)만 `security: []`. 오류 `Error` 의 `code` enum 과 공통 응답 `TooManyRequests`(429, `Retry-After`)도 있습니다. 도구 태그의 `x-health-path` 는 표준 헬스 `/t/<도구>/healthz`.
 - **오류**: 공통 `Error` = `{"error": "…"}`, 공통 응답 `BadRequest`(400)·`Unauthorized`(401, `login` 포함)·`Forbidden`(403)·`NotFound`(404)·`Conflict`(409)·`PayloadTooLarge`(413)·`ServerError`(500)·`BadGateway`(502 = 도구 꺼짐 → `POST /api/start`). 도구 경로에는 401·502 가 모두 붙어 있습니다. 모양이 다른 곳(tts-local POST 의 `{"error": {"message", "type"}}` = `OpenAIError`)은 그대로 적었습니다.
 - **스트리밍**: `text/event-stream`(SSE)·`application/x-ndjson` 응답은 스키마가 문자열이고, 이벤트별 JSON 모양은 미디어 타입의 **`x-stream-events`** 목록(`[{name, schema}]`)과 operation description 에 있습니다. 생성기는 이 확장을 무시하므로, 이벤트 타입은 `components["schemas"]["<도구>…Event"]` 를 직접 가져다 쓰세요. **도중 오류도 HTTP 200 으로 오고 스트림 안 `error` 이벤트로만 옵니다.**
 - **파일**: 업로드는 대부분 JSON 안 base64(`contentEncoding: base64`), 상한을 넘으면 413 — 상한은 각 operation description. 내려받기는 실제 `Content-Type`(`format: binary`) + `Content-Disposition` 헤더.
