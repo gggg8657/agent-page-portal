@@ -45,7 +45,7 @@ OpenAPI 3.1: [`openapi/agent-builder-local.json`](openapi/agent-builder-local.js
 
 ## 권한·공유 규칙
 - 사람 구분은 포털이 붙이는 `X-Agent-User`(계정 id). 관리자 = 로컬 주인 `owner` 또는 서명된 `X-Agent-Role: admin`(관리자 계정 — 작업 폴더는 자기 `u/<id>`).
-- **부서·부서장**은 같은 서버 포털 DB(`_data/portal.db` 의 `users.dept`·`dept_heads`)를 **읽기 전용**으로 조회(포털 코드 변경 없음).
+- **소속·장**은 같은 서버 포털 DB(`_data/portal.db` 의 `users.dept·unit_id`·`dept_heads`·`org_units`)를 **읽기 전용**으로 조회. 공유 대상은 계층 조직 단위(하위 포함 — 부에 공유하면 그 부와 하위 실 모두, 최상위 = 전체). 예전 `review.dept`(이름만)는 같은 이름 단위로 봄.
 - 에이전트 설정·자료는 **공유 데이터**(만든 계정 기록). 고치기·지우기·자료 올리기·시험 대화는 만든 사람·관리자만(403). 응답엔 계정 id 대신 `can_edit`·`owner_name`.
 - **볼 수 있는 사람**: 만든 사람·관리자, 부서 공개가 **승인된** 뒤 그 부서 사람, 승인 대기 중이면 그 부서 승인자(검토용). 그 밖에는 404(있는지도 알리지 않음).
 - 부서원에게는 `instructions`·`only_docs`·`cite`·`length` 를 내보내지 않는다(대화에 필요한 이름·설명·예시 질문·자료 목록만).
@@ -72,13 +72,13 @@ OpenAPI 3.1: [`openapi/agent-builder-local.json`](openapi/agent-builder-local.js
  "can_edit": true, "can_approve": false, "mine": true, "owner_name": "내가 만듦", "fav": false, "created": "…", "updated": "…",
  "instructions": "…", "only_docs": true, "cite": true, "length": "short", "template": "rules"}
 ```
-- `review`(부서 공개 요청): `{"dept", "status": "pending|approved|rejected", "requested", "decided", "by_name", "note"}`
+- `review`(조직 공개 요청): `{"dept"(대상 단위 이름, 최상위면 "전체"), "unit"(단위 id), "path"(경로), "status": "pending|approved|rejected", "requested", "decided", "by_name", "note"}`
 
 ### POST api/agents/{id} — 고치기
 - 보낸 필드만: `name`(60) `desc`(140) `icon`(2) `instructions`(6000) `examples`(글 목록, 8개·200자) `only_docs`·`cite`(참/거짓) `length`(`short|mid|long`). 형식 틀림 400.
 
 ### POST api/agents/{id}/publish
-- `{"scope": "me"}` → 바로 게시(나만). `{"scope": "dept"}` → 만든 사람 부서로 승인 요청(`review.status: "pending"`). 관리자가 게시하면 바로 승인(관리자는 `dept` 로 부서 지정). 만든 사람 부서가 없으면 400. 이미 같은 부서로 대기·승인 중이면 그대로.
+- `{"scope": "me"}` → 바로 게시(나만). `{"scope": "dept", "unit": "<단위 id>"}` → 그 조직으로 승인 요청(`review.status: "pending"`) — `unit` 은 만든 사람의 소속 단위나 그 상위(`GET api/me` 의 `share_targets`: 내 소속 → 상위 → 전체), 안 주면 소속 단위, 줄기 밖이면 400. `{"scope": "all"}` = 최상위(전체). 승인자는 대상 단위의 장 → 없으면 상위 단위의 장 → …(본인 제외), 아무도 없으면 관리자. 관리자가 게시하면 바로 승인(관리자는 아무 단위나). 만든 사람 소속이 없으면 400. 이미 같은 대상으로 대기·승인 중이면 그대로.
 
 ### POST api/agents/{id}/docs — SSE
 - 요청 `{"file_name": "지침.hwpx", "file_b64": "…"}` 또는 `{"text": "붙여 넣은 글", "file_name": "선택"}`.
@@ -136,7 +136,7 @@ OpenAPI 3.1: [`openapi/agent-builder-local.json`](openapi/agent-builder-local.js
 ## 모두의 에이전트 연동 (2026-10-19)
 - `GET api/stats` — 참여 현황(수만): `{agents, creators, shared, new_7d, asks_7d, top_creators: [{name, dept, agents, uses_7d}]}`. 제작자 순위는 **부서에 공개(승인)한 에이전트만** 셈 — 비공개 에이전트의 제목·내용은 나가지 않음.
 - `POST api/agents/<id>/duplicate` — 내 에이전트뿐 아니라 **내가 볼 수 있는 부서 공개 에이전트**도 내 초안(나만)으로 복제(자료 포함). 볼 수 없으면 404, 공개 안 된 남의 것은 403.
-- 카드(`api/agents`)에 `created`, `dept`(부서 공개 승인이면 그 부서) 추가.
+- 카드(`api/agents`)에 `created`, `dept`(조직 공개 승인이면 대상 단위 이름)·`dept_path`(그 경로 — 배지는 `' › '` 로 이음) 추가.
 - 복제 허용(`allow_fork`, 기본 참): 만든 사람이 편집기 공개 범위 옆 체크로 끔 → 남의 `duplicate` 는 403 "만든 사람이 복제를 허용하지 않았습니다"(내 것·관리자는 됨). 카드·상세에 `allow_fork`, 지시문 본문은 여전히 남에게 안 보임.
 - 관리자 공유 끄기(`blocked`, 2026-10-20): `block {off: true}` 면 부서원 목록·보기(404)·복제·참여 현황·순위에서 빠지고 만든 사람·관리자만 봄. 카드·상세의 `blocked` `{ts, by_name, reason}` 는 만든 사람·관리자에게만(그 밖엔 null). 자료·대화·설정은 그대로, `off: false` 면 돌아옴. 복제본에는 안 옮겨짐.
 - 복제 기록: 복제본 `agent.json` 의 `forked_from {id, name, owner, at, docs_copied}`. 남의 부서 공개 에이전트를 복제하면 **지시문·설정만** 복사하고 자료 파일은 복사하지 않음(내 것·관리자는 자료까지). 카드·상세에 `forks`(수), `forked_from`(원본 — 볼 수 있을 때만 id), 상세에 `forks_list`(내가 볼 수 있는 복제본만).
