@@ -19,7 +19,7 @@ try:
 except ImportError:   # Pillow 없음 — 바이트에서 메타데이터만 걷는 길로
     Image = ImageOps = None
 
-from . import accounts, community, config, jobs, tools, toolstate
+from . import accounts, comments, community, config, jobs, tools, toolstate
 from .db import db, now
 
 CATS = {"활용사례": "활용 사례", "활용팁": "활용 팁", "질문": "질문", "공지": "공지"}
@@ -301,6 +301,9 @@ def listing(ctx, cat="", q="", agent="", sort="new", limit=30, offset=0):
             for t in json.loads(a or "[]"):
                 hot[t] = hot.get(t, 0) + 1
         posts = [_pub(c, r, ctx, liked=r["id"] in liked, reports=reps.get(r["id"], 0)) for r in rows]
+        cm = comments.counts(c, "post", [p["id"] for p in posts])
+        for p in posts:
+            p["comments"] = cm.get(str(p["id"]), 0)
     return {"posts": posts, "counts": counts, "cats": CATS, "total": counts[cat] if cat else counts[""],
             "hot_agents": [{"id": k, "posts": v} for k, v in sorted(hot.items(), key=lambda x: (-x[1], x[0]))[:20]],
             "can_notice": bool(ctx.is_owner), "limits": {"title": TITLE_MAX, "body": BODY_MAX, "agents": AGENTS_MAX, "img_bytes": IMG_MAX, "img_n": IMG_N}}
@@ -312,7 +315,9 @@ def get(ctx, pid):
         r = _row(c, pid)
         if not _can_see(ctx, r):
             raise FileNotFoundError("없는 글입니다")
-        return {"post": _pub(c, r, ctx, full=True), "images": _images(pid) if (r["uid"] == ctx.uid) else None}
+        d = _pub(c, r, ctx, full=True)
+        d["comments"] = comments.counts(c, "post", [pid]).get(str(pid), 0)
+        return {"post": d, "images": _images(pid) if (r["uid"] == ctx.uid) else None}
 
 
 def _images(pid):
@@ -356,6 +361,11 @@ def recent(ctx):
             out.append(d)
             if len(out) >= 30:
                 break
+        for kind in ("review", "request"):
+            cm = comments.counts(c, kind, [d["id"] for d in out if d["type"] == kind])
+            for d in out:
+                if d["type"] == kind:
+                    d["comments"] = cm.get(d["id"], 0)
     return {"items": out}
 
 
@@ -415,6 +425,8 @@ def save(ctx, req):
     agents = _agents(ctx, req.get("agents"))
     with db() as c:
         r = _row(c, pid)
+        if r["draft"] and config.COMMUNITY_POST_VERIFIED_ONLY:   # 새 글만(고치기는 그대로) — 기본 꺼짐
+            comments.need_verified(c, ctx.uid, "글")
         if not (r["uid"] and r["uid"] == ctx.uid) or r["fmt"] != "md":
             raise PermissionError("내가 쓴 글만 고칠 수 있습니다")
     community._rate(ctx.uid)
@@ -446,6 +458,7 @@ def delete(ctx, req):
         c.execute("DELETE FROM posts WHERE id=?", (pid,))
         c.execute("DELETE FROM post_likes WHERE post=?", (pid,))
         c.execute("DELETE FROM post_reports WHERE post=?", (pid,))
+        community._drop_comments(c, "post", pid)
         accounts.audit(c, ctx.uid, "post_delete", f"post:{pid}", (r["title"] or "")[:60] + ("" if mine else " (관리자)"))
     _drop_dir(pid)
     tools.stats_reset()

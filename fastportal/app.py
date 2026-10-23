@@ -400,6 +400,8 @@ def post_sync(ctx, body):
                 tags = ["#" + x.strip("#") for x in (req.get("tags") or "").split() if x]
                 if "#공지" in tags and not ctx.is_owner:   # 공지는 관리자만(새 쓰기 화면 posts.save 와 같은 규칙)
                     raise PermissionError("공지는 관리자만 쓸 수 있습니다")
+                if config.COMMUNITY_POST_VERIFIED_ONLY and not accounts.is_verified(c, ctx.uid):
+                    raise PermissionError("부서장 승인 후 글을 쓸 수 있습니다")
                 c.execute("INSERT INTO posts(title,body,author,dept,tags,ts,uid) VALUES(?,?,?,?,?,?,?)",   # 예전 글쓰기(글자만) — 새 화면은 /api/community/post/*
                           (req["title"].strip(), req.get("body", "").strip(), ctx.uname, req.get("dept", ""), json.dumps(tags), db.now(), ctx.uid))
                 return ctx.send({"ok": True})

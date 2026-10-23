@@ -107,6 +107,8 @@ PIP_INDEX_URL = os.environ.get("PORTAL_PIP_INDEX_URL", "").strip()
 # ── 본문·프록시 ─────────────────────────────────────────────────────────
 MAX_BODY = int(os.environ.get("PORTAL_MAX_BODY", str(600 * 1024 * 1024)))   # 보안 설계서 '포털 업로드 상한' 제안값(meeting 음성 500MB 포함)
 MAX_JSON = int(os.environ.get("PORTAL_MAX_JSON", str(1024 * 1024)))
+# 커뮤니티 일반 글(활용 사례·팁·질문)도 '확인된 사용자'(accounts.is_verified)만 쓰게 — 기본 꺼짐(댓글·자유게시판은 늘 확인된 사용자만)
+COMMUNITY_POST_VERIFIED_ONLY = os.environ.get("COMMUNITY_POST_VERIFIED_ONLY", "0") == "1"
 DRAIN_MAX = 4 * 1024 * 1024 * 1024   # 이보다 큰 본문은 다 읽어 버리지 않고 바로 끊음
 PROXY_TIMEOUT = 3600
 HOP = {"connection", "keep-alive", "transfer-encoding", "te", "trailer", "upgrade", "proxy-connection", "host", "content-length", "accept-encoding"}

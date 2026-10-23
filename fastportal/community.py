@@ -263,10 +263,18 @@ def _own_row(c, table, rid, ctx, admin_ok=True):
     return own_row(c, table, rid, ctx.uid, "없습니다", "다른 사람의 글입니다", admin_ok and ctx.is_owner)
 
 
+def _drop_comments(c, kind, tid):
+    """대상을 지우면 그 댓글·댓글 신고도(comments.py 표 — 아직 없을 수 있음: 시험의 작은 DB)"""
+    if c.execute("SELECT 1 FROM sqlite_master WHERE name='comments'").fetchone():
+        c.execute("DELETE FROM comment_reports WHERE comment IN (SELECT id FROM comments WHERE kind=? AND target=?)", (kind, str(tid)))
+        c.execute("DELETE FROM comments WHERE kind=? AND target=?", (kind, str(tid)))
+
+
 def delete_review(ctx, req):
     with db() as c:
         r = _own_row(c, "reviews", req.get("id"), ctx)
         c.execute("DELETE FROM reviews WHERE id=?", (r["id"],))
+        _drop_comments(c, "review", r["id"])
         accounts.audit(c, ctx.uid, "review_delete", f"{r['kind']}:{r['target']}", f"#{r['id']}" + (" (관리자)" if r["uid"] != ctx.uid else ""))
     return {"ok": True}
 
@@ -353,6 +361,7 @@ def delete_request(ctx, req):
         r = _own_row(c, "requests_fb", req.get("id"), ctx)
         c.execute("DELETE FROM request_votes WHERE req=?", (r["id"],))
         c.execute("DELETE FROM requests_fb WHERE id=?", (r["id"],))
+        _drop_comments(c, "request", r["id"])
         accounts.audit(c, ctx.uid, "request_delete", f"{r['kind']}:{r['target']}", f"#{r['id']}" + (" (관리자)" if r["uid"] != ctx.uid else ""))
     return {"ok": True}
 
@@ -402,8 +411,8 @@ def _q(ctx):
 def _err(ctx, fn):
     try:
         return ctx.send(fn())
-    except PermissionError as e:
-        return ctx.send({"error": str(e), "code": "forbidden"}, code=403)
+    except PermissionError as e:   # comments.NotVerified(확인된 사용자 아님)는 code=not_verified
+        return ctx.send({"error": str(e), "code": "not_verified" if type(e).__name__ == "NotVerified" else "forbidden"}, code=403)
     except FileNotFoundError as e:
         return ctx.send({"error": str(e), "code": "not_found"}, code=404)
     except LookupError as e:
@@ -413,7 +422,7 @@ def _err(ctx, fn):
 
 
 def handle_get(ctx):
-    from . import board, posts   # 글(posts.py)·자유게시판(board.py)이 이 모듈의 대상 확인·글 검사를 씀 — 순환 import 를 피해 여기서
+    from . import board, comments, posts   # 글(posts.py)·자유게시판(board.py)·댓글(comments.py)이 이 모듈의 대상 확인·글 검사를 씀 — 순환 import 를 피해 여기서
     p, q = ctx.p, _q(ctx)
     one = lambda k: (q.get(k) or [""])[0]
     if p.startswith("/api/community/img/"):
@@ -425,6 +434,8 @@ def handle_get(ctx):
         return _err(ctx, lambda: posts.GETS[p](ctx, one))
     if p in board.GETS:
         return _err(ctx, lambda: board.GETS[p](ctx, one))
+    if p in comments.GETS:
+        return _err(ctx, lambda: comments.GETS[p](ctx, one))
     if p == "/api/community/summary":
         keys = [x for x in one("t").split(",") if x]
         def f():
@@ -447,8 +458,8 @@ POSTS = {"/api/community/review": write_review, "/api/community/review/delete": 
 
 
 def handle_post(ctx, req):
-    from . import board, posts
-    fn = POSTS.get(ctx.p) or posts.POSTS.get(ctx.p) or board.POSTS.get(ctx.p)
+    from . import board, comments, posts
+    fn = POSTS.get(ctx.p) or posts.POSTS.get(ctx.p) or board.POSTS.get(ctx.p) or comments.POSTS.get(ctx.p)
     if not fn:
         return ctx.send({"error": "not found"}, code=404)
     return _err(ctx, lambda: fn(ctx, req))

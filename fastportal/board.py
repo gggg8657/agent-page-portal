@@ -4,6 +4,7 @@
   응답에 계정 id·이름을 넣지 않음(내 것인지는 mine 참·거짓만). 글·댓글 쓰기는 감사 기록에도 남기지 않음(감사 표 actor 로 작성자가 드러나므로).
   내용은 로그에 찍지 않음. 글자만(그림 없음) — 화면도 링크를 누를 수 없는 글자로 그림.
   작성자 확인(관리자만): 신고가 1건 이상 있는 글·댓글에만, 이유를 적어야 하고, 감사 기록(board_reveal: 누가·언제·어느 글·이유)을 남긴 뒤 계정을 돌려줌.
+  쓰기(새 글·댓글)는 '확인된 사용자'(accounts.is_verified)만 — 아니면 403 code=not_verified. 댓글은 쓴 사람이 고칠 수 있음(/board/comment/edit).
   안전: 처음 쓰기 전 규칙 동의(board_agree), 사람당 1시간에 글 POST_RATE(5)·댓글 COMMENT_RATE(30)(DB 로 셈 — 포털 프로세스가 여럿이어도 같음),
         서로 다른 신고자 N 명(기본 3, 관리자 설정)이면 자동 숨김, 관리자 숨기기·지우기, 신고는 관리자 알림함(작성자 없이).
 API: GET /api/community/board?q=&offset= · /board/post?id= · /board/reports(관리자)
@@ -11,7 +12,7 @@ API: GET /api/community/board?q=&offset= · /board/post?id= · /board/reports(�
           /board/report {kind:post|comment,id,reason} · /board/hide {kind,id,hidden}(관리자) · /board/reveal {kind,id,reason}(관리자) · /board/settings {autohide}(관리자)"""
 import os, re, secrets, time
 
-from . import accounts, community, jobs
+from . import accounts, comments, community, jobs
 from .db import db, now
 
 TITLE_MAX, BODY_MAX, COMMENT_MAX, REASON_MAX = 80, 5000, 1000, 300
@@ -37,6 +38,8 @@ def init(c):
     CREATE TABLE IF NOT EXISTS board_reports(kind TEXT NOT NULL, target INTEGER NOT NULL, uid TEXT NOT NULL, reason TEXT, ts TEXT, UNIQUE(kind, target, uid));
     CREATE TABLE IF NOT EXISTS board_agree(uid TEXT PRIMARY KEY, version INTEGER NOT NULL, ts TEXT);
     CREATE TABLE IF NOT EXISTS board_settings(k TEXT PRIMARY KEY, v TEXT);""")
+    if "updated" not in {r[1] for r in c.execute("PRAGMA table_info(board_comments)")}:   # 댓글 고치기(2026-10-23 뒤)
+        c.execute("ALTER TABLE board_comments ADD COLUMN updated TEXT")
 
 
 # ── 도움 ─────────────────────────────────────────────────────────────────
@@ -121,7 +124,8 @@ def listing(ctx, q="", offset=0):
             if ctx.is_owner:
                 d["reports"] = _reports(c, "post", r["id"])
             out.append(d)
-        return {"posts": out, "total": total, "agreed": agreed(c, ctx.uid), "notice": NOTICE, "rules": RULES, "rules_version": RULES_VERSION,
+        v = accounts.is_verified(c, ctx.uid)
+        return {"posts": out, "total": total, "verified": v, "not_verified": "" if v else comments.NOT_VERIFIED, "agreed": agreed(c, ctx.uid), "notice": NOTICE, "rules": RULES, "rules_version": RULES_VERSION,
                 "limits": {"title": TITLE_MAX, "body": BODY_MAX, "comment": COMMENT_MAX, "posts_per_hour": POST_RATE, "comments_per_hour": COMMENT_RATE},
                 "admin": bool(ctx.is_owner)}
 
@@ -135,7 +139,7 @@ def get(ctx, pid):
         cq = "SELECT * FROM board_comments WHERE post=?" + ("" if ctx.is_owner else " AND (hidden=0 OR uid=?)") + " ORDER BY id"
         cs = []
         for m in c.execute(cq, (pid,) if ctx.is_owner else (pid, ctx.uid)):
-            d = {"id": m["id"], "author": _label(0 if m["uid"] == r["uid"] else alias.get(m["uid"], 0)), "body": m["body"], "ts": m["ts"],
+            d = {"id": m["id"], "author": _label(0 if m["uid"] == r["uid"] else alias.get(m["uid"], 0)), "body": m["body"], "ts": m["ts"], "updated": m["updated"],
                  "mine": m["uid"] == ctx.uid, "hidden": bool(m["hidden"]), "reported": ("comment", m["id"]) in mine_rep}
             if ctx.is_owner:
                 d["reports"] = _reports(c, "comment", m["id"])
@@ -144,7 +148,8 @@ def get(ctx, pid):
                 "mine": r["uid"] == ctx.uid, "hidden": bool(r["hidden"]), "reported": ("post", pid) in mine_rep}
         if ctx.is_owner:
             post["reports"] = _reports(c, "post", pid)
-        return {"post": post, "comments": cs, "agreed": agreed(c, ctx.uid), "notice": NOTICE, "rules": RULES, "rules_version": RULES_VERSION,
+        v = accounts.is_verified(c, ctx.uid)
+        return {"post": post, "comments": cs, "verified": v, "not_verified": "" if v else comments.NOT_VERIFIED, "agreed": agreed(c, ctx.uid), "notice": NOTICE, "rules": RULES, "rules_version": RULES_VERSION,
                 "admin": bool(ctx.is_owner)}
 
 
@@ -194,6 +199,7 @@ def save(ctx, req):
                 raise PermissionError("내가 쓴 글만 고칠 수 있습니다")
             c.execute("UPDATE board_posts SET title=?, body=?, updated=? WHERE id=?", (title, body, now(), pid))
             return {"ok": True, "id": pid}
+        comments.need_verified(c, ctx.uid, "글")
         _rate(c, "board_posts", ctx.uid, POST_RATE, "글")
         pid = c.execute("INSERT INTO board_posts(uid, title, body, ts, updated) VALUES(?,?,?,?,?)", (ctx.uid, title, body, now(), now())).lastrowid
     return {"ok": True, "id": pid}
@@ -224,12 +230,26 @@ def comment(ctx, req):
     pid = _id(req.get("post"))
     body = community._text(req.get("body"), COMMENT_MAX, "댓글", required=True)
     with db() as c:
+        comments.need_verified(c, ctx.uid)
         _need_agree(c, ctx.uid)
         r = _post_row(c, pid, ctx)
         _rate(c, "board_comments", ctx.uid, COMMENT_RATE, "댓글")
         n = _alias(c, pid, ctx.uid, r["uid"])
         cid = c.execute("INSERT INTO board_comments(post, uid, body, ts) VALUES(?,?,?,?)", (pid, ctx.uid, body, now())).lastrowid
     return {"ok": True, "id": cid, "author": _label(n)}
+
+
+def edit_comment(ctx, req):
+    cid = _id(req.get("id"), "댓글")
+    body = community._text(req.get("body"), COMMENT_MAX, "댓글", required=True)
+    with db() as c:
+        r = c.execute("SELECT uid FROM board_comments WHERE id=?", (cid,)).fetchone()
+        if not r:
+            raise FileNotFoundError("없는 댓글입니다")
+        if r["uid"] != ctx.uid:
+            raise PermissionError("내가 쓴 댓글만 고칠 수 있습니다")
+        c.execute("UPDATE board_comments SET body=?, updated=? WHERE id=?", (body, now(), cid))
+    return {"ok": True}
 
 
 def delete_comment(ctx, req):
@@ -330,5 +350,6 @@ GETS = {"/api/community/board": lambda ctx, one: listing(ctx, one("q").strip(), 
         "/api/community/board/reports": lambda ctx, one: reports(ctx)}
 POSTS = {"/api/community/board/agree": agree, "/api/community/board/save": save, "/api/community/board/delete": delete,
          "/api/community/board/comment": comment, "/api/community/board/comment/delete": delete_comment,
+         "/api/community/board/comment/edit": edit_comment,
          "/api/community/board/report": report, "/api/community/board/hide": hide, "/api/community/board/reveal": reveal,
          "/api/community/board/settings": settings}

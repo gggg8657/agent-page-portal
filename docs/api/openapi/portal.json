@@ -5525,7 +5525,7 @@
      "portal"
     ],
     "x-permission": "self",
-    "description": "규칙 동의 뒤. id 없으면 새 글(1시간 5개), 있으면 내 글 고치기. 글자만(그림·링크 없음)",
+    "description": "규칙 동의 뒤. id 없으면 새 글(1시간 5개), 있으면 내 글 고치기. 글자만(그림·링크 없음) 확인된 사용자만(아니면 403 not_verified).",
     "requestBody": {
      "required": true,
      "content": {
@@ -5642,7 +5642,7 @@
      "portal"
     ],
     "x-permission": "self",
-    "description": "규칙 동의 뒤, 1시간 30개. 응답 author = 그 글에서 내 가명",
+    "description": "규칙 동의 뒤, 1시간 30개. 응답 author = 그 글에서 내 가명 확인된 사용자만(아니면 403 not_verified).",
     "requestBody": {
      "required": true,
      "content": {
@@ -5996,6 +5996,420 @@
      },
      "404": {
       "description": "없는 글(숨긴 글은 쓴 사람·관리자만)"
+     }
+    }
+   }
+  },
+  "/api/community/comments": {
+   "get": {
+    "operationId": "commentList",
+    "summary": "댓글 목록(커뮤니티 글·요청·리뷰)",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "그 대상을 볼 수 있는 사람만. 숨긴 댓글은 쓴 사람·관리자만. can_comment = 확인된 사용자(소속 승인됨·대기 요청 없음, 관리자)",
+    "parameters": [
+     {
+      "name": "kind",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "enum": [
+        "post",
+        "request",
+        "review"
+       ]
+      },
+      "description": "post|request|review"
+     },
+     {
+      "name": "id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      },
+      "description": "대상 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CommentList"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·1시간 30개)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "code=not_verified(소속 승인 전 — 부서장 승인 후 댓글) · 남의 댓글 · 관리자 전용"
+     },
+     "404": {
+      "description": "없는 대상·볼 수 없는 대상"
+     }
+    }
+   }
+  },
+  "/api/community/comment": {
+   "post": {
+    "operationId": "commentWrite",
+    "summary": "댓글 달기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "확인된 사용자만(아니면 403 not_verified), 1시간 30개, 글자만",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "kind",
+         "id",
+         "body"
+        ],
+        "properties": {
+         "kind": {
+          "type": "string",
+          "enum": [
+           "post",
+           "request",
+           "review"
+          ]
+         },
+         "id": {
+          "type": [
+           "string",
+           "integer"
+          ]
+         },
+         "body": {
+          "type": "string",
+          "maxLength": 1000
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·1시간 30개)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "code=not_verified(소속 승인 전 — 부서장 승인 후 댓글) · 남의 댓글 · 관리자 전용"
+     },
+     "404": {
+      "description": "없는 대상·볼 수 없는 대상"
+     }
+    }
+   }
+  },
+  "/api/community/comment/edit": {
+   "post": {
+    "operationId": "commentEdit",
+    "summary": "내 댓글 고치기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id",
+         "body"
+        ],
+        "properties": {
+         "id": {
+          "type": "integer"
+         },
+         "body": {
+          "type": "string",
+          "maxLength": 1000
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·1시간 30개)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "code=not_verified(소속 승인 전 — 부서장 승인 후 댓글) · 남의 댓글 · 관리자 전용"
+     },
+     "404": {
+      "description": "없는 대상·볼 수 없는 대상"
+     }
+    }
+   }
+  },
+  "/api/community/comment/delete": {
+   "post": {
+    "operationId": "commentDelete",
+    "summary": "댓글 지우기(쓴 사람·관리자)",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id"
+        ],
+        "properties": {
+         "id": {
+          "type": "integer"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·1시간 30개)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "code=not_verified(소속 승인 전 — 부서장 승인 후 댓글) · 남의 댓글 · 관리자 전용"
+     },
+     "404": {
+      "description": "없는 대상·볼 수 없는 대상"
+     }
+    }
+   }
+  },
+  "/api/community/comment/hide": {
+   "post": {
+    "operationId": "commentHide",
+    "summary": "댓글 숨기기·풀기(관리자)",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "admin",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id"
+        ],
+        "properties": {
+         "id": {
+          "type": "integer"
+         },
+         "hidden": {
+          "type": "boolean"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·1시간 30개)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "code=not_verified(소속 승인 전 — 부서장 승인 후 댓글) · 남의 댓글 · 관리자 전용"
+     },
+     "404": {
+      "description": "없는 대상·볼 수 없는 대상"
+     }
+    }
+   }
+  },
+  "/api/community/comment/report": {
+   "post": {
+    "operationId": "commentReport",
+    "summary": "댓글 신고",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "남의 댓글에 한 번 — 관리자 알림함",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id"
+        ],
+        "properties": {
+         "id": {
+          "type": "integer"
+         },
+         "reason": {
+          "type": "string",
+          "maxLength": 300
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·1시간 30개)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "code=not_verified(소속 승인 전 — 부서장 승인 후 댓글) · 남의 댓글 · 관리자 전용"
+     },
+     "404": {
+      "description": "없는 대상·볼 수 없는 대상"
+     }
+    }
+   }
+  },
+  "/api/community/board/comment/edit": {
+   "post": {
+    "operationId": "boardCommentEdit",
+    "summary": "자유게시판 내 댓글 고치기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id",
+         "body"
+        ],
+        "properties": {
+         "id": {
+          "type": "integer"
+         },
+         "body": {
+          "type": "string",
+          "maxLength": 1000
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·1시간 30개)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "code=not_verified(소속 승인 전 — 부서장 승인 후 댓글) · 남의 댓글 · 관리자 전용"
+     },
+     "404": {
+      "description": "없는 대상·볼 수 없는 대상"
      }
     }
    }
@@ -7843,6 +8257,10 @@
        "$ref": "#/components/schemas/UnitInfo"
       },
       "description": "내가 장인 단위(실장 → 실, 부장 → 부 …)"
+     },
+     "verified": {
+      "type": "boolean",
+      "description": "커뮤니티 댓글·자유게시판 쓰기 가능 — 소속 승인됨·대기 요청 없음, 관리자(accounts.is_verified)"
      }
     }
    },
@@ -10409,6 +10827,10 @@
      "reports": {
       "type": "integer",
       "description": "관리자에게만 — 신고 수"
+     },
+     "comments": {
+      "type": "integer",
+      "description": "보이는 댓글 수"
      }
     }
    },
@@ -10584,6 +11006,10 @@
      },
      "type_label": {
       "type": "string"
+     },
+     "comments": {
+      "type": "integer",
+      "description": "보이는 댓글 수"
      }
     }
    },
@@ -11018,6 +11444,12 @@
      "reports": {
       "type": "integer",
       "description": "관리자에게만"
+     },
+     "updated": {
+      "type": [
+       "string",
+       "null"
+      ]
      }
     }
    },
@@ -11066,6 +11498,13 @@
       "additionalProperties": {
        "type": "integer"
       }
+     },
+     "verified": {
+      "type": "boolean"
+     },
+     "not_verified": {
+      "type": "string",
+      "description": "쓸 수 없을 때 안내"
      }
     }
    },
@@ -11107,6 +11546,13 @@
      },
      "admin": {
       "type": "boolean"
+     },
+     "verified": {
+      "type": "boolean"
+     },
+     "not_verified": {
+      "type": "string",
+      "description": "쓸 수 없을 때 안내"
      }
     }
    },
@@ -11172,6 +11618,79 @@
         }
        }
       }
+     }
+    }
+   },
+   "Comment": {
+    "type": "object",
+    "description": "댓글 — 쓴 사람 이름(author)은 보이고 계정 id 는 안 나감",
+    "required": [
+     "id",
+     "author",
+     "body",
+     "ts",
+     "mine",
+     "hidden",
+     "reported"
+    ],
+    "properties": {
+     "id": {
+      "type": "integer"
+     },
+     "author": {
+      "type": "string"
+     },
+     "body": {
+      "type": "string"
+     },
+     "ts": {
+      "type": "string"
+     },
+     "updated": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "mine": {
+      "type": "boolean"
+     },
+     "hidden": {
+      "type": "boolean"
+     },
+     "reported": {
+      "type": "boolean"
+     },
+     "reports": {
+      "type": "integer",
+      "description": "관리자에게만"
+     }
+    }
+   },
+   "CommentList": {
+    "type": "object",
+    "required": [
+     "comments",
+     "can_comment",
+     "not_verified",
+     "admin"
+    ],
+    "properties": {
+     "comments": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Comment"
+      }
+     },
+     "can_comment": {
+      "type": "boolean"
+     },
+     "not_verified": {
+      "type": "string",
+      "description": "쓸 수 없을 때 안내(빈 값 = 쓸 수 있음)"
+     },
+     "admin": {
+      "type": "boolean"
      }
     }
    }

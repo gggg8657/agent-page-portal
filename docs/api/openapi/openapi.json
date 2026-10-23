@@ -33365,6 +33365,10 @@
        "$ref": "#/components/schemas/UnitInfo"
       },
       "description": "내가 장인 단위(실장 → 실, 부장 → 부 …)"
+     },
+     "verified": {
+      "type": "boolean",
+      "description": "커뮤니티 댓글·자유게시판 쓰기 가능 — 소속 승인됨·대기 요청 없음, 관리자(accounts.is_verified)"
      }
     }
    },

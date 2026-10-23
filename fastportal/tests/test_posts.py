@@ -4,7 +4,7 @@ import io, json, os, struct, tempfile, unittest, zlib
 from types import SimpleNamespace as NS
 from unittest.mock import patch
 
-from fastportal import community, config, db as dbm, posts, tools
+from fastportal import comments, community, config, db as dbm, posts, tools
 from fastportal.db import db
 
 TOOLS = {"sql-local": {"dir": "sql-local", "port": 1, "name": "SQL"},
@@ -74,7 +74,10 @@ class PostsTest(unittest.TestCase):
             # 예전 글(글자만, uid 없음) — 열을 더하기 전에 넣어 둠
             c.execute("INSERT INTO posts(title, body, author, dept, tags, ts) VALUES('예전 사례', '# 그냥 글', '홍길동', 'A', ?, '2026-10-01T00:00:00')",
                       (json.dumps(["#활용사례"]),))
-            community.init(c); posts.init(c)
+            c.execute("CREATE TABLE requests(id INTEGER PRIMARY KEY, kind TEXT, uid TEXT, dept TEXT, status TEXT)")
+            for col in ("unit_id INTEGER", "disabled INTEGER DEFAULT 0", "deactivated TEXT"):
+                c.execute("ALTER TABLE users ADD COLUMN " + col)
+            community.init(c); posts.init(c); comments.init(c)
 
     def fake_builder(self, user, path, role=""):
         if path == "/api/agents/abc123":   # alice 부서만 보는 에이전트

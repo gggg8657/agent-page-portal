@@ -4,7 +4,7 @@ import json, os, tempfile, unittest
 from types import SimpleNamespace as NS
 from unittest.mock import patch
 
-from fastportal import board, community, config
+from fastportal import board, comments, community, config
 from fastportal.db import db
 
 NAMES = {"alice": "앨리스", "bob": "밥", "carol": "캐롤", "dave": "데이브", "owner": "관리자"}
@@ -23,10 +23,12 @@ class BoardTest(unittest.TestCase):
         for x in self.p: x.start()
         community._RATE.clear()
         with db() as c:
-            c.executescript("""CREATE TABLE users(id TEXT PRIMARY KEY, name TEXT, dept TEXT);
+            c.executescript("""CREATE TABLE users(id TEXT PRIMARY KEY, name TEXT, dept TEXT, unit_id INTEGER, disabled INTEGER DEFAULT 0, deactivated TEXT);
+                CREATE TABLE requests(id INTEGER PRIMARY KEY, kind TEXT, uid TEXT, dept TEXT, status TEXT);
                 CREATE TABLE audit(ts TEXT, actor TEXT, action TEXT, target TEXT, detail TEXT);""")
-            c.executemany("INSERT INTO users VALUES(?,?,?)", [(k, v, "A") for k, v in NAMES.items()])
-            board.init(c)
+            c.executemany("INSERT INTO users(id, name, dept, unit_id) VALUES(?,?,?,?)", [(k, v, "A", 1) for k, v in NAMES.items()])
+            c.execute("INSERT INTO users(id, name, dept) VALUES('eve', '이브', 'A')")
+            board.init(c); comments.init(c)
         for u in ("alice", "bob", "carol", "dave"):
             board.agree(ctx(u), {"version": board.RULES_VERSION})
 
@@ -148,6 +150,24 @@ class BoardTest(unittest.TestCase):
             a = c.execute("SELECT actor, target, detail, ts FROM audit WHERE action='board_reveal'").fetchall()
         self.assertEqual([(x[0], x[1], x[2]) for x in a], [("owner", f"board:post:{p}", "비방 신고 확인")])
         self.assertTrue(a[0][3])
+
+    def test_unverified_cannot_write_and_comment_edit(self):
+        p = board.save(ctx("alice"), {"title": "t", "body": "b"})["id"]
+        with db() as c:
+            c.execute("INSERT INTO users(id, name, dept) VALUES('frank', '프랭크', '')")   # 소속 없음
+            c.execute("INSERT INTO requests(kind, uid, dept, status) VALUES('dept_join', 'carol', 'B', 'pending')")   # 옮기는 중(대기)
+        for who in ("frank", "carol"):
+            board.agree(ctx(who), {"version": board.RULES_VERSION})
+            for f, a in ((board.save, {"title": "t", "body": "b"}), (board.comment, {"post": p, "body": "c"})):
+                with self.subTest(who=who, f=f.__name__), self.assertRaises(comments.NotVerified):
+                    f(ctx(who), a)
+        self.assertFalse(board.get(ctx("frank"), p)["verified"]); self.assertTrue(board.get(ctx("bob"), p)["verified"])
+        cid = board.comment(ctx("bob"), {"post": p, "body": "처음"})["id"]
+        with self.assertRaises(PermissionError):
+            board.edit_comment(ctx("alice"), {"id": cid, "body": "남의 것"})
+        board.edit_comment(ctx("bob"), {"id": cid, "body": "고침"})
+        c0 = board.get(ctx("dave"), p)["comments"][0]
+        self.assertEqual((c0["body"], c0["author"]), ("고침", "익명 1")); self.assertTrue(c0["updated"])
 
     def test_text_limits_and_bad_input(self):
         for bad in ({"title": "", "body": "b"}, {"title": "t", "body": ""}, {"title": "가" * 81, "body": "b"}, {"title": 1, "body": "b"}):

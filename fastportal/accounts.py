@@ -27,6 +27,18 @@ def is_admin(uid):
     return uid == "owner" or uid in OWNERS
 
 
+def is_verified(c, uid):
+    """'확인된 사용자'(커뮤니티 댓글·자유게시판 쓰기 조건) — 판단은 이 함수 한 곳에서만.
+    관리자이거나, 정지·비활성이 아니고 소속(users.unit_id — 소속 장·관리자가 승인한 것만 들어감)이 있으며 대기 중인 소속 요청(dept_join)이 없음.
+    조직 모델이 바뀌면 여기만 고침(예전 부서 이름 users.dept 만 있는 계정도 소속으로 봄)"""
+    if is_admin(uid):
+        return True
+    r = c.execute("SELECT unit_id, dept, disabled, deactivated FROM users WHERE id=?", (uid,)).fetchone()
+    if not r or r["disabled"] or r["deactivated"] or not (r["unit_id"] or r["dept"]):
+        return False
+    return not c.execute("SELECT 1 FROM requests WHERE uid=? AND kind='dept_join' AND status='pending'", (uid,)).fetchone()
+
+
 def audit(c, actor, action, target, detail=""):
     c.execute("INSERT INTO audit VALUES(?,?,?,?,?)", (now(), actor, action, target, detail))
 
@@ -328,6 +340,7 @@ def me(c, uid, uname):
             # 계층 소속 — dept·dept_pending·heads 는 예전 도구 호환(단위 이름). path 는 원장·부원장을 뺀 위→아래 이름
             "unit": org.info(c, unit[0]) if unit else None, "unit_pending": org.info(c, pend["unit_id"]) if pend else None,
             "head_units": [org.info(c, h) for h in org.head_units(c, uid)],
+            "verified": is_verified(c, uid),   # 커뮤니티 댓글·자유게시판 쓰기 가능(소속 승인됨·대기 요청 없음, 관리자)
             "account": bool(u), "onboarded": bool(u["onboarded"]) if u else True,
             "tour_seen": (u["tour_seen"] or 0) if u else config.TOUR_VERSION, "tour_version": config.TOUR_VERSION,
             "tutorials": tut_seen(u["tut_seen"]) if u else None,
