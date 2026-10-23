@@ -3634,6 +3634,455 @@
     }
    }
   },
+  "/api/community/board": {
+   "get": {
+    "operationId": "boardList",
+    "summary": "자유게시판 목록",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "응답에 계정 id·이름은 없음 — 작성자는 '익명(글쓴이)'·'익명 N'(글마다 따로 매김), 내 것은 mine 만. 숨긴 글은 쓴 사람·관리자만",
+    "parameters": [
+     {
+      "name": "q",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string"
+      },
+      "description": "제목·본문 검색"
+     },
+     {
+      "name": "offset",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer"
+      },
+      "description": "건너뛸 수(30개씩)"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BoardList"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·속도 제한: 1시간 글 5·댓글 30)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "규칙 동의 전·남의 글·관리자 전용·신고 없는 글 확인"
+     },
+     "404": {
+      "description": "없는 글(숨긴 글은 쓴 사람·관리자만)"
+     }
+    }
+   }
+  },
+  "/api/community/board/post": {
+   "get": {
+    "operationId": "boardPost",
+    "summary": "자유게시판 글 하나 + 댓글",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "integer"
+      },
+      "description": "글 id"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BoardDetail"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·속도 제한: 1시간 글 5·댓글 30)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "규칙 동의 전·남의 글·관리자 전용·신고 없는 글 확인"
+     },
+     "404": {
+      "description": "없는 글(숨긴 글은 쓴 사람·관리자만)"
+     }
+    }
+   }
+  },
+  "/api/community/board/agree": {
+   "post": {
+    "operationId": "boardAgree",
+    "summary": "자유게시판 규칙 동의",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "version"
+        ],
+        "properties": {
+         "version": {
+          "type": "integer"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·속도 제한: 1시간 글 5·댓글 30)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "규칙 동의 전·남의 글·관리자 전용·신고 없는 글 확인"
+     },
+     "404": {
+      "description": "없는 글(숨긴 글은 쓴 사람·관리자만)"
+     }
+    }
+   }
+  },
+  "/api/community/board/save": {
+   "post": {
+    "operationId": "boardSave",
+    "summary": "자유게시판 글 쓰기·고치기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "규칙 동의 뒤. id 없으면 새 글(1시간 5개), 있으면 내 글 고치기. 글자만(그림·링크 없음)",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "title",
+         "body"
+        ],
+        "properties": {
+         "id": {
+          "type": "integer"
+         },
+         "title": {
+          "type": "string",
+          "maxLength": 80
+         },
+         "body": {
+          "type": "string",
+          "maxLength": 5000
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·속도 제한: 1시간 글 5·댓글 30)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "규칙 동의 전·남의 글·관리자 전용·신고 없는 글 확인"
+     },
+     "404": {
+      "description": "없는 글(숨긴 글은 쓴 사람·관리자만)"
+     }
+    }
+   }
+  },
+  "/api/community/board/delete": {
+   "post": {
+    "operationId": "boardDelete",
+    "summary": "자유게시판 글 지우기(댓글까지)",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "쓴 사람·관리자",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id"
+        ],
+        "properties": {
+         "id": {
+          "type": "integer"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·속도 제한: 1시간 글 5·댓글 30)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "규칙 동의 전·남의 글·관리자 전용·신고 없는 글 확인"
+     },
+     "404": {
+      "description": "없는 글(숨긴 글은 쓴 사람·관리자만)"
+     }
+    }
+   }
+  },
+  "/api/community/board/comment": {
+   "post": {
+    "operationId": "boardComment",
+    "summary": "댓글 달기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "규칙 동의 뒤, 1시간 30개. 응답 author = 그 글에서 내 가명",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "post",
+         "body"
+        ],
+        "properties": {
+         "post": {
+          "type": "integer"
+         },
+         "body": {
+          "type": "string",
+          "maxLength": 1000
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·속도 제한: 1시간 글 5·댓글 30)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "규칙 동의 전·남의 글·관리자 전용·신고 없는 글 확인"
+     },
+     "404": {
+      "description": "없는 글(숨긴 글은 쓴 사람·관리자만)"
+     }
+    }
+   }
+  },
+  "/api/community/board/comment/delete": {
+   "post": {
+    "operationId": "boardCommentDelete",
+    "summary": "댓글 지우기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "쓴 사람·관리자(가명 번호는 유지)",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "id"
+        ],
+        "properties": {
+         "id": {
+          "type": "integer"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·속도 제한: 1시간 글 5·댓글 30)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "규칙 동의 전·남의 글·관리자 전용·신고 없는 글 확인"
+     },
+     "404": {
+      "description": "없는 글(숨긴 글은 쓴 사람·관리자만)"
+     }
+    }
+   }
+  },
+  "/api/community/board/report": {
+   "post": {
+    "operationId": "boardReport",
+    "summary": "글·댓글 신고",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "남의 것에 한 사람 한 번. 서로 다른 신고자 N 명(기본 3, /board/settings)이면 자동 숨김. 관리자 알림함(작성자 없이)",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "kind",
+         "id"
+        ],
+        "properties": {
+         "kind": {
+          "type": "string",
+          "enum": [
+           "post",
+           "comment"
+          ]
+         },
+         "id": {
+          "type": "integer"
+         },
+         "reason": {
+          "type": "string",
+          "maxLength": 300
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "입력 오류(길이·형식·속도 제한: 1시간 글 5·댓글 30)"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "규칙 동의 전·남의 글·관리자 전용·신고 없는 글 확인"
+     },
+     "404": {
+      "description": "없는 글(숨긴 글은 쓴 사람·관리자만)"
+     }
+    }
+   }
+  },
   "/api/idea/plan": {
    "post": {
     "operationId": "portalIdeaPlan",
@@ -62387,6 +62836,256 @@
      },
      "all": {
       "type": "boolean"
+     }
+    }
+   },
+   "BoardPost": {
+    "type": "object",
+    "description": "자유게시판 글 — 응답에 계정 id·이름은 없음 — 작성자는 '익명(글쓴이)'·'익명 N'(글마다 따로 매김), 내 것은 mine 만",
+    "required": [
+     "id",
+     "title",
+     "ts",
+     "author",
+     "mine",
+     "hidden"
+    ],
+    "properties": {
+     "id": {
+      "type": "integer"
+     },
+     "title": {
+      "type": "string"
+     },
+     "excerpt": {
+      "type": "string",
+      "description": "목록만"
+     },
+     "body": {
+      "type": "string",
+      "description": "글 하나만"
+     },
+     "ts": {
+      "type": "string"
+     },
+     "updated": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "author": {
+      "type": "string"
+     },
+     "comments": {
+      "type": "integer",
+      "description": "목록만"
+     },
+     "mine": {
+      "type": "boolean"
+     },
+     "hidden": {
+      "type": "boolean"
+     },
+     "reported": {
+      "type": "boolean"
+     },
+     "reports": {
+      "type": "integer",
+      "description": "관리자에게만"
+     }
+    }
+   },
+   "BoardComment": {
+    "type": "object",
+    "required": [
+     "id",
+     "author",
+     "body",
+     "ts",
+     "mine",
+     "hidden",
+     "reported"
+    ],
+    "properties": {
+     "id": {
+      "type": "integer"
+     },
+     "author": {
+      "type": "string"
+     },
+     "body": {
+      "type": "string"
+     },
+     "ts": {
+      "type": "string"
+     },
+     "mine": {
+      "type": "boolean"
+     },
+     "hidden": {
+      "type": "boolean"
+     },
+     "reported": {
+      "type": "boolean"
+     },
+     "reports": {
+      "type": "integer",
+      "description": "관리자에게만"
+     }
+    }
+   },
+   "BoardList": {
+    "type": "object",
+    "required": [
+     "posts",
+     "total",
+     "agreed",
+     "notice",
+     "rules",
+     "rules_version",
+     "limits",
+     "admin"
+    ],
+    "properties": {
+     "posts": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/BoardPost"
+      }
+     },
+     "total": {
+      "type": "integer"
+     },
+     "agreed": {
+      "type": "boolean"
+     },
+     "notice": {
+      "type": "string"
+     },
+     "rules": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "rules_version": {
+      "type": "integer"
+     },
+     "admin": {
+      "type": "boolean"
+     },
+     "limits": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "integer"
+      }
+     }
+    }
+   },
+   "BoardDetail": {
+    "type": "object",
+    "required": [
+     "post",
+     "comments",
+     "agreed",
+     "notice",
+     "rules",
+     "rules_version",
+     "admin"
+    ],
+    "properties": {
+     "post": {
+      "$ref": "#/components/schemas/BoardPost"
+     },
+     "comments": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/BoardComment"
+      }
+     },
+     "agreed": {
+      "type": "boolean"
+     },
+     "notice": {
+      "type": "string"
+     },
+     "rules": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "rules_version": {
+      "type": "integer"
+     },
+     "admin": {
+      "type": "boolean"
+     }
+    }
+   },
+   "BoardReports": {
+    "type": "object",
+    "required": [
+     "items",
+     "autohide"
+    ],
+    "properties": {
+     "autohide": {
+      "type": "integer"
+     },
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "kind",
+        "id",
+        "post",
+        "title",
+        "body",
+        "hidden",
+        "reports",
+        "last",
+        "reasons"
+       ],
+       "properties": {
+        "kind": {
+         "type": "string",
+         "enum": [
+          "post",
+          "comment"
+         ]
+        },
+        "id": {
+         "type": "integer"
+        },
+        "post": {
+         "type": "integer"
+        },
+        "title": {
+         "type": "string"
+        },
+        "body": {
+         "type": "string"
+        },
+        "hidden": {
+         "type": "boolean"
+        },
+        "reports": {
+         "type": "integer"
+        },
+        "last": {
+         "type": "string"
+        },
+        "reasons": {
+         "type": "array",
+         "items": {
+          "type": "string"
+         }
+        }
+       }
+      }
      }
     }
    }

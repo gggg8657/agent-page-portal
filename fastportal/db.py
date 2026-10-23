@@ -124,8 +124,9 @@ def init_db(seed_depts=()):
                 c.execute(f"ALTER TABLE users ADD COLUMN {col} {ddl}")
                 if col == "onboarded":
                     c.execute("UPDATE users SET onboarded=1")
-        from . import posts   # 커뮤니티 글 — posts 표 열 더하기·신고 표(posts.init)
+        from . import board, posts   # 커뮤니티 글 — posts 표 열 더하기·신고 표(posts.init), 자유게시판 표(board.init)
         posts.init(c)
+        board.init(c)
         if "ip" not in {r[1] for r in c.execute("PRAGMA table_info(login_fails)")}:   # 잠금을 (아이디, 접속지) 단위로 + 접속지별 속도 제한(sessions.limited·ip_limited)
             c.execute("ALTER TABLE login_fails ADD COLUMN ip TEXT")
             c.execute("CREATE INDEX IF NOT EXISTS login_fails_ip ON login_fails(ip)")

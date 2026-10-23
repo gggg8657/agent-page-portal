@@ -413,7 +413,7 @@ def _err(ctx, fn):
 
 
 def handle_get(ctx):
-    from . import posts   # 글(posts.py)이 이 모듈의 대상 확인·글 검사를 씀 — 순환 import 를 피해 여기서
+    from . import board, posts   # 글(posts.py)·자유게시판(board.py)이 이 모듈의 대상 확인·글 검사를 씀 — 순환 import 를 피해 여기서
     p, q = ctx.p, _q(ctx)
     one = lambda k: (q.get(k) or [""])[0]
     if p.startswith("/api/community/img/"):
@@ -423,6 +423,8 @@ def handle_get(ctx):
             return ctx.send({"error": str(e), "code": "not_found"}, code=404)
     if p in posts.GETS:
         return _err(ctx, lambda: posts.GETS[p](ctx, one))
+    if p in board.GETS:
+        return _err(ctx, lambda: board.GETS[p](ctx, one))
     if p == "/api/community/summary":
         keys = [x for x in one("t").split(",") if x]
         def f():
@@ -445,8 +447,8 @@ POSTS = {"/api/community/review": write_review, "/api/community/review/delete": 
 
 
 def handle_post(ctx, req):
-    from . import posts
-    fn = POSTS.get(ctx.p) or posts.POSTS.get(ctx.p)
+    from . import board, posts
+    fn = POSTS.get(ctx.p) or posts.POSTS.get(ctx.p) or board.POSTS.get(ctx.p)
     if not fn:
         return ctx.send({"error": "not found"}, code=404)
     return _err(ctx, lambda: fn(ctx, req))
