@@ -62,13 +62,13 @@ class Base(unittest.TestCase):
 
 class ProfanityTest(Base):
     def test_variants_blocked(self):
-        for t in ("씨발 진짜", "씨 발", "시.발", "시1발", "ㅅㅂ 뭐야", "ㅅ1ㅂ", "ㅅ ㅂ", "개 새 끼", "병신같네", "18놈아", "tlqkf", "ㅄ", "존 나 짜증"):
+        for t in ("씨발 진짜", "씨 발", "시.발", "시1발", "ㅅㅂ 뭐야", "ㅅ1ㅂ", "ㅅ ㅂ", "개 새 끼", "병신같네", "18놈아", "tlqkf", "ㅄ", "존 나 짜증", "ㅈ같네요", "ㅈ 같네", "좆같다", "ㅅ발", "씨ㅂ", "ㅂ신아", "ㅁ친놈", "지ㄹ하네", "개ㅅㄲ", "조까라", "씹새끼"):
             with self.subTest(t=t):
                 self.assertTrue(modfilter.profanity(t), t)
 
     def test_exceptions_and_normal_text(self):
         for t in ("시발점부터 다시 봅시다", "18세 이상", "오후 3시 발표 자료", "사법 제도", "2018년 보고서", "씨 발아 실험", "병 신고 절차",
-                  "등신대 사진", "회의 18분 남음", "이번 시바견 사진", "ㅎㅎ 좋아요", "ㅋㅋㅋ"):
+                  "등신대 사진", "회의 18분 남음", "이번 시바견 사진", "ㅎㅎ 좋아요", "ㅋㅋㅋ", "조까지 다 했어요", "껌을 씹다", "씹는 맛", "조까다로운", "존재 이유", "감자 같네요"):
             with self.subTest(t=t):
                 self.assertEqual(modfilter.profanity(t), [], t)
 
