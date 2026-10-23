@@ -296,7 +296,7 @@ def record(c, kind, target, uid, verdict):
 def notify_held(kind, target):
     try:
         j = jobs.upsert("owner", "community", "done", f"held-{kind}-{target}-{secrets.token_hex(3)}", "보류 글: 특정인 비방 의심 — 확인해 주세요",
-                        "/community?held=1", HELD_MSG)
+                        "/admin?tab=community", HELD_MSG)   # 관리 화면 커뮤니티 탭(보류 글 칸)
         if j:
             jobs.HUB.publish("job", j, j["user"])
     except Exception as e:
