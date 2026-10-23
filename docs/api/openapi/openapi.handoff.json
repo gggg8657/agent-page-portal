@@ -3817,6 +3817,13 @@
          "body": {
           "type": "string",
           "maxLength": 5000
+         },
+         "files": {
+          "type": "array",
+          "items": {
+           "type": "integer"
+          },
+          "description": "붙일 첨부 id(POST /board/file 로 올린 내 대기 첨부, 고칠 때는 지금 붙은 것도) — 글 5·댓글 3개, 빠진 기존 첨부는 지움"
          }
         }
        }
@@ -3930,6 +3937,13 @@
          "body": {
           "type": "string",
           "maxLength": 1000
+         },
+         "files": {
+          "type": "array",
+          "items": {
+           "type": "integer"
+          },
+          "description": "붙일 첨부 id(POST /board/file 로 올린 내 대기 첨부, 고칠 때는 지금 붙은 것도) — 글 5·댓글 3개, 빠진 기존 첨부는 지움"
          }
         }
        }
@@ -4408,6 +4422,13 @@
          "body": {
           "type": "string",
           "maxLength": 1000
+         },
+         "files": {
+          "type": "array",
+          "items": {
+           "type": "integer"
+          },
+          "description": "붙일 첨부 id(POST /board/file 로 올린 내 대기 첨부, 고칠 때는 지금 붙은 것도) — 글 5·댓글 3개, 빠진 기존 첨부는 지움"
          }
         }
        }
@@ -4437,6 +4458,122 @@
      },
      "404": {
       "description": "없는 대상·볼 수 없는 대상"
+     }
+    }
+   }
+  },
+  "/api/community/board/file": {
+   "post": {
+    "operationId": "boardFileUpload",
+    "summary": "자유게시판 첨부 올리기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "본문 = 파일 바이트. 그림 png·jpg·webp·gif(Pillow 로 회전 적용·메타데이터 없이 다시 저장), 문서 pdf·docx·xlsx·pptx·hwp·hwpx·txt·csv(zip 안 받음). 확장자와 앞 바이트·구성이 맞아야 함(400). 한 개 10MB(413). 확인된 사용자만(403 not_verified). docx·xlsx·pptx·hwpx 는 작성자·회사·메모 작성자 칸을 비우고, pdf 는 pypdf 가 있으면 Info·XMP 를 뺌. hwp·지우지 못한 pdf 는 note 표시. 대기 첨부는 하루 뒤 지움",
+    "parameters": [
+     {
+      "name": "name",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string"
+      },
+      "description": "원래 파일 이름 — 확장자만 봄(저장·응답에 안 씀)"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/octet-stream": {
+       "schema": {
+        "type": "string",
+        "format": "binary"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "성공",
+      "content": {
+       "application/json": {
+        "schema": {
+         "allOf": [
+          {
+           "$ref": "#/components/schemas/BoardFile"
+          },
+          {
+           "type": "object",
+           "properties": {
+            "ok": {
+             "type": "boolean"
+            }
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "종류·내용 불일치·손상·대기 첨부 너무 많음·속도"
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "403": {
+      "description": "not_verified"
+     },
+     "413": {
+      "description": "10MB 초과"
+     }
+    }
+   }
+  },
+  "/api/community/board/file/{name}": {
+   "get": {
+    "operationId": "boardFile",
+    "summary": "자유게시판 첨부 받기",
+    "tags": [
+     "portal"
+    ],
+    "x-permission": "self",
+    "description": "로그인 계정 + 붙은 글·댓글을 볼 수 있는 사람만(대기 중이면 올린 사람만). 그림 inline image/*, 문서 attachment application/octet-stream(파일 이름 첨부N.확장자), nosniff, CSP sandbox",
+    "parameters": [
+     {
+      "name": "name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{24}\\.[a-z]{3,4}$"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "파일",
+      "content": {
+       "application/octet-stream": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       },
+       "image/*": {
+        "schema": {
+         "type": "string",
+         "format": "binary"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "로그인 필요"
+     },
+     "404": {
+      "description": "없음·볼 수 없음"
      }
     }
    }
@@ -63263,6 +63400,20 @@
      "reports": {
       "type": "integer",
       "description": "관리자에게만"
+     },
+     "files": {
+      "description": "글 하나: 첨부 목록 · 목록: 첨부 수",
+      "oneOf": [
+       {
+        "type": "array",
+        "items": {
+         "$ref": "#/components/schemas/BoardFile"
+        }
+       },
+       {
+        "type": "integer"
+       }
+      ]
      }
     }
    },
@@ -63308,6 +63459,12 @@
        "string",
        "null"
       ]
+     },
+     "files": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/BoardFile"
+      }
      }
     }
    },
@@ -63549,6 +63706,46 @@
      },
      "admin": {
       "type": "boolean"
+     }
+    }
+   },
+   "BoardFile": {
+    "type": "object",
+    "description": "첨부 — 원래 이름 대신 '첨부N.확장자'·'그림N.확장자', 주소에 계정 없음",
+    "required": [
+     "id",
+     "url",
+     "name",
+     "ext",
+     "size",
+     "image",
+     "note"
+    ],
+    "properties": {
+     "id": {
+      "type": "integer"
+     },
+     "url": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "ext": {
+      "type": "string"
+     },
+     "size": {
+      "type": "integer"
+     },
+     "image": {
+      "type": "boolean"
+     },
+     "note": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "'작성자 정보가 남을 수 있음'(hwp·지우지 못한 pdf)"
      }
     }
    }

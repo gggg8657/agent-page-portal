@@ -30,7 +30,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from starlette.concurrency import run_in_threadpool
 
-from . import accounts, admintools, ask, auth, community, config, db, relay, devsubmit, dwell, flows, idea, jobs, lists, match, org, pages, pkgindex, posts, probe, proxy, sessions, tools, toolstate, workspace
+from . import accounts, admintools, ask, auth, community, config, db, relay, devsubmit, dwell, flows, board_files, idea, jobs, lists, match, org, pages, pkgindex, posts, probe, proxy, sessions, tools, toolstate, workspace
 from .config import OWNERS, TLS
 from .ctx import Ctx, TooBig, drain, length, not_implemented, parse_json, read_body, too_big
 
@@ -567,6 +567,22 @@ async def route(ctx, request):
             except TooBig:
                 return too_big(ctx, devsubmit.PKG_LIST_MAX)
             return await run_slow(devsubmit.pkg_upload, ctx, body)
+        if ctx.p == "/api/community/board/file":   # 자유게시판 첨부(본문 = 파일 바이트, 상한 board_files.FILE_MAX) — 확인된 사용자·대기 수·속도를 본문보다 먼저
+            try:
+                name, _ext = await run_in_threadpool(board_files.upload_check, ctx)
+            except (PermissionError, ValueError) as e:
+                code = 403 if isinstance(e, PermissionError) else 400
+                r = ctx.send({"error": str(e), "code": "not_verified" if type(e).__name__ == "NotVerified" else "forbidden" if code == 403 else "bad_request"}, code=code)
+                r.raw_headers.append((b"connection", b"close"))
+                return r
+            try:
+                body = await read_body(ctx, board_files.FILE_MAX)
+            except TooBig:
+                return too_big(ctx, board_files.FILE_MAX)
+            try:
+                return await run_in_threadpool(lambda: ctx.send(board_files.upload(ctx, name, body)))
+            except ValueError as e:
+                return ctx.send({"error": str(e), "code": "bad_request"}, code=400)
         if ctx.p == "/api/community/image":   # 커뮤니티 글 그림(본문 = 그림 바이트, 상한 posts.IMG_MAX) — 내 글·장 수·속도를 본문보다 먼저 확인
             try:
                 pid = await run_in_threadpool(posts.upload_target, ctx)

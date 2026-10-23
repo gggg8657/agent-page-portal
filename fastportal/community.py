@@ -425,6 +425,12 @@ def handle_get(ctx):
     from . import board, comments, posts   # 글(posts.py)·자유게시판(board.py)·댓글(comments.py)이 이 모듈의 대상 확인·글 검사를 씀 — 순환 import 를 피해 여기서
     p, q = ctx.p, _q(ctx)
     one = lambda k: (q.get(k) or [""])[0]
+    if p.startswith("/api/community/board/file/"):   # 자유게시판 첨부(board_files.serve — 볼 수 있는 글·댓글만)
+        from . import board_files
+        try:
+            return board_files.serve(ctx)
+        except FileNotFoundError as e:
+            return ctx.send({"error": str(e), "code": "not_found"}, code=404)
     if p.startswith("/api/community/img/"):
         try:
             return posts.image(ctx)

@@ -2,7 +2,7 @@
 
   가명: 글마다 따로 매김 — 글쓴이 0 = '익명(글쓴이)', 댓글을 처음 단 순서대로 1, 2, … (같은 글 안에서 같은 사람은 늘 같은 번호, 지워도 번호 유지).
   응답에 계정 id·이름을 넣지 않음(내 것인지는 mine 참·거짓만). 글·댓글 쓰기는 감사 기록에도 남기지 않음(감사 표 actor 로 작성자가 드러나므로).
-  내용은 로그에 찍지 않음. 글자만(그림 없음) — 화면도 링크를 누를 수 없는 글자로 그림.
+  내용은 로그에 찍지 않음. 본문은 글자만 — 화면도 링크를 누를 수 없는 글자로 그림. 그림·문서 첨부는 board_files.py(작성자 정보 지우기·중립 이름).
   작성자 확인(관리자만): 신고가 1건 이상 있는 글·댓글에만, 이유를 적어야 하고, 감사 기록(board_reveal: 누가·언제·어느 글·이유)을 남긴 뒤 계정을 돌려줌.
   쓰기(새 글·댓글)는 '확인된 사용자'(accounts.is_verified)만 — 아니면 403 code=not_verified. 댓글은 쓴 사람이 고칠 수 있음(/board/comment/edit).
   안전: 처음 쓰기 전 규칙 동의(board_agree), 사람당 1시간에 글 POST_RATE(5)·댓글 COMMENT_RATE(30)(DB 로 셈 — 포털 프로세스가 여럿이어도 같음),
@@ -12,7 +12,7 @@ API: GET /api/community/board?q=&offset= · /board/post?id= · /board/reports(�
           /board/report {kind:post|comment,id,reason} · /board/hide {kind,id,hidden}(관리자) · /board/reveal {kind,id,reason}(관리자) · /board/settings {autohide}(관리자)"""
 import os, re, secrets, time
 
-from . import accounts, comments, community, jobs
+from . import accounts, board_files, comments, community, jobs
 from .db import db, now
 
 TITLE_MAX, BODY_MAX, COMMENT_MAX, REASON_MAX = 80, 5000, 1000, 300
@@ -38,6 +38,7 @@ def init(c):
     CREATE TABLE IF NOT EXISTS board_reports(kind TEXT NOT NULL, target INTEGER NOT NULL, uid TEXT NOT NULL, reason TEXT, ts TEXT, UNIQUE(kind, target, uid));
     CREATE TABLE IF NOT EXISTS board_agree(uid TEXT PRIMARY KEY, version INTEGER NOT NULL, ts TEXT);
     CREATE TABLE IF NOT EXISTS board_settings(k TEXT PRIMARY KEY, v TEXT);""")
+    board_files.init(c)
     if "updated" not in {r[1] for r in c.execute("PRAGMA table_info(board_comments)")}:   # 댓글 고치기(2026-10-23 뒤)
         c.execute("ALTER TABLE board_comments ADD COLUMN updated TEXT")
 
@@ -120,7 +121,8 @@ def listing(ctx, q="", offset=0):
         out = []
         for r in rows:
             d = {"id": r["id"], "title": r["title"], "excerpt": re.sub(r"\s+", " ", r["body"])[:160], "ts": r["ts"], "updated": r["updated"],
-                 "author": _label(0), "comments": r["comments"], "hidden": bool(r["hidden"]), "mine": r["uid"] == ctx.uid}
+                 "author": _label(0), "comments": r["comments"], "hidden": bool(r["hidden"]), "mine": r["uid"] == ctx.uid,
+                 "files": c.execute("SELECT COUNT(*) FROM board_files WHERE kind='post' AND target=?", (r["id"],)).fetchone()[0]}
             if ctx.is_owner:
                 d["reports"] = _reports(c, "post", r["id"])
             out.append(d)
@@ -143,9 +145,10 @@ def get(ctx, pid):
                  "mine": m["uid"] == ctx.uid, "hidden": bool(m["hidden"]), "reported": ("comment", m["id"]) in mine_rep}
             if ctx.is_owner:
                 d["reports"] = _reports(c, "comment", m["id"])
+            d["files"] = board_files.listing(c, "comment", m["id"])
             cs.append(d)
         post = {"id": r["id"], "title": r["title"], "body": r["body"], "ts": r["ts"], "updated": r["updated"], "author": _label(0),
-                "mine": r["uid"] == ctx.uid, "hidden": bool(r["hidden"]), "reported": ("post", pid) in mine_rep}
+                "mine": r["uid"] == ctx.uid, "hidden": bool(r["hidden"]), "reported": ("post", pid) in mine_rep, "files": board_files.listing(c, "post", pid)}
         if ctx.is_owner:
             post["reports"] = _reports(c, "post", pid)
         v = accounts.is_verified(c, ctx.uid)
@@ -198,14 +201,18 @@ def save(ctx, req):
             if r["uid"] != ctx.uid:
                 raise PermissionError("내가 쓴 글만 고칠 수 있습니다")
             c.execute("UPDATE board_posts SET title=?, body=?, updated=? WHERE id=?", (title, body, now(), pid))
+            board_files.attach(c, ctx, "post", pid, req.get("files"))
             return {"ok": True, "id": pid}
         comments.need_verified(c, ctx.uid, "글")
         _rate(c, "board_posts", ctx.uid, POST_RATE, "글")
         pid = c.execute("INSERT INTO board_posts(uid, title, body, ts, updated) VALUES(?,?,?,?,?)", (ctx.uid, title, body, now(), now())).lastrowid
+        board_files.attach(c, ctx, "post", pid, req.get("files"))
     return {"ok": True, "id": pid}
 
 
 def _drop_post(c, pid):
+    board_files.drop(c, "comment", [r[0] for r in c.execute("SELECT id FROM board_comments WHERE post=?", (pid,))])
+    board_files.drop(c, "post", [pid])
     c.execute("DELETE FROM board_reports WHERE kind='comment' AND target IN (SELECT id FROM board_comments WHERE post=?)", (pid,))
     for t in ("DELETE FROM board_comments WHERE post=?", "DELETE FROM board_alias WHERE post=?", "DELETE FROM board_reports WHERE kind='post' AND target=?",
               "DELETE FROM board_posts WHERE id=?"):
@@ -236,6 +243,7 @@ def comment(ctx, req):
         _rate(c, "board_comments", ctx.uid, COMMENT_RATE, "댓글")
         n = _alias(c, pid, ctx.uid, r["uid"])
         cid = c.execute("INSERT INTO board_comments(post, uid, body, ts) VALUES(?,?,?,?)", (pid, ctx.uid, body, now())).lastrowid
+        board_files.attach(c, ctx, "comment", cid, req.get("files"))
     return {"ok": True, "id": cid, "author": _label(n)}
 
 
@@ -249,6 +257,7 @@ def edit_comment(ctx, req):
         if r["uid"] != ctx.uid:
             raise PermissionError("내가 쓴 댓글만 고칠 수 있습니다")
         c.execute("UPDATE board_comments SET body=?, updated=? WHERE id=?", (body, now(), cid))
+        board_files.attach(c, ctx, "comment", cid, req.get("files"))
     return {"ok": True}
 
 
@@ -261,6 +270,7 @@ def delete_comment(ctx, req):
         if r["uid"] != ctx.uid and not ctx.is_owner:
             raise PermissionError("내가 쓴 댓글만 지울 수 있습니다")
         c.execute("DELETE FROM board_reports WHERE kind='comment' AND target=?", (cid,))
+        board_files.drop(c, "comment", [cid])
         c.execute("DELETE FROM board_comments WHERE id=?", (cid,))   # 가명 번호(board_alias)는 그대로 — 다시 달아도 같은 번호
         if r["uid"] != ctx.uid:
             accounts.audit(c, ctx.uid, "board_delete", f"board:comment:{cid}", "(관리자)")
