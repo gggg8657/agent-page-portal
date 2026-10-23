@@ -16,11 +16,14 @@ PREFS = {"home": ("clean", "plaza")}   # 설정 한 값(첫 값이 기본)
 # 화면 디자인(agent-page-web src/lib/design.ts 와 같은 목록) — 키 → 고를 수 있는 값(첫 값이 기본). design "" = 구버전 계열(밝기·계열은 /api/account/theme), orbit "" = 디자인 기본값
 DESIGN = {
     "design": ("", "kaeri", "hub", "bento", "editorial", "swiss", "glass", "atomic", "nordic", "executive", "slate", "warm", "triad"),
-    "layout": ("a", "f", "b", "c", "d"),
+    "layout": ("a", "f", "b", "c", "d"),   # "d"(50:50 로그인)는 2026-10-23 뺌 — 예전 값이라 받기는 하되 "a" 로 바꿔 저장·응답(LAYOUT_OLD)
     "font": ("pretendard", "noto"),
     "orbit": ("", "on", "off"),
     "icons": ("on", "off"),
 }
+
+
+LAYOUT_OLD = {"d": "a"}   # 없앤 화면 구조 → 대신 쓸 값(읽을 때·저장할 때 모두)
 
 
 def _design(v):
@@ -35,7 +38,7 @@ def _design(v):
         x = v.get(k, allowed[0])
         if x not in allowed:
             raise ValueError(f"{k} 는 " + "·".join(a or '""' for a in allowed) + " 중 하나")
-        out[k] = x
+        out[k] = LAYOUT_OLD.get(x, x) if k == "layout" else x
     return out
 
 

@@ -50,6 +50,9 @@ class ListsTest(unittest.TestCase):
         for items in ({"design": "nope"}, {"layout": "z"}, {"font": "comic"}, {"orbit": True}, {"icons": "maybe"}, {"x": 1}, ["kaeri"], "kaeri", None):
             with self.assertRaises(ValueError, msg=repr(items)):
                 lists.put(self.c, "a", {"kind": "design", "items": items})
+        self.assertEqual(lists.put(self.c, "a", {"kind": "design", "items": {"layout": "d"}})["design"]["layout"], "a", "없앤 D(50:50 로그인)는 오류 없이 A 로")
+        self.c.execute("UPDATE user_lists SET items=? WHERE uid='a' AND kind='design'", ('{"design": "kaeri", "layout": "d"}',))
+        self.assertEqual(lists.get(self.c, "a")["design"]["layout"], "a", "예전에 저장된 D 도 A 로 읽음")
         self.c.execute("UPDATE user_lists SET items=? WHERE uid='a' AND kind='design'", ('{"design": "gone"}',))
         self.assertEqual(lists.get(self.c, "a")["design"]["design"], "", "옛 값이 목록에 없으면 기본값")
 
