@@ -1096,7 +1096,7 @@
     "tags": [
      "portal"
     ],
-    "description": "로그인한 계정의 즐겨찾기·최근 사용 목록·홈 화면·홈 방문·화면 디자인. 아직 저장한 적 없으면 빈 목록·기본값(design 은 null).",
+    "description": "로그인한 계정의 즐겨찾기·최근 사용 목록·홈 화면·홈 방문·화면 디자인·왼쪽 메뉴. 아직 저장한 적 없으면 빈 목록·기본값(design·nav 는 null).",
     "responses": {
      "200": {
       "description": "목록",
@@ -1119,7 +1119,7 @@
     "tags": [
      "portal"
     ],
-    "description": "`kind` 목록을 `items` 로 통째로 바꿈(부분 추가 아님 — 화면이 바꾼 전체 목록을 보냄). 등록되지 않은 도구는 빠지고 중복은 제거, fav 최대 100·recent 최대 10 으로 잘림. 응답은 정리된 그 목록 하나 `{\"<kind>\": [...]}`. kind \"design\" 은 화면 디자인(DesignPrefs)을 통째로 저장하고 `{\"design\": {...}}` 를 돌려줌.",
+    "description": "`kind` 목록을 `items` 로 통째로 바꿈(부분 추가 아님 — 화면이 바꾼 전체 목록을 보냄). 등록되지 않은 도구는 빠지고 중복은 제거, fav 최대 100·recent 최대 10 으로 잘림. 응답은 정리된 그 목록 하나 `{\"<kind>\": [...]}`. kind \"design\" 은 화면 디자인(DesignPrefs)을 통째로 저장하고 `{\"design\": {...}}` 를 돌려줌. kind \"nav\" 는 왼쪽 메뉴(NavPrefs)를 통째로 저장하고 `{\"nav\": {...}}` 를 돌려줌.",
     "requestBody": {
      "required": true,
      "content": {
@@ -1163,6 +1163,9 @@
           },
           "design": {
            "$ref": "#/components/schemas/DesignPrefs"
+          },
+          "nav": {
+           "$ref": "#/components/schemas/NavPrefs"
           }
          }
         }
@@ -1170,7 +1173,7 @@
       }
      },
      "400": {
-      "description": "kind 가 fav·recent·home·seen·design 이 아니거나 items 모양·값이 틀림",
+      "description": "kind 가 fav·recent·home·seen·design·nav 가 아니거나 items 모양·값이 틀림",
       "content": {
        "application/json": {
         "schema": {
@@ -8515,6 +8518,17 @@
        }
       ],
       "description": "화면 디자인 — null = 저장한 적 없음"
+     },
+     "nav": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/NavPrefs"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "왼쪽 메뉴 — null = 저장한 적 없음(화면 기본)"
      }
     },
     "required": [
@@ -8535,7 +8549,8 @@
        "recent",
        "home",
        "seen",
-       "design"
+       "design",
+       "nav"
       ]
      },
      "items": {
@@ -8548,9 +8563,12 @@
        },
        {
         "$ref": "#/components/schemas/DesignPrefs"
+       },
+       {
+        "$ref": "#/components/schemas/NavPrefs"
        }
       ],
-      "description": "fav·recent: 도구 dir 목록(전체를 이 값으로 바꿈) · home: [\"clean\"|\"plaza\"] · design: DesignPrefs 객체(없는 키는 기본값) · seen: 없음"
+      "description": "fav·recent: 도구 dir 목록(전체를 이 값으로 바꿈) · home: [\"clean\"|\"plaza\"] · design: DesignPrefs 객체(없는 키는 기본값) · seen: 없음 · nav: NavPrefs 객체"
      }
     }
    },
@@ -9375,6 +9393,63 @@
       "type": "string"
      }
     }
+   },
+   "NavPrefs": {
+    "type": "object",
+    "description": "계정에 저장한 왼쪽 메뉴(어느 PC·브라우저에서나 같음). 웹 src/lib/nav.ts 와 같은 id — 서버가 확인(모르는 id·키는 400).",
+    "additionalProperties": false,
+    "properties": {
+     "order": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "enum": [
+        "home",
+        "plaza",
+        "community",
+        "all",
+        "create",
+        "fav",
+        "recent",
+        "work",
+        "cats",
+        "help"
+       ]
+      },
+      "description": "메뉴 순서(빠진 id 는 기본 순서로 뒤에 붙음, 중복 제거)"
+     },
+     "hidden": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "enum": [
+        "plaza",
+        "community",
+        "all",
+        "create",
+        "fav",
+        "recent",
+        "work",
+        "cats",
+        "help"
+       ]
+      },
+      "description": "숨긴 메뉴(home 은 못 숨김)"
+     },
+     "pins": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 3,
+      "description": "메뉴에 바로가기로 둔 도구 dir(등록된 도구만, 최대 3)"
+     }
+    },
+    "required": [
+     "order",
+     "hidden",
+     "pins"
+    ]
    }
   },
   "responses": {

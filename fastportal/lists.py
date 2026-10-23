@@ -4,7 +4,10 @@ GET /api/lists → {"fav": [...], "recent": [...], "home": "clean"|"plaza"} · P
 홈 방문(인사 문구용): GET 의 "seen" = 지난번 홈을 연 시각(UTC ISO) | ""(처음 — 새 계정) | "?"(이 기능 전부터 쓰던 계정, 모름).
   POST {"kind": "seen"} → 지금 시각을 적고 {"seen": 지난번 값} 을 돌려줌(홈을 열 때 한 번).
 화면 디자인(2026-10-21): GET 의 "design" = {design, layout, font, orbit, icons} | null(저장한 적 없음 — 화면이 이 브라우저 값을 한 번 옮길지 정함).
-  POST {"kind": "design", "items": {...}} — 다섯 값을 통째로 바꿈(없는 키는 기본값, 모르는 값·키는 400). 어느 PC·브라우저에서나 같은 디자인."""
+  POST {"kind": "design", "items": {...}} — 다섯 값을 통째로 바꿈(없는 키는 기본값, 모르는 값·키는 400). 어느 PC·브라우저에서나 같은 디자인.
+왼쪽 메뉴(2026-10-23): GET 의 "nav" = {order: [메뉴 id], hidden: [메뉴 id], pins: [도구 dir]} | null(저장한 적 없음 — 화면 기본).
+  POST {"kind": "nav", "items": {...}} — 통째로 바꿈. order 는 NAV_IDS 안에서 중복 없이(빠진 id 는 기본 순서로 뒤에), hidden 에 home 은 못 넣음,
+  pins 는 등록된 도구 최대 NAV_PINS 개. 모르는 id·키는 400."""
 import datetime
 import json
 
@@ -21,6 +24,36 @@ DESIGN = {
     "orbit": ("", "on", "off"),
     "icons": ("on", "off"),
 }
+
+
+# 왼쪽 메뉴 — agent-page-web src/lib/nav.ts 와 같은 id(기본 순서). home 은 숨길 수 없음(순서는 바꿀 수 있음)
+NAV_IDS = ("home", "plaza", "community", "all", "create", "fav", "recent", "work", "cats", "help")
+NAV_FIXED = {"home"}
+NAV_PINS = 3
+
+
+def _nav(v):
+    """보낸 메뉴 설정 확인 — 모르는 키·id 는 ValueError, 빠진 id 는 기본 순서로 뒤에 붙임"""
+    if not isinstance(v, dict):
+        raise ValueError("nav 의 items 는 {order, hidden, pins} 객체")
+    bad = [k for k in v if k not in ("order", "hidden", "pins")]
+    if bad:
+        raise ValueError("모르는 키: " + ", ".join(map(str, bad)))
+    order, hidden, pins = v.get("order", []), v.get("hidden", []), v.get("pins", [])
+    for name, xs in (("order", order), ("hidden", hidden), ("pins", pins)):
+        if not isinstance(xs, list) or not all(isinstance(x, str) for x in xs):
+            raise ValueError(f"{name} 는 문자열 목록")
+    unknown = [x for x in order + hidden if x not in NAV_IDS]
+    if unknown:
+        raise ValueError("모르는 메뉴: " + ", ".join(unknown))
+    if NAV_FIXED & set(hidden):
+        raise ValueError("홈은 숨길 수 없습니다")
+    clean_order = list(dict.fromkeys(order)) + [x for x in NAV_IDS if x not in order]
+    clean_hidden = [x for x in NAV_IDS if x in set(hidden)]
+    clean_pins = [d for d in dict.fromkeys(pins) if tools.tool(d)]
+    if len(clean_pins) > NAV_PINS:
+        raise ValueError(f"바로가기는 {NAV_PINS}개까지")
+    return {"order": clean_order, "hidden": clean_hidden, "pins": clean_pins}
 
 
 LAYOUT_OLD = {"d": "a"}   # 없앤 화면 구조 → 대신 쓸 값(읽을 때·저장할 때 모두)
@@ -47,10 +80,16 @@ def init(c):
 
 
 def get(c, uid):
-    out = {k: [] for k in KINDS} | {k: v[0] for k, v in PREFS.items()} | {"seen": _seen_default(c, uid), "design": None}
+    out = {k: [] for k in KINDS} | {k: v[0] for k, v in PREFS.items()} | {"seen": _seen_default(c, uid), "design": None, "nav": None}
     for kind, items in c.execute("SELECT kind, items FROM user_lists WHERE uid=?", (uid,)):
         if kind == "seen":
             out["seen"] = json.loads(items)
+            continue
+        if kind == "nav":
+            try:
+                out["nav"] = _nav(json.loads(items))
+            except ValueError:   # 목록이 바뀌어 옛 값이 틀리면 기본(null — 화면 기본 순서)
+                out["nav"] = None
             continue
         if kind == "design":
             try:
@@ -88,6 +127,11 @@ def put(c, uid, req):
         c.execute("INSERT INTO user_lists(uid, kind, items, ts) VALUES(?,?,?,?) ON CONFLICT(uid, kind) DO UPDATE SET items=excluded.items, ts=excluded.ts",
                   (uid, "seen", json.dumps(datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")), now()))
         return {"seen": prev}
+    if kind == "nav":
+        n = _nav(items)
+        c.execute("INSERT INTO user_lists(uid, kind, items, ts) VALUES(?,?,?,?) ON CONFLICT(uid, kind) DO UPDATE SET items=excluded.items, ts=excluded.ts",
+                  (uid, "nav", json.dumps(n), now()))
+        return {"nav": n}
     if kind == "design":
         d = _design(items)
         c.execute("INSERT INTO user_lists(uid, kind, items, ts) VALUES(?,?,?,?) ON CONFLICT(uid, kind) DO UPDATE SET items=excluded.items, ts=excluded.ts",
@@ -100,7 +144,7 @@ def put(c, uid, req):
                   (uid, kind, json.dumps(items), now()))
         return {kind: items[0]}
     if kind not in KINDS:
-        raise ValueError("kind 는 fav·recent·home·seen·design 중 하나")
+        raise ValueError("kind 는 fav·recent·home·seen·design·nav 중 하나")
     if not isinstance(items, list) or not all(isinstance(d, str) for d in items):
         raise ValueError("items 는 도구 dir 문자열 목록")
     clean = []

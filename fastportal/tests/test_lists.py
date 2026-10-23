@@ -16,7 +16,7 @@ class ListsTest(unittest.TestCase):
         self.p.stop()
 
     def test_per_account(self):
-        self.assertEqual(lists.get(self.c, "a"), {"fav": [], "recent": [], "home": "clean", "seen": "?", "design": None})
+        self.assertEqual(lists.get(self.c, "a"), {"fav": [], "recent": [], "home": "clean", "seen": "?", "design": None, "nav": None})
         lists.put(self.c, "a", {"kind": "fav", "items": ["sql-local", "chart-local"]})
         self.assertEqual(lists.get(self.c, "a")["fav"], ["sql-local", "chart-local"])
         self.assertEqual(lists.get(self.c, "b")["fav"], [], "다른 계정에 보이면 안 됨")
@@ -55,6 +55,19 @@ class ListsTest(unittest.TestCase):
         self.assertEqual(lists.get(self.c, "a")["design"]["layout"], "a", "예전에 저장된 D 도 A 로 읽음")
         self.c.execute("UPDATE user_lists SET items=? WHERE uid='a' AND kind='design'", ('{"design": "gone"}',))
         self.assertEqual(lists.get(self.c, "a")["design"]["design"], "", "옛 값이 목록에 없으면 기본값")
+
+    def test_nav(self):
+        self.assertIsNone(lists.get(self.c, "a")["nav"], "저장한 적 없음 = null(화면 기본)")
+        r = lists.put(self.c, "a", {"kind": "nav", "items": {"order": ["fav", "home", "fav"], "hidden": ["plaza", "help"], "pins": ["sql-local", "nope", "sql-local"]}})["nav"]
+        self.assertEqual(r["order"][:2], ["fav", "home"], "앞에서 고른 순서, 중복 없이")
+        self.assertEqual(sorted(r["order"]), sorted(lists.NAV_IDS), "빠진 id 는 뒤에 붙음")
+        self.assertEqual(r["hidden"], ["plaza", "help"])
+        self.assertEqual(r["pins"], ["sql-local"], "등록된 도구만·중복 없이")
+        self.assertEqual(lists.get(self.c, "a")["nav"], r)
+        self.assertIsNone(lists.get(self.c, "b")["nav"], "다른 계정에 보이면 안 됨")
+        for items in ({"hidden": ["home"]}, {"order": ["x"]}, {"hidden": ["nope"]}, {"pins": ["a-local", "b-local", "c-local", "d-local"]}, {"order": "home"}, {"x": []}, ["home"]):
+            with self.assertRaises(ValueError, msg=repr(items)):
+                lists.put(self.c, "a", {"kind": "nav", "items": items})
 
     def test_seen(self):
         self.c.execute("CREATE TABLE users(id TEXT PRIMARY KEY, ts TEXT)")
