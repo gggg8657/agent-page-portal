@@ -124,7 +124,8 @@ def init_db(seed_depts=()):
                 c.execute(f"ALTER TABLE users ADD COLUMN {col} {ddl}")
                 if col == "onboarded":
                     c.execute("UPDATE users SET onboarded=1")
-        from . import board, comments, posts   # 커뮤니티 글 — posts 표 열 더하기·신고 표(posts.init), 자유게시판 표(board.init), 댓글 표(comments.init)
+        from . import board, comments, modfilter, posts   # 커뮤니티 글 — posts 표 열 더하기·신고 표(posts.init), 자유게시판 표(board.init), 댓글 표(comments.init), 거르기 기록(modfilter.init)
+        modfilter.init(c)
         posts.init(c)
         board.init(c)
         comments.init(c)

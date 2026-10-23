@@ -19,7 +19,7 @@ try:
 except ImportError:   # Pillow 없음 — 바이트에서 메타데이터만 걷는 길로
     Image = ImageOps = None
 
-from . import accounts, comments, community, config, jobs, tools, toolstate
+from . import accounts, comments, community, config, jobs, modfilter, tools, toolstate
 from .db import db, now
 
 CATS = {"활용사례": "활용 사례", "활용팁": "활용 팁", "질문": "질문", "공지": "공지"}
@@ -49,6 +49,7 @@ def init(c):
     c.executescript("""
     CREATE TABLE IF NOT EXISTS post_reports(post INTEGER NOT NULL, uid TEXT NOT NULL, reason TEXT, ts TEXT, UNIQUE(post, uid));
     CREATE INDEX IF NOT EXISTS posts_uid ON posts(uid, draft);""")
+    modfilter.add_held_column(c, "posts")
 
 
 # ── 그림 확인·메타데이터 걷기 ────────────────────────────────────────────
@@ -254,7 +255,7 @@ def _pub(c, r, ctx, full=False, liked=None, reports=None):
     d = {"id": r["id"], "title": r["title"] or "", "author": r["author"] or "", "dept": r["dept"] or "", "tags": tags, "cat": _cat(tags),
          "ts": r["ts"] or "", "updated": r["updated"] or r["ts"] or "", "likes": r["likes"], "liked": liked, "agents": json.loads(r["agents"] or "[]"),
          "fmt": r["fmt"] or "text", "mine": mine, "can_edit": mine and r["fmt"] == "md", "can_delete": mine or bool(ctx.is_owner),
-         "hidden": bool(r["hidden"]), "draft": bool(r["draft"]), "thumb": _thumb(r), "excerpt": excerpt(r["body"]) if r["fmt"] == "md" else (r["body"] or "")[:200]}
+         "hidden": bool(r["hidden"]), "held": bool(r["held"]), "draft": bool(r["draft"]), "thumb": _thumb(r), "excerpt": excerpt(r["body"]) if r["fmt"] == "md" else (r["body"] or "")[:200]}
     if full:
         d["body"] = r["body"] or ""
         d["reported"] = bool(c.execute("SELECT 1 FROM post_reports WHERE post=? AND uid=?", (r["id"], ctx.uid)).fetchone())
@@ -430,6 +431,7 @@ def save(ctx, req):
         if not (r["uid"] and r["uid"] == ctx.uid) or r["fmt"] != "md":
             raise PermissionError("내가 쓴 글만 고칠 수 있습니다")
     community._rate(ctx.uid)
+    v = modfilter.check(ctx, "post", title, modfilter_text(body))   # 욕설 422 · 특정인 비방 보류(LLM — DB 잠금 밖)
     with db() as c:
         dept = (c.execute("SELECT dept FROM users WHERE id=?", (ctx.uid,)).fetchone() or [""])[0] or ""
         first = bool(r["draft"])
@@ -437,6 +439,7 @@ def save(ctx, req):
                   (title, body, json.dumps(["#" + cat]), json.dumps(agents), now(), now() if first else r["ts"],
                    ctx.uname or r["author"], dept if first else r["dept"], pid))
         accounts.audit(c, ctx.uid, "post_write" if first else "post_edit", f"post:{pid}", f"#{cat} 그림 {len(_images(pid))}")
+        extra = modfilter.apply(c, "post", pid, ctx.uid, v)
     used = {m.group(2) for m in IMG_RE.finditer(body) if int(m.group(1)) == pid}
     for f in _images(pid):   # 본문에서 뺀 그림은 지움
         if f not in used:
@@ -445,7 +448,14 @@ def save(ctx, req):
             except OSError:
                 pass
     tools.stats_reset()
-    return {"ok": True, "id": pid}
+    if v.held:
+        modfilter.notify_held("post", pid)
+    return {"ok": True, "id": pid, **extra}
+
+
+def modfilter_text(body):
+    """거르기에 넘길 본문 — 그림 주소(무작위 16진)는 빼고 그림 설명만"""
+    return IMG_RE.sub("", body or "")
 
 
 def delete(ctx, req):
@@ -472,7 +482,7 @@ def hide(ctx, req):
     on = bool(req.get("hidden", True))
     with db() as c:
         _row(c, pid)
-        c.execute("UPDATE posts SET hidden=? WHERE id=?", (int(on), pid))
+        c.execute("UPDATE posts SET hidden=?" + ("" if on else ", held=0") + " WHERE id=?", (int(on), pid))   # 숨김을 풀면 보류도 풂
         accounts.audit(c, ctx.uid, "post_hide" if on else "post_unhide", f"post:{pid}")
     tools.stats_reset()
     return {"ok": True, "hidden": on}

@@ -4,7 +4,7 @@ import io, json, os, tempfile, unittest, zipfile
 from types import SimpleNamespace as NS
 from unittest.mock import patch
 
-from fastportal import board, board_files, comments, community, config, posts
+from fastportal import modfilter, board, board_files, comments, community, config, posts
 from fastportal.db import db
 
 NAMES = {"alice": "앨리스", "bob": "밥", "owner": "관리자"}
@@ -66,7 +66,8 @@ LEAKS = ["홍길동", "김철수", "비밀연구실", "박부장", "이수정", 
 class BoardFilesTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.p = [patch.object(config, "DB_FILE", os.path.join(self.tmp.name, "portal.db")), patch.object(config, "DATA", self.tmp.name)]
+        self.p = [patch.object(modfilter, "MOD_ON", False),   # 2단계(LLM) 거르기는 test_modfilter 에서만
+                  patch.object(config, "DB_FILE", os.path.join(self.tmp.name, "portal.db")), patch.object(config, "DATA", self.tmp.name)]
         for x in self.p: x.start()
         community._RATE.clear(); posts._IMG_RATE.clear()
         with db() as c:
@@ -102,12 +103,24 @@ class BoardFilesTest(unittest.TestCase):
                     self.assertEqual(z.namelist()[0], "mimetype"); self.assertEqual(z.read("mimetype"), b"application/hwp+zip")
 
     def test_pdf(self):
-        ext, image, out, note = board_files.clean("x.pdf", PDF)
-        if board_files.pypdf is None:
-            self.assertEqual((out, note), (PDF, board_files.NOTE_LEFT))   # pypdf 없음 — 그대로 + 남을 수 있음 표시
-        else:
-            self.assertNotIn(b"PdfWriterName", out); self.assertNotIn(b"SecretApp", out); self.assertIsNone(note)
+        ext, image, out, note = board_files.clean("x.pdf", PDF)   # 손상된(교차 참조 없음) PDF — 그대로 + 표시
+        self.assertEqual((out, note), (PDF, board_files.NOTE_LEFT))
         self.assertEqual(board_files.clean("x.hwp", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\0" * 100)[3], board_files.NOTE_LEFT)
+
+    @unittest.skipUnless(board_files.pypdf, "pypdf 없음")
+    def test_pdf_author_and_xmp_removed(self):
+        import pypdf
+        from pypdf.generic import NameObject, StreamObject
+        w = pypdf.PdfWriter(); w.add_blank_page(100, 100); w.add_metadata({"/Author": "PdfWriterName", "/Creator": "SecretApp"})
+        st = StreamObject(); st.set_data(b'<x:xmpmeta xmlns:x="adobe:ns:meta/"><dc:creator>XmpPerson</dc:creator></x:xmpmeta>')
+        w._root_object[NameObject("/Metadata")] = w._add_object(st)
+        b = io.BytesIO(); w.write(b)
+        self.assertIn(b"PdfWriterName", b.getvalue())
+        ext, image, out, note = board_files.clean("x.pdf", b.getvalue())
+        for x in (b"PdfWriterName", b"SecretApp", b"XmpPerson"):
+            self.assertNotIn(x, out)
+        self.assertIsNone(note)
+        self.assertEqual(len(pypdf.PdfReader(io.BytesIO(out)).pages), 1)
 
     @unittest.skipUnless(posts.Image, "Pillow 없음")
     def test_image_gps_stripped(self):

@@ -12,6 +12,7 @@
 | Playwright / playwright-core | 1.63.0 | 개발 도구 — 사용 설명서 화면 캡처·PDF 생성(`guide/tools/`, `node_modules` 는 커밋 제외) | Apache-2.0 | https://github.com/microsoft/playwright | 가능 | 받는 Chromium 은 자체 라이선스 |
 | Pillow | 12.1.1 | 개발 도구 — 설명서 그림 처리(`guide/tools/build.py`) | MIT-CMU (HPND) | https://github.com/python-pillow/Pillow | 가능 | |
 | Pillow | 13.0.0 | 실행 — 포털(`fastportal/posts.py`) 커뮤니티 글 그림 회전 적용·메타데이터 제거·다시 저장(`fastportal/requirements.txt`) | MIT-CMU (HPND) | https://github.com/python-pillow/Pillow | 가능 | 없으면 바이트에서 메타데이터만 걷음 |
+| pypdf | 6.21.2 | 실행 — 포털(`fastportal/board_files.py`) 자유게시판 PDF 첨부의 문서 정보·XMP 제거(`fastportal/requirements.txt`) | BSD-3-Clause | https://github.com/py-pdf/pypdf | 가능 | 없으면 PDF 는 그대로 + '작성자 정보가 남을 수 있음' |
 | nvidia-smi | — | 외부 CLI(GPU 상태 표시) | NVIDIA 독점 | https://developer.nvidia.com | 드라이버 약관 | 동봉 안 함 |
 
 ## 확인 필요

@@ -4,7 +4,7 @@ import json, os, tempfile, unittest
 from types import SimpleNamespace as NS
 from unittest.mock import patch
 
-from fastportal import board, comments, community, config
+from fastportal import modfilter, board, comments, community, config
 from fastportal.db import db
 
 NAMES = {"alice": "앨리스", "bob": "밥", "carol": "캐롤", "dave": "데이브", "owner": "관리자"}
@@ -18,7 +18,8 @@ class BoardTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.jobs = []
-        self.p = [patch.object(config, "DB_FILE", os.path.join(self.tmp.name, "portal.db")),
+        self.p = [patch.object(modfilter, "MOD_ON", False),   # 2단계(LLM) 거르기는 test_modfilter 에서만
+                  patch.object(config, "DB_FILE", os.path.join(self.tmp.name, "portal.db")),
                   patch.object(board.jobs, "upsert", side_effect=lambda *a, **k: self.jobs.append(a) or None)]
         for x in self.p: x.start()
         community._RATE.clear()

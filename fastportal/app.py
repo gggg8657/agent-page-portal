@@ -30,7 +30,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from starlette.concurrency import run_in_threadpool
 
-from . import accounts, admintools, analytics, ask, auth, community, config, db, relay, devsubmit, dwell, flows, board_files, idea, jobs, lists, match, org, pages, pkgindex, posts, probe, proxy, sessions, tools, toolstate, workspace
+from . import accounts, admintools, analytics, ask, auth, community, config, db, relay, devsubmit, dwell, flows, board_files, modfilter, idea, jobs, lists, match, org, pages, pkgindex, posts, probe, proxy, sessions, tools, toolstate, workspace
 from .config import OWNERS, TLS
 from .ctx import Ctx, TooBig, drain, length, not_implemented, parse_json, read_body, too_big
 
@@ -76,7 +76,7 @@ async def run_slow(fn, *args):
     return await anyio.to_thread.run_sync(fn, *args, limiter=slow_limiter())
 
 
-SLOW_POST = re.compile(r"/api/(idea/|workspace/sync$|pin$|admin/reset$|admin/tool$)")   # post_sync 중 오래 걸리는 것(LLM·도구 이력·PIN 해시)
+SLOW_POST = re.compile(r"/api/(idea/|workspace/sync$|pin$|admin/reset$|admin/tool$|post$|community/(post/save|comment(/edit)?|board/(save|comment(/edit)?)|review|request)$)")   # 커뮤니티 쓰기 = LLM 거르기(최대 8초)   # post_sync 중 오래 걸리는 것(LLM·도구 이력·PIN 해시)
 SLOW_GET = re.compile(r"/api/workspace/[0-9a-f]{32}$|/api/match$")   # 작업 하나 열기(도구에서 상세 결과를 다시 읽음) · 할 일 검색(검색어 임베딩 — 최대 MATCH_EMBED_TIMEOUT 초)
 
 
@@ -408,6 +408,9 @@ def post_sync(ctx, body):
                     raise PermissionError("공지는 관리자만 쓸 수 있습니다")
                 if config.COMMUNITY_POST_VERIFIED_ONLY and not accounts.is_verified(c, ctx.uid):
                     raise PermissionError("부서장 승인 후 글을 쓸 수 있습니다")
+                hits = modfilter.profanity(req.get("title") or "", req.get("body") or "")   # 예전 글쓰기도 욕설 막기(LLM 판정은 새 화면 경로만)
+                if hits:
+                    return ctx.send({"error": str(modfilter.Blocked(hits)), "code": "profanity", "matches": hits}, code=422)
                 c.execute("INSERT INTO posts(title,body,author,dept,tags,ts,uid) VALUES(?,?,?,?,?,?,?)",   # 예전 글쓰기(글자만) — 새 화면은 /api/community/post/*
                           (req["title"].strip(), req.get("body", "").strip(), ctx.uname, req.get("dept", ""), json.dumps(tags), db.now(), ctx.uid))
                 return ctx.send({"ok": True})

@@ -4,7 +4,7 @@ import os, tempfile, unittest
 from types import SimpleNamespace as NS
 from unittest.mock import patch
 
-from fastportal import community, config, flows
+from fastportal import modfilter, community, config, flows
 from fastportal.db import db
 
 TOOLS = {"sql-local": {"dir": "sql-local", "port": 1, "name": "SQL", "author": "alice"},
@@ -19,7 +19,8 @@ class CommunityTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.sent = []
-        self.p = [patch.object(config, "DB_FILE", os.path.join(self.tmp.name, "portal.db")),
+        self.p = [patch.object(modfilter, "MOD_ON", False),   # 2단계(LLM) 거르기는 test_modfilter 에서만
+                  patch.object(config, "DB_FILE", os.path.join(self.tmp.name, "portal.db")),
                   patch.object(community.tools, "tool", side_effect=lambda d: TOOLS.get(d)),
                   patch.object(community.tools, "tools", return_value=list(TOOLS.values())),
                   patch.object(community, "_notify", side_effect=lambda *a: self.sent.append(a)),

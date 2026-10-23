@@ -37,6 +37,9 @@ def init(c):
     CREATE INDEX IF NOT EXISTS requests_fb_t ON requests_fb(kind, target);
     CREATE INDEX IF NOT EXISTS requests_fb_owner ON requests_fb(owner);
     CREATE TABLE IF NOT EXISTS request_votes(req TEXT NOT NULL, uid TEXT NOT NULL, ts TEXT, UNIQUE(req, uid));""")
+    from . import modfilter   # 보류(held) 열 — 특정인 비방 의심(modfilter)
+    for t in ("reviews", "requests_fb"):
+        modfilter.add_held_column(c, t)
 
 
 # ── 속도 제한 ────────────────────────────────────────────────────────────
@@ -159,7 +162,7 @@ def summary(c, keys, admin=False):
 
 def _review_pub(r, names, me):
     return {"id": r["id"], "name": names.get(r["uid"], r["uid"]), "stars": r["stars"], "body": r["body"] or "", "created": r["created"], "updated": r["updated"],
-            "mine": r["uid"] == me, "hidden": bool(r["hidden"])}
+            "mine": r["uid"] == me, "hidden": bool(r["hidden"]), "held": bool(r["held"]) if "held" in r.keys() else False}
 
 
 def reviews(ctx, kind, tid):
@@ -183,7 +186,8 @@ def _req_pub(c, r, names, me, admin):
     return {"id": r["id"], "kind": r["kind"], "target": r["target"], "type": r["type"], "type_label": REQ_TYPES.get(r["type"], r["type"]),
             "title": r["title"], "body": r["body"] or "", "status": r["status"], "status_label": REQ_STATES.get(r["status"], r["status"]),
             "note": r["note"] or "", "name": names.get(r["uid"], r["uid"]), "mine": r["uid"] == me, "created": r["created"], "updated": r["updated"],
-            "votes": votes, "voted": voted, "can_status": admin or r["owner"] == me, "hidden": bool(r["hidden"])}
+            "votes": votes, "voted": voted, "can_status": admin or r["owner"] == me, "hidden": bool(r["hidden"]),
+            "held": bool(r["held"]) if "held" in r.keys() else False}
 
 
 def requests_for(ctx, kind, tid):
@@ -250,13 +254,19 @@ def write_review(ctx, req):
     if tg["mine"]:
         raise PermissionError("자기 것에는 리뷰를 쓸 수 없습니다")
     _rate(ctx.uid)
+    from . import modfilter
+    v = modfilter.check(ctx, "review", body)   # 욕설 422 · 특정인 비방 보류
     with db() as c:
         c.execute("INSERT INTO reviews(id, kind, target, uid, stars, body, created, updated) VALUES(?,?,?,?,?,?,?,?) "   # 한 사람 하나 — 동시에 두 번 와도(UNIQUE) 고쳐 씀
                   "ON CONFLICT(kind, target, uid) DO UPDATE SET stars=excluded.stars, body=excluded.body, updated=excluded.updated",
                   (secrets.token_urlsafe(9), kind, tid, ctx.uid, stars, body, now(), now()))
         rid = c.execute("SELECT id FROM reviews WHERE kind=? AND target=? AND uid=?", (kind, tid, ctx.uid)).fetchone()[0]
         accounts.audit(c, ctx.uid, "review_write", f"{kind}:{tid}", f"#{rid} ★{stars}")
-        return {"ok": True, "id": rid, "summary": summary(c, [f"{kind}:{tid}"])[f"{kind}:{tid}"]}
+        extra = modfilter.apply(c, "review", rid, ctx.uid, v)
+        out = {"ok": True, "id": rid, "summary": summary(c, [f"{kind}:{tid}"])[f"{kind}:{tid}"], **extra}
+    if v.held:
+        modfilter.notify_held("review", rid)
+    return out
 
 
 def _own_row(c, table, rid, ctx, admin_ok=True):
@@ -285,7 +295,7 @@ def hide(ctx, table, req):
     with db() as c:
         r = _own_row(c, table, req.get("id"), ctx)
         on = bool(req.get("hidden", True))
-        c.execute(f"UPDATE {table} SET hidden=? WHERE id=?", (int(on), r["id"]))
+        c.execute(f"UPDATE {table} SET hidden=?" + ("" if on else ", held=0") + " WHERE id=?", (int(on), r["id"]))   # 숨김을 풀면 보류도 풂
         accounts.audit(c, ctx.uid, ("review" if table == "reviews" else "request") + ("_hide" if on else "_unhide"), f"{r['kind']}:{r['target']}", f"#{r['id']}")
     return {"ok": True}
 
@@ -299,11 +309,17 @@ def write_request(ctx, req):
     body = _text(req.get("body"), BODY_MAX, "내용")
     tg = target(ctx, kind, tid)
     _rate(ctx.uid)
+    from . import modfilter
+    v = modfilter.check(ctx, "request", title, body)   # 욕설 422 · 특정인 비방 보류
     rid = secrets.token_urlsafe(9)
     with db() as c:
         c.execute("INSERT INTO requests_fb(id, kind, target, uid, owner, type, title, body, status, created, updated) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                   (rid, kind, tid, ctx.uid, tg["owner"], typ, title, body, "open", now(), now()))
         accounts.audit(c, ctx.uid, "request_write", f"{kind}:{tid}", f"#{rid} {REQ_TYPES[typ]}")
+        extra = modfilter.apply(c, "request", rid, ctx.uid, v)
+    if v.held:   # 보류 — 주인에게 알리지 않고 관리자 보류 글로만
+        modfilter.notify_held("request", rid)
+        return {"ok": True, "id": rid, **extra}
     # 받는 사람: 대상 주인(author 계정) + 도구·주인 없는 대상은 관리자 알림함. 관리자 계정은 모두 'owner' 알림함 하나로(두 번 안 감), 보낸 사람 자신은 뺌
     to = set()
     if tg["owner"] and tg["owner"] != ctx.uid:
@@ -411,6 +427,10 @@ def _q(ctx):
 def _err(ctx, fn):
     try:
         return ctx.send(fn())
+    except ValueError as e:
+        if type(e).__name__ == "Blocked":   # modfilter 욕설 — 422 + 걸린 표현(가림)
+            return ctx.send({"error": str(e), "code": "profanity", "matches": e.hits}, code=422)
+        return ctx.send({"error": str(e), "code": "bad_request"}, code=400)
     except PermissionError as e:   # comments.NotVerified(확인된 사용자 아님)는 code=not_verified
         return ctx.send({"error": str(e), "code": "not_verified" if type(e).__name__ == "NotVerified" else "forbidden"}, code=403)
     except FileNotFoundError as e:
@@ -442,6 +462,9 @@ def handle_get(ctx):
         return _err(ctx, lambda: board.GETS[p](ctx, one))
     if p in comments.GETS:
         return _err(ctx, lambda: comments.GETS[p](ctx, one))
+    from . import modfilter
+    if p in modfilter.GETS:   # 관리자: 보류 글·욕설 목록
+        return _err(ctx, lambda: modfilter.GETS[p](ctx, one))
     if p == "/api/community/summary":
         keys = [x for x in one("t").split(",") if x]
         def f():
@@ -464,8 +487,8 @@ POSTS = {"/api/community/review": write_review, "/api/community/review/delete": 
 
 
 def handle_post(ctx, req):
-    from . import board, comments, posts
-    fn = POSTS.get(ctx.p) or posts.POSTS.get(ctx.p) or board.POSTS.get(ctx.p) or comments.POSTS.get(ctx.p)
+    from . import board, comments, modfilter, posts
+    fn = POSTS.get(ctx.p) or posts.POSTS.get(ctx.p) or board.POSTS.get(ctx.p) or comments.POSTS.get(ctx.p) or modfilter.POSTS.get(ctx.p)
     if not fn:
         return ctx.send({"error": "not found"}, code=404)
     return _err(ctx, lambda: fn(ctx, req))

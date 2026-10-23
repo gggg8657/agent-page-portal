@@ -118,26 +118,29 @@ def _hwpx(b):
 
 
 def _pdf(b):
+    """pypdf 로 쪽만 새 파일에 옮겨 담음(append — 문서 정보 Info·문서 XMP·떠 있는 객체는 안 따라옴), 쪽마다 XMP·메모 작성자(/T)도 뺌"""
     if pypdf is None:
         return b, NOTE_LEFT
     try:
         r = pypdf.PdfReader(io.BytesIO(b))
         if r.is_encrypted:
             return b, NOTE_LEFT
-        w = pypdf.PdfWriter(clone_from=r)
-        try:
-            w.metadata = None
-        except Exception:
-            pass
-        root_obj = w._root_object
-        if "/Metadata" in root_obj:
-            del root_obj["/Metadata"]
+        w = pypdf.PdfWriter()
+        w.append(r)
+        w.metadata = None
+        for pg in w.pages:
+            if "/Metadata" in pg:
+                del pg["/Metadata"]
+            for a in pg.get("/Annots") or []:
+                o = a.get_object()
+                if "/T" in o:
+                    del o["/T"]
         out = io.BytesIO()
         w.write(out)
         data = out.getvalue()
     except Exception:
         return b, NOTE_LEFT   # 읽지 못하는 PDF — 그대로 두고 표시(열거나 실행하지 않음)
-    if b"/Author" in data or b"<x:xmpmeta" in data:
+    if b"/Author" in data or b"xmpmeta" in data:
         return b, NOTE_LEFT
     return data, None
 

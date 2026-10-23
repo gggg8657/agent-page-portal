@@ -12,7 +12,7 @@ API: GET /api/community/board?q=&offset= · /board/post?id= · /board/reports(�
           /board/report {kind:post|comment,id,reason} · /board/hide {kind,id,hidden}(관리자) · /board/reveal {kind,id,reason}(관리자) · /board/settings {autohide}(관리자)"""
 import os, re, secrets, time
 
-from . import accounts, board_files, comments, community, jobs
+from . import accounts, board_files, comments, community, jobs, modfilter
 from .db import db, now
 
 TITLE_MAX, BODY_MAX, COMMENT_MAX, REASON_MAX = 80, 5000, 1000, 300
@@ -39,8 +39,12 @@ def init(c):
     CREATE TABLE IF NOT EXISTS board_agree(uid TEXT PRIMARY KEY, version INTEGER NOT NULL, ts TEXT);
     CREATE TABLE IF NOT EXISTS board_settings(k TEXT PRIMARY KEY, v TEXT);""")
     board_files.init(c)
-    if "updated" not in {r[1] for r in c.execute("PRAGMA table_info(board_comments)")}:   # 댓글 고치기(2026-10-23 뒤)
-        c.execute("ALTER TABLE board_comments ADD COLUMN updated TEXT")
+    cols = {r[1] for r in c.execute("PRAGMA table_info(board_comments)")}
+    for col, ddl in (("updated", "TEXT"), ("parent_id", "INTEGER"), ("deleted", "INTEGER NOT NULL DEFAULT 0")):   # 고치기 · 답글(한 단) · 지운 자리
+        if col not in cols:
+            c.execute(f"ALTER TABLE board_comments ADD COLUMN {col} {ddl}")
+    modfilter.add_held_column(c, "board_posts")
+    modfilter.add_held_column(c, "board_comments")
 
 
 # ── 도움 ─────────────────────────────────────────────────────────────────
@@ -116,12 +120,12 @@ def listing(ctx, q="", offset=0):
     with db() as c:
         total = c.execute("SELECT COUNT(*) FROM board_posts p" + where, args).fetchone()[0]
         rows = c.execute("SELECT p.id, p.uid, p.title, p.body, p.ts, p.updated, p.hidden, "
-                         "(SELECT COUNT(*) FROM board_comments m WHERE m.post=p.id AND (m.hidden=0 OR ?)) comments FROM board_posts p" + where +
+                         "(SELECT COUNT(*) FROM board_comments m WHERE m.post=p.id AND m.deleted=0 AND (m.hidden=0 OR ?)) comments, p.held FROM board_posts p" + where +
                          " ORDER BY p.id DESC LIMIT 30 OFFSET ?", [int(bool(ctx.is_owner))] + args + [offset]).fetchall()
         out = []
         for r in rows:
             d = {"id": r["id"], "title": r["title"], "excerpt": re.sub(r"\s+", " ", r["body"])[:160], "ts": r["ts"], "updated": r["updated"],
-                 "author": _label(0), "comments": r["comments"], "hidden": bool(r["hidden"]), "mine": r["uid"] == ctx.uid,
+                 "author": _label(0), "comments": r["comments"], "hidden": bool(r["hidden"]), "held": bool(r["held"]), "mine": r["uid"] == ctx.uid,
                  "files": c.execute("SELECT COUNT(*) FROM board_files WHERE kind='post' AND target=?", (r["id"],)).fetchone()[0]}
             if ctx.is_owner:
                 d["reports"] = _reports(c, "post", r["id"])
@@ -141,14 +145,17 @@ def get(ctx, pid):
         cq = "SELECT * FROM board_comments WHERE post=?" + ("" if ctx.is_owner else " AND (hidden=0 OR uid=?)") + " ORDER BY id"
         cs = []
         for m in c.execute(cq, (pid,) if ctx.is_owner else (pid, ctx.uid)):
-            d = {"id": m["id"], "author": _label(0 if m["uid"] == r["uid"] else alias.get(m["uid"], 0)), "body": m["body"], "ts": m["ts"], "updated": m["updated"],
-                 "mine": m["uid"] == ctx.uid, "hidden": bool(m["hidden"]), "reported": ("comment", m["id"]) in mine_rep}
+            gone = bool(m["deleted"])   # 답글이 남아 자리만 둔 지운 댓글
+            d = {"id": m["id"], "parent_id": m["parent_id"], "deleted": gone, "author": "" if gone else _label(0 if m["uid"] == r["uid"] else alias.get(m["uid"], 0)),
+                 "body": "" if gone else m["body"], "ts": m["ts"], "updated": m["updated"], "mine": not gone and m["uid"] == ctx.uid, "hidden": bool(m["hidden"]),
+                 "held": bool(m["held"]), "reported": ("comment", m["id"]) in mine_rep}
             if ctx.is_owner:
                 d["reports"] = _reports(c, "comment", m["id"])
             d["files"] = board_files.listing(c, "comment", m["id"])
             cs.append(d)
         post = {"id": r["id"], "title": r["title"], "body": r["body"], "ts": r["ts"], "updated": r["updated"], "author": _label(0),
-                "mine": r["uid"] == ctx.uid, "hidden": bool(r["hidden"]), "reported": ("post", pid) in mine_rep, "files": board_files.listing(c, "post", pid)}
+                "mine": r["uid"] == ctx.uid, "hidden": bool(r["hidden"]), "held": bool(r["held"]), "reported": ("post", pid) in mine_rep,
+                "files": board_files.listing(c, "post", pid)}
         if ctx.is_owner:
             post["reports"] = _reports(c, "post", pid)
         v = accounts.is_verified(c, ctx.uid)
@@ -191,8 +198,20 @@ def agree(ctx, req):
 def save(ctx, req):
     title = community._text(req.get("title"), TITLE_MAX, "제목", required=True)
     body = community._text(req.get("body"), BODY_MAX, "본문", required=True)
-    with db() as c:
+    with db() as c:   # 권한·속도 먼저(가벼움) — 거르기(LLM)는 그 뒤 잠금 밖에서
         _need_agree(c, ctx.uid)
+        if req.get("id") is None:
+            comments.need_verified(c, ctx.uid, "글")
+            _rate(c, "board_posts", ctx.uid, POST_RATE, "글")
+    v = modfilter.check(ctx, "board_post", title, body)
+    out = _save(ctx, req, title, body, v)
+    if v.held:
+        modfilter.notify_held("board_post", out["id"])
+    return out
+
+
+def _save(ctx, req, title, body, v):
+    with db() as c:
         if req.get("id") is not None:
             pid = _id(req.get("id"))
             r = c.execute("SELECT uid FROM board_posts WHERE id=?", (pid,)).fetchone()
@@ -202,12 +221,10 @@ def save(ctx, req):
                 raise PermissionError("내가 쓴 글만 고칠 수 있습니다")
             c.execute("UPDATE board_posts SET title=?, body=?, updated=? WHERE id=?", (title, body, now(), pid))
             board_files.attach(c, ctx, "post", pid, req.get("files"))
-            return {"ok": True, "id": pid}
-        comments.need_verified(c, ctx.uid, "글")
-        _rate(c, "board_posts", ctx.uid, POST_RATE, "글")
+            return {"ok": True, "id": pid, **modfilter.apply(c, "board_post", pid, ctx.uid, v)}
         pid = c.execute("INSERT INTO board_posts(uid, title, body, ts, updated) VALUES(?,?,?,?,?)", (ctx.uid, title, body, now(), now())).lastrowid
         board_files.attach(c, ctx, "post", pid, req.get("files"))
-    return {"ok": True, "id": pid}
+        return {"ok": True, "id": pid, **modfilter.apply(c, "board_post", pid, ctx.uid, v)}
 
 
 def _drop_post(c, pid):
@@ -241,37 +258,53 @@ def comment(ctx, req):
         _need_agree(c, ctx.uid)
         r = _post_row(c, pid, ctx)
         _rate(c, "board_comments", ctx.uid, COMMENT_RATE, "댓글")
+        par = comments.parent(c, "board_comments", "post=?", (pid,), req.get("parent_id"))
+    v = modfilter.check(ctx, "board_comment", body)
+    with db() as c:
         n = _alias(c, pid, ctx.uid, r["uid"])
-        cid = c.execute("INSERT INTO board_comments(post, uid, body, ts) VALUES(?,?,?,?)", (pid, ctx.uid, body, now())).lastrowid
+        cid = c.execute("INSERT INTO board_comments(post, uid, body, ts, parent_id) VALUES(?,?,?,?,?)", (pid, ctx.uid, body, now(), par)).lastrowid
         board_files.attach(c, ctx, "comment", cid, req.get("files"))
-    return {"ok": True, "id": cid, "author": _label(n)}
+        extra = modfilter.apply(c, "board_comment", cid, ctx.uid, v)
+    if v.held:
+        modfilter.notify_held("board_comment", cid)
+    return {"ok": True, "id": cid, "author": _label(n), **extra}
 
 
 def edit_comment(ctx, req):
     cid = _id(req.get("id"), "댓글")
     body = community._text(req.get("body"), COMMENT_MAX, "댓글", required=True)
     with db() as c:
-        r = c.execute("SELECT uid FROM board_comments WHERE id=?", (cid,)).fetchone()
-        if not r:
+        r = c.execute("SELECT uid, deleted FROM board_comments WHERE id=?", (cid,)).fetchone()
+        if not r or r["deleted"]:
             raise FileNotFoundError("없는 댓글입니다")
         if r["uid"] != ctx.uid:
             raise PermissionError("내가 쓴 댓글만 고칠 수 있습니다")
+    v = modfilter.check(ctx, "board_comment", body)
+    with db() as c:
         c.execute("UPDATE board_comments SET body=?, updated=? WHERE id=?", (body, now(), cid))
         board_files.attach(c, ctx, "comment", cid, req.get("files"))
-    return {"ok": True}
+        extra = modfilter.apply(c, "board_comment", cid, ctx.uid, v)
+    if v.held:
+        modfilter.notify_held("board_comment", cid)
+    return {"ok": True, **extra}
 
 
 def delete_comment(ctx, req):
     cid = _id(req.get("id"), "댓글")
     with db() as c:
-        r = c.execute("SELECT uid FROM board_comments WHERE id=?", (cid,)).fetchone()
-        if not r:
+        r = c.execute("SELECT uid, parent_id, deleted FROM board_comments WHERE id=?", (cid,)).fetchone()
+        if not r or r["deleted"]:
             raise FileNotFoundError("없는 댓글입니다")
         if r["uid"] != ctx.uid and not ctx.is_owner:
             raise PermissionError("내가 쓴 댓글만 지울 수 있습니다")
         c.execute("DELETE FROM board_reports WHERE kind='comment' AND target=?", (cid,))
         board_files.drop(c, "comment", [cid])
-        c.execute("DELETE FROM board_comments WHERE id=?", (cid,))   # 가명 번호(board_alias)는 그대로 — 다시 달아도 같은 번호
+        if c.execute("SELECT 1 FROM board_comments WHERE parent_id=?", (cid,)).fetchone():   # 답글이 있으면 자리만('삭제된 댓글입니다')
+            c.execute("UPDATE board_comments SET body='', deleted=1, hidden=0, held=0 WHERE id=?", (cid,))
+        else:
+            c.execute("DELETE FROM board_comments WHERE id=?", (cid,))   # 가명 번호(board_alias)는 그대로 — 다시 달아도 같은 번호
+            if r["parent_id"] is not None and not c.execute("SELECT 1 FROM board_comments WHERE parent_id=?", (r["parent_id"],)).fetchone():
+                c.execute("DELETE FROM board_comments WHERE id=? AND deleted=1", (r["parent_id"],))
         if r["uid"] != ctx.uid:
             accounts.audit(c, ctx.uid, "board_delete", f"board:comment:{cid}", "(관리자)")
     return {"ok": True}
@@ -292,7 +325,7 @@ def report(ctx, req):
     community._rate(ctx.uid)
     with db() as c:
         r = _target(c, kind, tid)
-        if r["hidden"] and not ctx.is_owner:
+        if (r["hidden"] and not ctx.is_owner) or (kind == "comment" and r["deleted"]):
             raise FileNotFoundError("없는 글입니다")
         if r["uid"] == ctx.uid:
             raise PermissionError("내 글은 신고할 수 없습니다")
@@ -321,7 +354,7 @@ def hide(ctx, req):
     kind, tid, on = req.get("kind"), _id(req.get("id")), bool(req.get("hidden", True))
     with db() as c:
         _target(c, kind, tid)
-        c.execute(f"UPDATE {KINDS[kind]} SET hidden=? WHERE id=?", (int(on), tid))
+        c.execute(f"UPDATE {KINDS[kind]} SET hidden=?" + ("" if on else ", held=0") + " WHERE id=?", (int(on), tid))   # 숨김을 풀면 보류도 풂
         accounts.audit(c, ctx.uid, "board_hide" if on else "board_unhide", f"board:{kind}:{tid}")
     return {"ok": True, "hidden": on}
 

@@ -4,7 +4,7 @@ import io, json, os, struct, tempfile, unittest, zlib
 from types import SimpleNamespace as NS
 from unittest.mock import patch
 
-from fastportal import comments, community, config, db as dbm, posts, tools
+from fastportal import modfilter, comments, community, config, db as dbm, posts, tools
 from fastportal.db import db
 
 TOOLS = {"sql-local": {"dir": "sql-local", "port": 1, "name": "SQL"},
@@ -57,7 +57,8 @@ class PostsTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.jobs = []
-        self.p = [patch.object(config, "DB_FILE", os.path.join(self.tmp.name, "portal.db")),
+        self.p = [patch.object(modfilter, "MOD_ON", False),   # 2단계(LLM) 거르기는 test_modfilter 에서만
+                  patch.object(config, "DB_FILE", os.path.join(self.tmp.name, "portal.db")),
                   patch.object(config, "DATA", self.tmp.name),
                   patch.object(community.tools, "tool", side_effect=lambda d: TOOLS.get(d)),
                   patch.object(community.toolstate, "is_off", return_value=False),

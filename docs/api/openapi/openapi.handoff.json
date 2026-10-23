@@ -2636,7 +2636,7 @@
      "portal"
     ],
     "x-permission": "self",
-    "description": "자기 것 403, 볼 수 없는 대상 403. stars 1~5, body 500자. 10분에 쓰기 20번",
+    "description": "자기 것 403, 볼 수 없는 대상 403. stars 1~5, body 500자. 10분에 쓰기 20번 거르기: 욕설이면 422(code=profanity), 특정인 비방 의심이면 저장하되 보류(응답 held=true·notice '관리자 확인 뒤 공개됩니다', 쓴 사람만 봄).",
     "responses": {
      "200": {
       "description": "성공",
@@ -2663,6 +2663,16 @@
      },
      "503": {
       "description": "에이전트 빌더 꺼짐"
+     },
+     "422": {
+      "description": "욕설·비속어 — code=profanity, matches=걸린 표현(첫 글자만 두고 가림). 입력은 그대로 두고 고쳐서 다시",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProfanityError"
+        }
+       }
+      }
      }
     },
     "requestBody": {
@@ -2768,7 +2778,7 @@
      "portal"
     ],
     "x-permission": "self",
-    "description": "type improve|bug|feature, title 80자, body 2000자. 대상 주인에게 작업 알림(tool community)",
+    "description": "type improve|bug|feature, title 80자, body 2000자. 대상 주인에게 작업 알림(tool community) 거르기: 욕설이면 422(code=profanity), 특정인 비방 의심이면 저장하되 보류(응답 held=true·notice '관리자 확인 뒤 공개됩니다', 쓴 사람만 봄).",
     "responses": {
      "200": {
       "description": "성공",
@@ -2795,6 +2805,16 @@
      },
      "503": {
       "description": "에이전트 빌더 꺼짐"
+     },
+     "422": {
+      "description": "욕설·비속어 — code=profanity, matches=걸린 표현(첫 글자만 두고 가림). 입력은 그대로 두고 고쳐서 다시",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProfanityError"
+        }
+       }
+      }
      }
     },
     "requestBody": {
@@ -3354,7 +3374,7 @@
      "portal"
     ],
     "x-permission": "self",
-    "description": "쓴 사람만(관리자도 남의 글은 못 고침, 예전 글은 고칠 수 없음). 본문은 마크다운(HTML 은 글자로 보임), 그림은 ![설명](/api/community/img/<id>/<이름>). 본문에서 뺀 그림 파일은 지움. 공지는 관리자만. 쓴 사람·부서는 계정 정보로",
+    "description": "쓴 사람만(관리자도 남의 글은 못 고침, 예전 글은 고칠 수 없음). 본문은 마크다운(HTML 은 글자로 보임), 그림은 ![설명](/api/community/img/<id>/<이름>). 본문에서 뺀 그림 파일은 지움. 공지는 관리자만. 쓴 사람·부서는 계정 정보로 거르기: 욕설이면 422(code=profanity), 특정인 비방 의심이면 저장하되 보류(응답 held=true·notice '관리자 확인 뒤 공개됩니다', 쓴 사람만 봄).",
     "requestBody": {
      "required": true,
      "content": {
@@ -3435,6 +3455,16 @@
      },
      "404": {
       "description": "없는 글(초안은 쓴 사람만, 숨긴 글은 쓴 사람·관리자만)"
+     },
+     "422": {
+      "description": "욕설·비속어 — code=profanity, matches=걸린 표현(첫 글자만 두고 가림). 입력은 그대로 두고 고쳐서 다시",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProfanityError"
+        }
+       }
+      }
      }
     }
    }
@@ -3795,7 +3825,7 @@
      "portal"
     ],
     "x-permission": "self",
-    "description": "규칙 동의 뒤. id 없으면 새 글(1시간 5개), 있으면 내 글 고치기. 글자만(그림·링크 없음) 확인된 사용자만(아니면 403 not_verified).",
+    "description": "규칙 동의 뒤. id 없으면 새 글(1시간 5개), 있으면 내 글 고치기. 글자만(그림·링크 없음) 확인된 사용자만(아니면 403 not_verified). 거르기: 욕설이면 422(code=profanity), 특정인 비방 의심이면 저장하되 보류(응답 held=true·notice '관리자 확인 뒤 공개됩니다', 쓴 사람만 봄).",
     "requestBody": {
      "required": true,
      "content": {
@@ -3853,6 +3883,16 @@
      },
      "404": {
       "description": "없는 글(숨긴 글은 쓴 사람·관리자만)"
+     },
+     "422": {
+      "description": "욕설·비속어 — code=profanity, matches=걸린 표현(첫 글자만 두고 가림). 입력은 그대로 두고 고쳐서 다시",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProfanityError"
+        }
+       }
+      }
      }
     }
    }
@@ -3919,7 +3959,7 @@
      "portal"
     ],
     "x-permission": "self",
-    "description": "규칙 동의 뒤, 1시간 30개. 응답 author = 그 글에서 내 가명 확인된 사용자만(아니면 403 not_verified).",
+    "description": "규칙 동의 뒤, 1시간 30개. 응답 author = 그 글에서 내 가명 확인된 사용자만(아니면 403 not_verified). 거르기: 욕설이면 422(code=profanity), 특정인 비방 의심이면 저장하되 보류(응답 held=true·notice '관리자 확인 뒤 공개됩니다', 쓴 사람만 봄).",
     "requestBody": {
      "required": true,
      "content": {
@@ -3944,6 +3984,10 @@
            "type": "integer"
           },
           "description": "붙일 첨부 id(POST /board/file 로 올린 내 대기 첨부, 고칠 때는 지금 붙은 것도) — 글 5·댓글 3개, 빠진 기존 첨부는 지움"
+         },
+         "parent_id": {
+          "type": "integer",
+          "description": "답글이면 부모 댓글 id(같은 글, 답글이 아닌 댓글 — 아니면 400)"
          }
         }
        }
@@ -3973,6 +4017,16 @@
      },
      "404": {
       "description": "없는 글(숨긴 글은 쓴 사람·관리자만)"
+     },
+     "422": {
+      "description": "욕설·비속어 — code=profanity, matches=걸린 표현(첫 글자만 두고 가림). 입력은 그대로 두고 고쳐서 다시",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProfanityError"
+        }
+       }
+      }
      }
     }
    }
@@ -4165,7 +4219,7 @@
      "portal"
     ],
     "x-permission": "self",
-    "description": "확인된 사용자만(아니면 403 not_verified), 1시간 30개, 글자만",
+    "description": "확인된 사용자만(아니면 403 not_verified), 1시간 30개, 글자만 거르기: 욕설이면 422(code=profanity), 특정인 비방 의심이면 저장하되 보류(응답 held=true·notice '관리자 확인 뒤 공개됩니다', 쓴 사람만 봄).",
     "requestBody": {
      "required": true,
      "content": {
@@ -4195,6 +4249,10 @@
          "body": {
           "type": "string",
           "maxLength": 1000
+         },
+         "parent_id": {
+          "type": "integer",
+          "description": "답글이면 부모 댓글 id(같은 글, 답글이 아닌 댓글 — 아니면 400)"
          }
         }
        }
@@ -4224,6 +4282,16 @@
      },
      "404": {
       "description": "없는 대상·볼 수 없는 대상"
+     },
+     "422": {
+      "description": "욕설·비속어 — code=profanity, matches=걸린 표현(첫 글자만 두고 가림). 입력은 그대로 두고 고쳐서 다시",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProfanityError"
+        }
+       }
+      }
      }
     }
    }
@@ -4282,8 +4350,19 @@
      },
      "404": {
       "description": "없는 대상·볼 수 없는 대상"
+     },
+     "422": {
+      "description": "욕설·비속어 — code=profanity, matches=걸린 표현(첫 글자만 두고 가림). 입력은 그대로 두고 고쳐서 다시",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProfanityError"
+        }
+       }
+      }
      }
-    }
+    },
+    "description": " 거르기: 욕설이면 422(code=profanity), 특정인 비방 의심이면 저장하되 보류(응답 held=true·notice '관리자 확인 뒤 공개됩니다', 쓴 사람만 봄)."
    }
   },
   "/api/community/comment/delete": {
@@ -4458,8 +4537,19 @@
      },
      "404": {
       "description": "없는 대상·볼 수 없는 대상"
+     },
+     "422": {
+      "description": "욕설·비속어 — code=profanity, matches=걸린 표현(첫 글자만 두고 가림). 입력은 그대로 두고 고쳐서 다시",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProfanityError"
+        }
+       }
+      }
      }
-    }
+    },
+    "description": " 거르기: 욕설이면 422(code=profanity), 특정인 비방 의심이면 저장하되 보류(응답 held=true·notice '관리자 확인 뒤 공개됩니다', 쓴 사람만 봄)."
    }
   },
   "/api/community/board/file": {
@@ -5011,11 +5101,22 @@
      },
      "401": {
       "$ref": "#/components/responses/Unauthorized"
+     },
+     "422": {
+      "description": "욕설·비속어 — code=profanity, matches=걸린 표현(첫 글자만 두고 가림). 입력은 그대로 두고 고쳐서 다시",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProfanityError"
+        }
+       }
+      }
      }
     },
     "tags": [
      "portal"
-    ]
+    ],
+    "description": " 거르기: 욕설이면 422(code=profanity), 특정인 비방 의심이면 저장하되 보류(응답 held=true·notice '관리자 확인 뒤 공개됩니다', 쓴 사람만 봄)."
    }
   },
   "/api/post_like": {
@@ -62801,6 +62902,10 @@
      "comments": {
       "type": "integer",
       "description": "보이는 댓글 수"
+     },
+     "held": {
+      "type": "boolean",
+      "description": "보류 중(쓴 사람에게만 보임 — '확인 중')"
      }
     }
    },
@@ -63414,6 +63519,10 @@
         "type": "integer"
        }
       ]
+     },
+     "held": {
+      "type": "boolean",
+      "description": "보류 중(쓴 사람에게만 보임 — '확인 중')"
      }
     }
    },
@@ -63465,6 +63574,20 @@
       "items": {
        "$ref": "#/components/schemas/BoardFile"
       }
+     },
+     "parent_id": {
+      "type": [
+       "integer",
+       "null"
+      ],
+      "description": "답글이면 부모 댓글"
+     },
+     "deleted": {
+      "type": "boolean",
+      "description": "답글이 남아 자리만 둔 지운 댓글(author·body 빈 값)"
+     },
+     "held": {
+      "type": "boolean"
      }
     }
    },
@@ -63679,6 +63802,20 @@
      "reports": {
       "type": "integer",
       "description": "관리자에게만"
+     },
+     "parent_id": {
+      "type": [
+       "integer",
+       "null"
+      ],
+      "description": "답글이면 부모 댓글"
+     },
+     "deleted": {
+      "type": "boolean",
+      "description": "답글이 남아 자리만 둔 지운 댓글(author·body 빈 값)"
+     },
+     "held": {
+      "type": "boolean"
      }
     }
    },
@@ -63746,6 +63883,140 @@
        "null"
       ],
       "description": "'작성자 정보가 남을 수 있음'(hwp·지우지 못한 pdf)"
+     }
+    }
+   },
+   "ProfanityError": {
+    "type": "object",
+    "required": [
+     "error",
+     "code",
+     "matches"
+    ],
+    "properties": {
+     "error": {
+      "type": "string"
+     },
+     "code": {
+      "type": "string",
+      "enum": [
+       "profanity"
+      ]
+     },
+     "matches": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    }
+   },
+   "HeldItem": {
+    "type": "object",
+    "required": [
+     "kind",
+     "id",
+     "title",
+     "body",
+     "reason",
+     "model",
+     "judged",
+     "stage",
+     "link",
+     "author"
+    ],
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "post",
+       "comment",
+       "board_post",
+       "board_comment",
+       "review",
+       "request"
+      ]
+     },
+     "id": {
+      "type": [
+       "integer",
+       "string"
+      ]
+     },
+     "title": {
+      "type": "string"
+     },
+     "body": {
+      "type": "string"
+     },
+     "reason": {
+      "type": "string"
+     },
+     "model": {
+      "type": "string"
+     },
+     "judged": {
+      "type": "string"
+     },
+     "stage": {
+      "type": "string"
+     },
+     "link": {
+      "type": "string"
+     },
+     "author": {
+      "type": "object",
+      "description": "쓴 사람 — 자유게시판은 uid 까지(작성자 추적, 처음 볼 때 감사 board_held_author)",
+      "properties": {
+       "name": {
+        "type": "string"
+       },
+       "uid": {
+        "type": "string"
+       }
+      }
+     }
+    }
+   },
+   "ModWords": {
+    "type": "object",
+    "required": [
+     "base",
+     "base_allow",
+     "added",
+     "removed",
+     "allow"
+    ],
+    "properties": {
+     "base": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "base_allow": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "added": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "removed": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "allow": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
      }
     }
    }
