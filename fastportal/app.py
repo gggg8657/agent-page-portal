@@ -30,7 +30,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from starlette.concurrency import run_in_threadpool
 
-from . import accounts, admintools, ask, auth, community, config, db, relay, devsubmit, dwell, flows, board_files, idea, jobs, lists, match, org, pages, pkgindex, posts, probe, proxy, sessions, tools, toolstate, workspace
+from . import accounts, admintools, analytics, ask, auth, community, config, db, relay, devsubmit, dwell, flows, board_files, idea, jobs, lists, match, org, pages, pkgindex, posts, probe, proxy, sessions, tools, toolstate, workspace
 from .config import OWNERS, TLS
 from .ctx import Ctx, TooBig, drain, length, not_implemented, parse_json, read_body, too_big
 
@@ -143,6 +143,10 @@ def get_sync(ctx):
             return ctx.send(lists.get(c, ctx.uid))
     if p == "/api/admin/dwell":
         return dwell.report(ctx)
+    if p == "/api/admin/analytics":   # 사용 통계(화면·도구·일별·이탈·깔때기) — 관리자
+        return analytics.report(ctx)
+    if p == "/api/admin/analytics.csv":   # 사용 통계 CSV(일별 집계·이벤트 원본 가명) — 관리자
+        return analytics.export(ctx)
     if p == "/api/admin/tools":   # 에이전트 관리 — 켜짐 확인(비동기) 뒤 표
         return "admin_tools"
     if p == "/api/admin/agents":
@@ -386,6 +390,8 @@ def post_sync(ctx, body):
                 return ctx.send(lists.put(c, ctx.uid, req))
             if path == "/api/dwell":
                 return dwell.record(ctx, c, req)
+            if path == "/api/events":   # 화면 클릭 이벤트 묶음(화이트리스트·중복 제거·속도 제한)
+                return analytics.record(ctx, c, req)
             if ctx.p.startswith("/api/flows/"):
                 return flows.handle_post(ctx, req)
             if ctx.p.startswith("/api/community/"):

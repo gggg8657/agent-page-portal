@@ -10,6 +10,9 @@ from . import accounts, db, timeutil, tools
 SCREENS = {
     "home": "홈", "all": "전체 에이전트", "fav": "즐겨찾기", "recent": "최근 사용",
     "work": "내 작업", "account": "계정 설정", "approvals": "승인", "admin": "관리", "tool": "도구",
+    # 2026-10-23 사용 통계(analytics.py) — 커뮤니티·광장·만들기 등 나머지 주요 화면
+    "plaza": "광장", "community": "커뮤니티", "post": "커뮤니티 글", "board": "자유게시판 글", "write": "글쓰기",
+    "create": "모두의 에이전트", "ask": "물어보기",
 }
 UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 _PRUNE_LOCK = threading.Lock()

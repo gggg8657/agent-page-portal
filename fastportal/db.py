@@ -136,6 +136,8 @@ def init_db(seed_depts=()):
         if not c.execute("SELECT 1 FROM depts").fetchone():
             seed = {r[0] for r in c.execute("SELECT DISTINCT dept FROM users")} | set(seed_depts)
             c.executemany("INSERT OR IGNORE INTO depts(name, ts) VALUES(?, datetime('now'))", [(d.strip(),) for d in seed if d and d.strip() and d.strip() != "개인"])
+        from . import analytics   # 사용 통계 — 화면 클릭 이벤트 표(ui_events)
+        analytics.init(c)
         from . import org   # 계층 조직(org_units·users.unit_id·dept_heads.unit_id) — 비어 있으면 기본 조직도 넣고 예전 부서 이름을 옮김
         org.init(c)
 
