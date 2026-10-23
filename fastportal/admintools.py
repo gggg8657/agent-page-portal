@@ -44,7 +44,8 @@ def tools_get(ctx, up):
             src = "file" if t.get("hidden") else "admin" if not s.get("visible", 1) else None
             out.append({"dir": t["dir"], "name": t.get("name") or t["dir"], "title": t.get("title") or "", "group": t.get("group") or "기타",
                         "port": t.get("port"), "remote": tools.is_remote(t), "hidden": bool(t.get("hidden")),
-                        "installed": tools.is_remote(t) or os.path.isdir(os.path.join(config.BASE, t["dir"])),
+                        "installed": tools.is_remote(t) or tools.is_container(t) or os.path.isdir(os.path.join(config.BASE, t["dir"])),
+                        "runtime": "container" if tools.is_container(t) else "remote" if tools.is_remote(t) else "host",
                         "up": bool(up.get(tools.tool_addr(t))), "enabled": bool(s.get("enabled", 1)),
                         "by": s.get("by"), "ts": s.get("ts"), "reason": s.get("reason") or "",
                         "visible": src is None, "hidden_src": src, "hide_by": s.get("hide_by"), "hide_ts": s.get("hide_ts"), "hide_reason": s.get("hide_reason") or "",

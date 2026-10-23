@@ -47,6 +47,10 @@ class DevSubmitTest(unittest.TestCase):
         for x in reversed(self.p): x.stop()
         self.tmp.cleanup()
 
+    def _row(self, sid):
+        with db() as c:
+            return c.execute("SELECT * FROM dev_submissions WHERE id=?", (sid,)).fetchone()
+
     ctx = staticmethod(lambda uid, owner=False: SimpleNamespace(uid=uid, agent_user=uid, agent_role="admin" if owner else "", is_owner=owner))
 
     def test_zip_attacks_rejected(self):
@@ -101,11 +105,19 @@ class DevSubmitTest(unittest.TestCase):
             pkgindex.replace(c, {"fastapi": {"0.110.0"}}, "t.txt")
             c.execute("UPDATE dev_submissions SET status='review'")
         g = {k.replace("hello-local", "pkgs-local"): v for k, v in GOOD.items()}
-        g["pkgs-local/requirements.txt"] = "fastapi==0.99\nnot-in-closed\ngit+https://example.invalid/x.git\n"
+        g["pkgs-local/requirements.txt"] = "fastapi==0.99\nnot-in-closed\n"
         s = devsubmit.submit(self.ctx("dev"), mkzip(g))
         w = " | ".join(s["checks"]["warnings"])
         self.assertEqual(s["status"], "sandbox", "패키지 문제는 경고(오류 아님)")
-        self.assertIn("버전 없음: fastapi==0.99", w); self.assertIn("폐쇄망에서 설치 불가: not-in-closed", w); self.assertIn("git", w)
+        self.assertIn("버전 없음: fastapi==0.99", w); self.assertIn("폐쇄망에서 설치 불가: not-in-closed", w)
+        self.assertTrue(devsubmit._public(self._row(s["id"]))["pkg_confirm"], "승인 때 관리자 확인이 필요하다고 표시")
+        with db() as c:
+            c.execute("UPDATE dev_submissions SET status='rejected'")
+        g = {k.replace("hello-local", "gitreq-local"): v for k, v in GOOD.items()}
+        g["gitreq-local/requirements.txt"] = "git+https://example.invalid/x.git\n--extra-index-url http://x.invalid\n"
+        s = devsubmit.submit(self.ctx("dev"), mkzip(g))
+        self.assertEqual(s["status"], "failed", "컨테이너 빌드가 받지 않는 줄(git·옵션)은 오류")
+        self.assertIn("requirements.txt", " ".join(s["checks"]["errors"]))
 
     def test_precheck_before_body(self):
         sent = []

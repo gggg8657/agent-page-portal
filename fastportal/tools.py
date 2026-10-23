@@ -1,7 +1,7 @@
 """도구 목록(tools.json)·시작·중지·등록·켜짐 확인(캐시)·혼합형 host(다른 컨테이너)·GPU 현황·홈 목록 데이터(사용 횟수·순위·게시글)."""
 import asyncio, datetime, json, os, re, socket, subprocess, threading, time, urllib.request
 
-from . import config, timeutil
+from . import config, devtool, timeutil
 from .config import BASE
 
 # ── tools.json ──────────────────────────────────────────────────────────
@@ -32,8 +32,15 @@ def is_remote(t):
     return bool(t.get("host"))
 
 
+def is_container(t):
+    """승인된 개발자 업로드 도구 — 격리 컨테이너(devtool.py)에서 돎. 시작·중지는 docker, 주소는 내부 망의 컨테이너 주소"""
+    return devtool.is_container(t)
+
+
 def tool_host(t):
-    """도구에 접속할 주소. host 없으면 127.0.0.1, 형식이 틀리면 None(접속하지 않음)"""
+    """도구에 접속할 주소. host 없으면 127.0.0.1(컨테이너 도구는 내부 망 주소), 형식이 틀리면 None(접속하지 않음)"""
+    if is_container(t):
+        return devtool.ip_for(t)
     h = t.get("host")
     if not h:
         return "127.0.0.1"
@@ -104,6 +111,8 @@ def claim_start(t):
 def start(t, extra_env=None):
     if is_remote(t):
         return   # 다른 컨테이너의 도구 — 그쪽이 띄움
+    if is_container(t):
+        return devtool.start(t, extra_env)   # 실패하면 RuntimeError(이미지·망 없음 등)
     cwd = os.path.join(BASE, t["dir"])
     env = {**os.environ, "PORT": str(t["port"]), "WORKSPACE": os.path.join(config.DATA, t["dir"]), "BIND": config.TOOL_BIND, **(extra_env or {})}   # + 작업 알림(PORTAL_JOBS_*, jobs.tool_env)
     env.pop("PORTAL_JOBS_SECRET", None)   # 포털 비밀값은 도구로 안 넘김(도구는 자기 토큰만)
@@ -141,6 +150,10 @@ def port_pids(port):
 def stop(t):
     if is_remote(t):
         return
+    if is_container(t):
+        devtool.stop(t)
+        _STARTING.pop(t["dir"], None)
+        return
     cwd = os.path.join(BASE, t["dir"])
     if os.path.exists(os.path.join(cwd, "setup.sh")):
         try:
@@ -173,13 +186,32 @@ def add_tool(t):
         row = {"dir": d, "port": port, "name": t.get("name") or d, "title": t.get("title") or d, "desc": t.get("desc", ""), "group": t.get("group") or "기타",
                "tags": [x for x in (t.get("tags") or "").replace("#", "").split() if x], "dept": t.get("dept", ""), "author": t.get("author", ""),
                "added": timeutil.today_kst().isoformat()}
+        if t.get("runtime") == "container":   # 개발자 업로드 승인(devsubmit) — 격리 컨테이너로 돎
+            row.update(runtime="container", image=t.get("image", ""))
         row["tags"] = ["#" + x for x in row["tags"]]
         ts.append(row)
-        tmp = config.TOOLS_FILE + ".tmp"   # 다른 요청이 쓰는 중인 반쪽 파일을 읽거나, 쓰다 죽어 깨진 tools.json 으로 포털이 못 뜨지 않게
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(ts, f, ensure_ascii=False, indent=1)
-        os.replace(tmp, config.TOOLS_FILE)
+        _write(ts)
         return row
+
+
+def _write(ts):
+    tmp = config.TOOLS_FILE + ".tmp"   # 다른 요청이 쓰는 중인 반쪽 파일을 읽거나, 쓰다 죽어 깨진 tools.json 으로 포털이 못 뜨지 않게
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(ts, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, config.TOOLS_FILE)
+    with _TOOLS_LOCK:
+        _TOOLS["m"] = None   # 수정 시각이 같은 틱이면 캐시가 옛 내용을 줄 수 있음 — 바로 다시 읽게
+
+
+def remove_tool(d, runtime="container"):
+    """tools.json 에서 한 줄 빼기 — 개발자 업로드 회수·승인 되돌리기만 씀(runtime 이 같은 줄만). 뺐으면 True"""
+    with _ADD_LOCK:
+        ts = tools()
+        keep = [x for x in ts if not (x["dir"] == d and x.get("runtime") == runtime)]
+        if len(keep) == len(ts):
+            return False
+        _write(keep)
+        return True
 
 
 def landing_groups():
@@ -270,7 +302,7 @@ def tool_list(c, up, uid, u=None):
     from . import toolstate
     u = usage(c) if u is None else u
     off, hid = toolstate.off(), toolstate.admin_hidden()
-    return [{**t, "hidden": bool(t.get("hidden")) or t["dir"] in hid, "up": up.get(tool_addr(t), False), "installed": is_remote(t) or os.path.isdir(os.path.join(BASE, t["dir"])),
+    return [{**t, "hidden": bool(t.get("hidden")) or t["dir"] in hid, "up": up.get(tool_addr(t), False), "installed": is_remote(t) or is_container(t) or os.path.isdir(os.path.join(BASE, t["dir"])),
              "url": f"/t/{t['dir']}/", "usage": u.get(t["dir"], {"recent": 0, "total": 0, "users": 0, "likes": 0})}
             for t in tools() if (config.SHOW_HIDDEN or not t.get("hidden")) and t["dir"] not in off]
 

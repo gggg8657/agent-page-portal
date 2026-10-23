@@ -8,13 +8,19 @@
           폐쇄망 pip 목록(pkgindex.scan_tree): requirements*.txt·pyproject.toml·setup.sh 의 pip install — 목록에 없음·없는 버전·git/URL/경로 설치는 경고.
   격리 자가검증: Docker(DEVCHECK_DOCKER_HOST, 기본 tcp://127.0.0.1:2375) — 이름 dongjukim-devcheck-<id>, GPU 없음, --network none,
           CPU·메모리·프로세스 수 상한, 읽기 전용 루트 + /tmp(tmpfs), 권한 모두 뺌, 시간 제한. 안에서: 문법 검사(compile), selftest.py, 서버 띄워 /healthz.
-          이미지(DEVCHECK_IMAGE)·Docker 가 없으면 '건너뜀'으로 표시하고 관리자에게 알림.
-  승인 잠금: PORTAL_DEV_APPROVE=0(기본) 이면 승인(ok=true)은 409 — 실행 격리가 끝날 때까지 임시. 거절은 그대로.
+          이미지(DEVCHECK_IMAGE = 바탕 이미지 dongjukim-devcheck:<판>, scripts/build-devcheck-image.sh)·Docker 가 없으면 '건너뜀'으로 표시하고 관리자에게 알림.
+  승인 잠금: PORTAL_DEV_APPROVE=0(기본) 이면 승인(ok=true)은 409. 거절·회수는 그대로. 푸는 법은 start-portal.sh 에 PORTAL_DEV_APPROVE=1.
   본문 전 권한 확인: app.py 가 precheck() 로 로그인·개발자·검사 중 제출을 먼저 보고, 아니면 본문(zip)을 읽지 않고 돌려보냄.
-  승인: ~/agent-page/<dir> 로 설치 + tools.json 등록(tools.add_tool) + guides/<dir>.md + 포털이 시작(서명 모드 PORTAL_TOOL_KEY). 모두 감사 기록."""
-import io, json, os, re, secrets, shutil, socket, stat, subprocess, threading, time, zipfile
+  승인(격리 실행, devtool.py — 호스트에서 setup.sh·app.py 를 실행하지 않음): 상태 installing → 뒤에서
+          이미지 빌드(dongjukim-tool-<dir>:<id>) → 컨테이너 기동(dongjukim-tool-<dir>, 도구 전용 서명 키) → /healthz → tools.json 등록("runtime": "container")
+          → guides/<dir>.md. 단계마다 감사 기록. 실패하면 거꾸로 되돌리고(등록·사용법·컨테이너·이미지) 상태를 review 로, 이유·단계·로그를 install 에.
+          폐쇄망 pip 목록 경고(설치 불가·버전 없음)가 있으면 관리자 확인(confirm_pkgs) 없이는 승인 안 됨.
+  회수: POST /api/admin/dev/revoke — 컨테이너·이미지·tools.json 줄·승인 때 만든 사용법을 지움(사용자 데이터 _data/<dir> 는 남김). 감사 기록.
+  개발자 신청: 일반 계정이 POST /api/dev/apply {reason} → 관리자 알림함 + 신청 목록(GET /api/admin/dev/applications) → 부여·보류(POST 같은 주소).
+  샘플·형식 안내: GET /api/dev/sample.zip(sdk/samples/hello-local + portal_auth.py + FORMAT.md) · GET /api/dev/format(형식 안내 마크다운)."""
+import datetime, io, json, os, re, secrets, shutil, socket, stat, subprocess, threading, time, zipfile
 
-from . import accounts, config, jobs, pkgindex, timeutil, tools
+from . import accounts, config, devtool, jobs, pkgindex, timeutil, tools
 from .db import db, now, own_row
 
 PKG_LIST_MAX = 8 * 1024 * 1024   # 폐쇄망 패키지 목록 파일(pip index 출력 포함) 상한
@@ -23,15 +29,20 @@ FILES_MAX = 2000
 UNZIP_MAX = 200 * 1024 * 1024
 FILE_MAX = 30 * 1024 * 1024
 SUB_DIR = os.path.join(config.DATA, "dev-submissions")
-DOCKER_HOST = os.environ.get("DEVCHECK_DOCKER_HOST", "tcp://127.0.0.1:2375")
-IMAGE = os.environ.get("DEVCHECK_IMAGE", "dongjukim/agent-portal:v2")
-IMAGE_PY = os.environ.get("DEVCHECK_PYTHON", "/opt/env/bin/python3")
+IMAGE = devtool.BASE_IMAGE   # 바탕 이미지 dongjukim-devcheck:<판>(DEVCHECK_IMAGE) — 승인된 도구 이미지도 이 위에 만듦
+IMAGE_PY = os.environ.get("DEVCHECK_PYTHON", "/usr/local/bin/python3")
 CHECK_TIMEOUT = int(os.environ.get("DEVCHECK_TIMEOUT", "180"))
 PORT_RANGE = (8810, 8899)
 NAME_RE = re.compile(r"[a-z][a-z0-9-]{1,38}-local")
 JOB_TOOL = "devsubmit"
 CHECK_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "devcheck_runner.py")
 SDK_AUTH = os.path.join(config.ROOT, "sdk", "portal_auth.py")
+SAMPLE_DIR = os.path.join(config.ROOT, "sdk", "samples", "hello-local")
+FORMAT_DOC = os.path.join(config.ROOT, "sdk", "samples", "FORMAT.md")
+HEALTH_WAIT = int(os.environ.get("DEVTOOL_HEALTH_WAIT", "60"))
+PKG_BLOCK = ("폐쇄망에서 설치 불가", "버전 없음")   # 이 경고가 있으면 승인에 관리자 확인(confirm_pkgs) 필요
+GET_PATHS = {"/api/dev/submissions", "/api/dev/apply", "/api/dev/sample.zip", "/api/dev/format", "/api/admin/dev/applications"}
+POST_PATHS = {"/api/admin/dev/decide", "/api/admin/dev/revoke", "/api/admin/developer", "/api/admin/dev/applications", "/api/dev/apply"}
 
 
 def init(c):
@@ -40,7 +51,10 @@ def init(c):
     CREATE TABLE IF NOT EXISTS dev_submissions(id TEXT PRIMARY KEY, uid TEXT NOT NULL, agent_user TEXT NOT NULL, dir TEXT, title TEXT,
         status TEXT NOT NULL, created TEXT NOT NULL, updated TEXT NOT NULL, size INTEGER, nfiles INTEGER,
         checks TEXT, sandbox TEXT, note TEXT, decided_by TEXT, decided_ts TEXT, port INTEGER);
-    CREATE INDEX IF NOT EXISTS dev_sub_uid ON dev_submissions(uid, created);""")
+    CREATE INDEX IF NOT EXISTS dev_sub_uid ON dev_submissions(uid, created);
+    CREATE TABLE IF NOT EXISTS dev_applications(uid TEXT PRIMARY KEY, reason TEXT, ts TEXT NOT NULL, status TEXT NOT NULL, decided_by TEXT, decided_ts TEXT, note TEXT);""")
+    if "install" not in {r[1] for r in c.execute("PRAGMA table_info(dev_submissions)")}:   # 승인 설치 단계·실패 이유(2026-10-23) — 예전 DB 에 붙임
+        c.execute("ALTER TABLE dev_submissions ADD COLUMN install TEXT")
 
 
 # ── 개발자 역할 ──────────────────────────────────────────────────────────
@@ -57,6 +71,7 @@ def set_developer(c, actor, uid, on):
         raise ValueError("없거나 정지된 계정입니다")
     if on:
         c.execute("INSERT OR IGNORE INTO developers VALUES(?,?,?)", (uid, actor, now()))
+        c.execute("UPDATE dev_applications SET status='granted', decided_by=?, decided_ts=? WHERE uid=? AND status='pending'", (actor, now(), uid))
     else:
         c.execute("DELETE FROM developers WHERE uid=?", (uid,))
     accounts.audit(c, actor, "developer_grant" if on else "developer_revoke", uid)
@@ -143,8 +158,14 @@ def check_tree(c, sid, top, path, files):
         err.append(f"이미 있는 도구 이름입니다: {top}")
     if c.execute("SELECT 1 FROM dev_submissions WHERE dir=? AND id<>? AND status IN ('checking','sandbox','review')", (top, sid)).fetchone():
         err.append(f"같은 이름({top})의 다른 제출이 승인 대기 중입니다")
-    if "app.py" not in names and "setup.sh" not in names:
-        err.append("app.py 또는 setup.sh 가 필요합니다(포털이 이것으로 띄움)")
+    if "app.py" not in names:
+        err.append("app.py 가 필요합니다 — 승인된 도구는 격리 컨테이너에서 python app.py 로 뜹니다")
+    if "setup.sh" in names:
+        info.append("setup.sh 는 실행하지 않습니다 — 의존성은 requirements.txt 로(승인 때 이미지에 바퀴(wheel)만 설치)")
+    if "requirements.txt" in names:
+        _, bad = devtool.clean_requirements(open(os.path.join(path, "requirements.txt"), encoding="utf-8", errors="replace").read(1024 * 1024))
+        if bad:
+            err.append("requirements.txt 에는 이름·버전 조건만 적어 주세요(옵션·URL·경로·-r·-e 는 받지 않음): " + "; ".join(b[:60] for b in bad[:3]))
     if "README.md" not in names:
         err.append("README.md 가 필요합니다")
     meta = {}
@@ -169,7 +190,7 @@ def check_tree(c, sid, top, path, files):
     if meta.get("group") and meta["group"] not in groups:
         warn.append(f"카테고리 '{str(meta['group'])[:20]}' 는 지금 없는 분류입니다 — 승인하면 새 분류로 보임(있는 것: {', '.join(sorted(g for g in groups if g))})")
     if "venv" in {f.split("/")[0] for f in names} or any(f.startswith("node_modules/") for f in names):
-        err.append("venv·node_modules 는 빼고 올려 주세요(설치는 setup.sh 가)")
+        err.append("venv·node_modules 는 빼고 올려 주세요(의존성은 requirements.txt 로)")
     if any(f.split("/")[0] == ".git" for f in names):
         warn.append(".git 폴더가 들어 있습니다(설치 때 그대로 복사됨)")
     srcs = [f for f in names if f.endswith((".py", ".sh", ".js", ".mjs", ".ts", ".html"))]
@@ -211,8 +232,7 @@ def check_tree(c, sid, top, path, files):
 
 # ── 격리 자가검증 ────────────────────────────────────────────────────────
 def _docker(args, timeout):
-    env = {**os.environ, "DOCKER_HOST": DOCKER_HOST}
-    return subprocess.run(["docker", *args], capture_output=True, text=True, timeout=timeout, env=env)
+    return devtool.docker(args, timeout)
 
 
 def sandbox(sid, top, src):
@@ -261,9 +281,9 @@ def sandbox(sid, top, src):
             "steps": steps, "log": log, "seconds": round(time.time() - t0, 1), "image": IMAGE, "container": name}
 
 
-def _notify(user, sid, status, title, msg):
+def _notify(user, sid, status, title, msg, link=None):
     try:
-        j = jobs.upsert(user, JOB_TOOL, status, f"{sid}-{secrets.token_hex(3)}", title[:200], f"/create?tab=make&m=dev&sub={sid}", msg[:400])
+        j = jobs.upsert(user, JOB_TOOL, status, f"{sid}-{secrets.token_hex(3)}", title[:200], link or f"/create?tab=make&m=dev&sub={sid}", msg[:400])
         if j:
             jobs.HUB.publish("job", j, j["user"])
     except Exception as e:
@@ -374,10 +394,13 @@ def _public(r, detail=False):
     d = {k: r[k] for k in ("id", "uid", "dir", "title", "status", "created", "updated", "size", "nfiles", "note", "decided_by", "decided_ts", "port")}
     chk = json.loads(r["checks"] or "null") or {}
     sb = json.loads(r["sandbox"] or "null")
+    inst = json.loads(r["install"] or "null") if "install" in r.keys() else None
     d["errors"], d["warnings"] = len(chk.get("errors") or []), len(chk.get("warnings") or [])
     d["sandbox_status"] = (sb or {}).get("status")
+    d["install_status"] = (inst or {}).get("status")
+    d["pkg_confirm"] = any(str(w).startswith(PKG_BLOCK) for w in chk.get("warnings") or [])
     if detail:
-        d["checks"], d["sandbox"] = chk, sb
+        d["checks"], d["sandbox"], d["install"] = chk, sb, inst
         src = os.path.join(SUB_DIR, r["id"], "src", r["dir"] or "")
         fl = []
         if r["dir"] and os.path.isdir(src):
@@ -426,7 +449,7 @@ def _free_port():
 
 
 def decide(ctx, req):
-    """POST /api/admin/dev/decide {id, ok, note} — 관리자만"""
+    """POST /api/admin/dev/decide {id, ok, note, confirm_skipped?, confirm_pkgs?} — 관리자만. 승인은 설치를 뒤에서 시작하고 바로 'installing' 으로 답함"""
     if not ctx.is_owner:
         raise PermissionError("관리자만 할 수 있습니다")
     note = str(req.get("note") or "").strip()[:300]
@@ -443,7 +466,6 @@ def decide(ctx, req):
                 accounts.audit(c, ctx.uid, "dev_reject", r["dir"] or "", f"#{r['id']} {note}")
                 _notify(r["agent_user"], r["id"], "failed", f"제출 {r['dir']}: 거절", note)
                 return {"ok": True, "status": "rejected"}
-            # shortcut: 아래 설치(폴더 복사·tools.json 등록·사용법·상태)는 한 단계가 실패하면 앞 단계가 남음(재승인은 '이미 같은 이름') — 승인 잠금을 풀기 전에 되돌리기를 붙일 것
             if not config.DEV_APPROVE:
                 raise Locked(LOCK_MSG)
             chk = json.loads(r["checks"] or "{}")
@@ -452,50 +474,227 @@ def decide(ctx, req):
             sb = json.loads(r["sandbox"] or "{}")
             if sb.get("status") == "skipped" and req.get("confirm_skipped") is not True:
                 raise ValueError("격리 검증을 건너뛴 제출입니다 — 확인(confirm_skipped)이 필요합니다")
+            if any(str(w).startswith(PKG_BLOCK) for w in chk.get("warnings") or []) and req.get("confirm_pkgs") is not True:
+                raise ValueError("폐쇄망 패키지 목록에 없는 설치 항목이 있습니다 — 확인(confirm_pkgs)이 필요합니다(빌드가 실패할 수 있음)")
             d = r["dir"]
             if tools.tool(d) or os.path.exists(os.path.join(config.BASE, d)):
                 raise ValueError(f"이미 같은 이름의 도구·폴더가 있습니다: {d}")
-            src = os.path.join(SUB_DIR, r["id"], "src", d)
-            dest = os.path.join(config.BASE, d)
+            if c.execute("SELECT 1 FROM dev_submissions WHERE status='installing'").fetchone():
+                raise ValueError("다른 제출을 설치하는 중입니다 — 끝난 뒤 다시 승인하세요")
             port = _free_port()
-            meta = chk.get("meta") or {}
-            shutil.copytree(src, dest, symlinks=False)
-            try:
-                for root, dirs, fs in os.walk(dest):
-                    os.chmod(root, 0o755)
-                    for f in fs:
-                        os.chmod(os.path.join(root, f), 0o755 if f.endswith(".sh") else 0o644)
-                if not os.path.exists(os.path.join(dest, "portal_auth.py")) and os.path.exists(SDK_AUTH):
-                    shutil.copy2(SDK_AUTH, os.path.join(dest, "portal_auth.py"))
-                row = tools.add_tool({"dir": d, "port": port, "name": meta.get("name") or d, "title": meta.get("title") or d, "desc": meta.get("desc", ""),
-                                      "group": meta.get("group") or "기타", "tags": meta.get("tags", ""), "dept": meta.get("dept", ""), "author": r["uid"]})
-            except Exception:
-                shutil.rmtree(dest, ignore_errors=True)
-                raise
-            gdir = os.path.join(config.ROOT, "guides")
-            os.makedirs(gdir, exist_ok=True)
-            gp = os.path.join(gdir, f"{d}.md")
-            if not os.path.exists(gp):
-                with open(gp, "w", encoding="utf-8") as f:
-                    f.write(meta.get("usage") or f"## {d}\n")
-            c.execute("UPDATE dev_submissions SET status='approved', note=?, decided_by=?, decided_ts=?, updated=?, port=? WHERE id=?",
-                      (note, ctx.uid, now(), now(), port, r["id"]))
-            accounts.audit(c, ctx.uid, "dev_approve", d, f"#{r['id']} 포트 {port}")
-            accounts.audit(c, ctx.uid, "tool_add", d, "개발자 제출 승인")
-        t = tools.tool(d)
-        tools.start(t, jobs.tool_env(t))
-        tools.alive_reset()
+            c.execute("UPDATE dev_submissions SET status='installing', note=?, decided_by=?, decided_ts=?, updated=?, port=?, install=? WHERE id=? AND status='review'",
+                      (note, ctx.uid, now(), now(), port, json.dumps({"status": "running", "steps": []}), r["id"]))
+            accounts.audit(c, ctx.uid, "dev_approve", d, f"#{r['id']} 포트 {port} — 격리 설치 시작")
+    threading.Thread(target=_install, args=(r["id"], ctx.uid, r["agent_user"], d, port, chk.get("meta") or {}, r["uid"]),
+                     daemon=True, name=f"devinstall-{r['id']}").start()
+    return {"ok": True, "status": "installing", "port": port}
+
+
+def _install(sid, actor, agent_user, d, port, meta, author):
+    """승인 설치(뒤에서): 이미지 빌드 → 컨테이너 기동 → /healthz → tools.json 등록 → 사용법. 실패하면 거꾸로 되돌리고 review 로"""
+    steps, made = [], {}
+    t = {"dir": d, "port": port, "runtime": "container", "image": ""}
+
+    def step(name, ok, detail=""):
+        steps.append({"name": name, "ok": bool(ok), "detail": str(detail)[-1500:]})
+        with db() as c:   # 화면이 진행을 보게 단계마다 적음
+            c.execute("UPDATE dev_submissions SET install=?, updated=? WHERE id=? AND status='installing'",
+                      (json.dumps({"status": "running", "steps": steps}, ensure_ascii=False), now(), sid))
+
+    def audit(action, detail=""):
         with db() as c:
-            accounts.audit(c, ctx.uid, "tool_start", d)
-        _notify(r["agent_user"], r["id"], "done", f"제출 {d}: 승인 — 포털에 등록됨", f"포털 카드로 등록되어 시작했습니다(포트 {port})")
-        return {"ok": True, "status": "approved", "tool": row}
+            accounts.audit(c, actor, action, d, f"#{sid} {detail}".strip())
+
+    work = os.path.join(SUB_DIR, sid, "build")
+    try:
+        shutil.rmtree(work, ignore_errors=True)
+        os.makedirs(work, mode=0o700)
+        image, _ = devtool.build(d, os.path.join(SUB_DIR, sid, "src", d), work, "s-" + re.sub(r"[^a-z0-9]", "", sid.lower())[:20], config.PIP_INDEX_URL)
+        made["image"] = t["image"] = image
+        step("이미지 빌드", True, image); audit("dev_build", image)
+        devtool.start(t, {"PORTAL_TOOL_KEY": jobs.container_key(d)} if config.TOOL_AUTH else {})
+        made["container"] = True
+        step("컨테이너 시작", True, f"{devtool.container_name(d)} · {devtool.ip_for(t)}:{port}"); audit("tool_start", "격리 컨테이너")
+        ok, detail = devtool.wait_health(t, HEALTH_WAIT)
+        if not ok:
+            raise RuntimeError(f"/healthz 확인 실패 — {detail}\n{devtool.logs(d)}")
+        step("/healthz", True, detail)
+        tools.add_tool({"dir": d, "port": port, "name": meta.get("name") or d, "title": meta.get("title") or d, "desc": meta.get("desc", ""),
+                        "group": meta.get("group") or "기타", "tags": meta.get("tags", ""), "dept": meta.get("dept", ""), "author": author,
+                        "runtime": "container", "image": image})
+        made["tool"] = True
+        step("포털 등록", True, "tools.json runtime=container"); audit("tool_add", "개발자 제출 승인(격리 컨테이너)")
+        gp = os.path.join(config.ROOT, "guides", f"{d}.md")
+        os.makedirs(os.path.dirname(gp), exist_ok=True)
+        if not os.path.exists(gp):
+            with open(gp, "w", encoding="utf-8") as f:
+                f.write(meta.get("usage") or f"## {d}\n")
+            made["guide"] = True
+        step("사용법", True, f"guides/{d}.md" + ("" if made.get("guide") else " (이미 있음 — 그대로)"))
+        with db() as c:
+            c.execute("UPDATE dev_submissions SET status='approved', install=?, updated=? WHERE id=? AND status='installing'",
+                      (json.dumps({"status": "done", "steps": steps, "image": image, "guide_created": bool(made.get("guide"))}, ensure_ascii=False), now(), sid))
+        audit("dev_install_ok", image)
+        tools.alive_reset(); tools.stats_reset()
+        _notify(agent_user, sid, "done", f"제출 {d}: 승인 — 포털에 등록됨", "격리 컨테이너로 시작했습니다")
+        _notify("owner", sid, "done", f"개발자 제출 설치 완료: {d}", f"격리 컨테이너 {devtool.container_name(d)}")
+    except Exception as e:
+        reason = str(e).split("\n")[0][:300] if isinstance(e, (RuntimeError, ValueError, OSError)) else f"서버 오류({type(e).__name__})"
+        log = str(e)[-4000:] if isinstance(e, RuntimeError) else ""
+        print("devsubmit: 설치 실패", sid, d, type(e).__name__, reason, flush=True)
+        undo = _rollback(d, t, made)
+        steps.append({"name": "되돌리기", "ok": True, "detail": ", ".join(undo) or "남은 것 없음"})
+        with db() as c:
+            c.execute("UPDATE dev_submissions SET status='review', port=NULL, install=?, updated=? WHERE id=? AND status='installing'",
+                      (json.dumps({"status": "failed", "reason": reason, "steps": steps, "log": log}, ensure_ascii=False), now(), sid))
+        audit("dev_install_fail", reason[:200])
+        _notify("owner", sid, "failed", f"개발자 제출 설치 실패: {d}", reason)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def _rollback(d, t, made):
+    """설치 중 만든 것만 거꾸로 지움 → 지운 것 이름 목록"""
+    out = []
+    for name, fn in (("guide", lambda: os.remove(os.path.join(config.ROOT, "guides", f"{d}.md"))), ("tool", lambda: tools.remove_tool(d)),
+                     ("container", lambda: devtool.stop(t)), ("image", lambda: devtool.remove_image(d, t.get("image")))):
+        if made.get(name):
+            try:
+                fn(); out.append({"guide": "사용법", "tool": "tools.json 줄", "container": "컨테이너", "image": "이미지"}[name])
+            except Exception as e:
+                print("devsubmit: 되돌리기 실패", d, name, type(e).__name__, flush=True)
+    tools.alive_reset()
+    return out
+
+
+def revoke(ctx, req):
+    """POST /api/admin/dev/revoke {id, note} — 관리자만. 승인된 제출을 등록 해제: 컨테이너·이미지·tools.json 줄·승인 때 만든 사용법 지움(데이터는 남김)"""
+    if not ctx.is_owner:
+        raise PermissionError("관리자만 할 수 있습니다")
+    note = str(req.get("note") or "").strip()[:300]
+    if not note:
+        raise ValueError("회수 사유를 적어 주세요")
+    with _INSTALL_LOCK:
+        with db() as c:
+            r = _get(c, ctx, req.get("id"), admin_only=True)
+        if r["status"] != "approved":
+            raise ValueError("승인된 제출만 회수할 수 있습니다")
+        d, inst = r["dir"], json.loads(r["install"] or "{}")
+        t = tools.tool(d)
+        if t and not tools.is_container(t):
+            raise ValueError("격리 컨테이너 도구가 아닙니다 — 관리자가 직접 정리하세요")
+        t = t or {"dir": d, "port": r["port"] or 0}
+        image = t.get("image") or inst.get("image")
+        devtool.stop(t)
+        tools.remove_tool(d)
+        devtool.remove_image(d, image)
+        gp = os.path.join(config.ROOT, "guides", f"{d}.md")
+        if inst.get("guide_created") and os.path.exists(gp):
+            os.remove(gp)
+        tools.alive_reset(); tools.stats_reset()
+        with db() as c:
+            c.execute("UPDATE dev_submissions SET status='revoked', note=?, updated=?, port=NULL WHERE id=?", (note, now(), r["id"]))
+            accounts.audit(c, ctx.uid, "dev_revoke", d, f"#{r['id']} {note}")
+            accounts.audit(c, ctx.uid, "tool_remove", d, "개발자 제출 회수(컨테이너·이미지 정리, 데이터는 남김)")
+    _notify(r["agent_user"], r["id"], "canceled", f"제출 {d}: 회수됨", note)
+    return {"ok": True, "status": "revoked"}
+
+
+# ── 개발자 신청 ──────────────────────────────────────────────────────────
+APPLY_AGAIN_S = 86400   # 보류된 뒤 다시 신청할 수 있기까지
+
+
+def apply(ctx, req):
+    """POST /api/dev/apply {reason} — 로그인한 일반 계정. 관리자 알림함에 올림"""
+    if not ctx.uid or ctx.uid == "owner":
+        raise PermissionError("로그인한 계정만 신청할 수 있습니다")
+    reason = str(req.get("reason") or "").strip()[:300]
+    if len(reason) < 5:
+        raise ValueError("만들 도구나 하려는 일을 짧게 적어 주세요(5자 이상)")
+    with db() as c:
+        if is_developer(c, ctx.uid):
+            raise ValueError("이미 개발자 권한이 있습니다")
+        cur = c.execute("SELECT status, decided_ts FROM dev_applications WHERE uid=?", (ctx.uid,)).fetchone()
+        if cur and cur["status"] == "pending":
+            raise ValueError("이미 신청했습니다 — 관리자 확인을 기다려 주세요")
+        if cur and cur["status"] == "dismissed" and cur["decided_ts"] and cur["decided_ts"] > (timeutil.utcnow() - datetime.timedelta(seconds=APPLY_AGAIN_S)).isoformat(timespec="seconds"):
+            raise ValueError("보류된 신청은 하루 뒤 다시 할 수 있습니다")
+        c.execute("INSERT INTO dev_applications(uid, reason, ts, status) VALUES(?,?,?, 'pending') ON CONFLICT(uid) DO UPDATE SET "
+                  "reason=excluded.reason, ts=excluded.ts, status='pending', decided_by=NULL, decided_ts=NULL, note=NULL", (ctx.uid, reason, now()))
+        accounts.audit(c, ctx.uid, "dev_apply", ctx.uid, reason[:200])
+    _notify("owner", "apply-" + ctx.uid, "done", f"개발자 신청: {ctx.uid}", reason, link="/create?tab=make&m=dev&apps=1")
+    return {"ok": True, "application": {"status": "pending", "reason": reason}}
+
+
+def my_application(ctx):
+    with db() as c:
+        r = c.execute("SELECT status, reason, ts, note FROM dev_applications WHERE uid=?", (ctx.uid,)).fetchone()
+        return {"developer": is_developer(c, ctx.uid), "application": dict(r) if r else None}
+
+
+def applications(c):
+    """관리자: 기다리는 신청 먼저, 최근 처리 50개"""
+    rows = c.execute("SELECT a.*, u.name, u.dept FROM dev_applications a LEFT JOIN users u ON u.id=a.uid "
+                     "ORDER BY a.status<>'pending', a.ts DESC LIMIT 100").fetchall()
+    return [{k: r[k] for k in ("uid", "name", "dept", "reason", "ts", "status", "decided_by", "decided_ts", "note")} for r in rows]
+
+
+def decide_application(ctx, req):
+    """POST /api/admin/dev/applications {uid, op: grant|dismiss, note} — 관리자만"""
+    if not ctx.is_owner:
+        raise PermissionError("관리자만 할 수 있습니다")
+    uid, op, note = str(req.get("uid") or ""), req.get("op"), str(req.get("note") or "").strip()[:300]
+    if op not in ("grant", "dismiss"):
+        raise ValueError("op 는 grant|dismiss")
+    with db() as c:
+        if not c.execute("SELECT 1 FROM dev_applications WHERE uid=? AND status='pending'", (uid,)).fetchone():
+            raise ValueError("기다리는 신청이 없습니다")
+        if op == "grant":
+            set_developer(c, ctx.uid, uid, True)   # 신청도 granted 로 바뀜 + 감사 developer_grant
+        else:
+            c.execute("UPDATE dev_applications SET status='dismissed', decided_by=?, decided_ts=?, note=? WHERE uid=?", (ctx.uid, now(), note, uid))
+            accounts.audit(c, ctx.uid, "dev_apply_dismiss", uid, note)
+    if op == "grant":
+        _notify(uid, "apply-" + uid, "done", "개발자 권한을 받았습니다", "모두의 에이전트 → 만들기 → 개발자 업로드에서 도구 폴더를 올릴 수 있습니다", link="/create?tab=make&m=dev")
+    else:
+        _notify(uid, "apply-" + uid, "canceled", "개발자 신청이 보류되었습니다", note or "관리자에게 문의하세요", link="/create?tab=make&m=dev")
+    return {"ok": True}
+
+
+# ── 샘플·형식 안내 ───────────────────────────────────────────────────────
+def sample_zip():
+    """hello-local 샘플 zip(sdk/samples/hello-local + 포털 sdk portal_auth.py + FORMAT.md) — 그대로 올려도 검사를 통과함"""
+    b = io.BytesIO()
+    with zipfile.ZipFile(b, "w", zipfile.ZIP_DEFLATED) as z:
+        for root, dirs, fs in os.walk(SAMPLE_DIR):
+            dirs[:] = sorted(x for x in dirs if x not in ("__pycache__", "_workspace"))
+            for f in sorted(fs):
+                if f.endswith(".pyc"):
+                    continue
+                p = os.path.join(root, f)
+                z.write(p, "hello-local/" + os.path.relpath(p, SAMPLE_DIR))
+        for src, name in ((SDK_AUTH, "portal_auth.py"), (FORMAT_DOC, "FORMAT.md")):
+            if os.path.exists(src):
+                z.write(src, "hello-local/" + name)
+    return b.getvalue()
 
 
 # ── 라우팅(app.py 가 부름) ───────────────────────────────────────────────
 def handle_get(ctx):
     p = ctx.p
     try:
+        if p == "/api/dev/apply":   # 내 개발자 신청 상태(로그인)
+            return ctx.send(my_application(ctx))
+        if p == "/api/dev/sample.zip":   # 샘플 도구 zip(로그인) — 누구나 받아 형식을 볼 수 있게
+            return ctx.send(sample_zip(), "application/zip", headers=[("Content-Disposition", 'attachment; filename="hello-local.zip"'), ("Cache-Control", "no-store")])
+        if p == "/api/dev/format":   # 형식 안내(마크다운)
+            with open(FORMAT_DOC, encoding="utf-8") as f:
+                return ctx.send({"markdown": f.read()})
         with db() as c:
+            if p == "/api/admin/dev/applications":
+                if not ctx.is_owner:
+                    raise PermissionError("관리자만 볼 수 있습니다")
+                return ctx.send({"applications": applications(c)})
             dev = is_developer(c, ctx.uid)
             if p == "/api/dev/submissions":
                 if not (dev or ctx.is_owner):
@@ -506,7 +705,7 @@ def handle_get(ctx):
                     rows = c.execute("SELECT * FROM dev_submissions WHERE uid=? ORDER BY created DESC LIMIT 100", (ctx.uid,)).fetchall()
                 return ctx.send({"submissions": [_public(r) for r in rows], "developer": dev, "admin": ctx.is_owner,
                                  "limits": {"zip_max": ZIP_MAX, "files_max": FILES_MAX, "unzip_max": UNZIP_MAX}, "image": IMAGE,
-                                 "approve": {"enabled": config.DEV_APPROVE, "reason": "" if config.DEV_APPROVE else LOCK_MSG}})
+                                 "approve": {"enabled": config.DEV_APPROVE, "reason": "" if config.DEV_APPROVE else LOCK_MSG}, "runtime": "container"})
             if p.startswith("/api/dev/submissions/"):
                 rest = p[len("/api/dev/submissions/"):]
                 sid, _, sub = rest.partition("/")
@@ -571,6 +770,12 @@ def handle_post(ctx, req):
                 return ctx.send(decide(ctx, req))
             except Locked as e:
                 return ctx.send({"error": str(e), "code": "approve_locked"}, code=409)
+        if p == "/api/admin/dev/revoke":
+            return ctx.send(revoke(ctx, req))
+        if p == "/api/admin/dev/applications":
+            return ctx.send(decide_application(ctx, req))
+        if p == "/api/dev/apply":
+            return ctx.send(apply(ctx, req))
         if p == "/api/admin/developer":
             if not ctx.is_owner:
                 raise PermissionError("관리자만 할 수 있습니다")
@@ -590,7 +795,21 @@ def handle_post(ctx, req):
 
 
 def recover():
-    """재시작 때: 검증 중으로 남은 제출은 실패로(스레드가 사라짐 — 다시 올리면 됨)"""
+    """재시작 때: 검증 중으로 남은 제출은 실패로(스레드가 사라짐 — 다시 올리면 됨). 설치 중이던 승인은 만든 것을 지우고 승인 대기로"""
     with db() as c:
         c.execute("UPDATE dev_submissions SET status='failed', sandbox=?, updated=? WHERE status IN ('checking','sandbox')",
                   (json.dumps({"status": "failed", "reason": "포털이 다시 시작되어 검증이 멈췄습니다 — 다시 올려 주세요", "steps": []}, ensure_ascii=False), now()))
+        stuck = c.execute("SELECT id, dir, port, install FROM dev_submissions WHERE status='installing'").fetchall()
+    for r in stuck:
+        d = r["dir"]
+        inst = json.loads(r["install"] or "{}")
+        made = {"tool": bool(tools.tool(d)) and tools.is_container(tools.tool(d)), "container": True,
+                "image": any(s.get("name") == "이미지 빌드" for s in inst.get("steps") or [])}
+        img = next((s["detail"] for s in inst.get("steps") or [] if s.get("name") == "이미지 빌드"), "")
+        try:
+            _rollback(d, {"dir": d, "port": r["port"] or 0, "image": img}, made)
+        except Exception as e:
+            print("devsubmit: 설치 되돌리기 실패", d, type(e).__name__, flush=True)
+        with db() as c:
+            c.execute("UPDATE dev_submissions SET status='review', port=NULL, install=?, updated=? WHERE id=? AND status='installing'",
+                      (json.dumps({"status": "failed", "reason": "포털이 다시 시작되어 설치가 멈췄습니다 — 다시 승인하세요", "steps": inst.get("steps") or []}, ensure_ascii=False), now(), r["id"]))

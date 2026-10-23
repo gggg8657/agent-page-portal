@@ -59,11 +59,22 @@ def token_for(tool_dir):
 TOOL_KEY = hmac.new(SECRET, b"portal-proxy", hashlib.sha256).hexdigest()
 
 
+def key_for(tool_dir):
+    """그 도구로 가는 서명의 키. 격리 컨테이너 도구(개발자 업로드 승인, tools.json runtime=container)는 도구 전용 키 —
+    올라온 코드가 키를 읽어도 다른 도구 앞 서명(관리자 역할 포함)을 만들 수 없게. 나머지 도구는 공용 TOOL_KEY(서로 부르므로)"""
+    return container_key(tool_dir) if tools.is_container(tools.tool(tool_dir) or {}) else TOOL_KEY
+
+
+def container_key(tool_dir):
+    """격리 컨테이너 도구 전용 서명 키(값은 출력하지 않음 — 컨테이너 env-file 로만)"""
+    return hmac.new(SECRET, ("portal-proxy-tool:" + tool_dir).encode(), hashlib.sha256).hexdigest()
+
+
 def sign(user, tool_dir, now=None):
     """도구로 가는 요청에 붙일 X-Agent-Auth 값: v2.<초>.HMAC(TOOL_KEY, "v2|<초>|<받는 도구 dir>|<user>") — portal_auth.verify 와 같은 규칙.
     받는 도구 이름이 들어가므로 한 도구 로그에 남은 서명을 다른 도구에 다시 쓸 수 없음"""
     ts = str(int(now if now is not None else time.time()))
-    return f"v2.{ts}." + hmac.new(TOOL_KEY.encode(), f"v2|{ts}|{tool_dir}|{user}".encode(), hashlib.sha256).hexdigest()
+    return f"v2.{ts}." + hmac.new(key_for(tool_dir).encode(), f"v2|{ts}|{tool_dir}|{user}".encode(), hashlib.sha256).hexdigest()
 
 
 def sign_role(user, tool_dir, role, now=None):
@@ -72,7 +83,7 @@ def sign_role(user, tool_dir, role, now=None):
     if not (role and config.TOOL_AUTH):
         return {}
     ts = str(int(now if now is not None else time.time()))
-    return {"X-Agent-Role": role, "X-Agent-Role-Auth": f"r2.{ts}." + hmac.new(TOOL_KEY.encode(), f"r2|{ts}|{tool_dir}|{user}|{role}".encode(), hashlib.sha256).hexdigest()}
+    return {"X-Agent-Role": role, "X-Agent-Role-Auth": f"r2.{ts}." + hmac.new(key_for(tool_dir).encode(), f"r2|{ts}|{tool_dir}|{user}|{role}".encode(), hashlib.sha256).hexdigest()}
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -94,7 +105,7 @@ def tool_env(t, port=None):
     url = os.environ.get("PORTAL_JOBS_URL") or f"http://127.0.0.1:{port or os.environ.get('PORT', '8720')}/api/internal/jobs"
     env = {"PORTAL_JOBS_URL": url, "PORTAL_JOBS_TOKEN": token_for(t["dir"]), "PORTAL_JOBS_TOOL": t["dir"]}
     if config.TOOL_AUTH:
-        env["PORTAL_TOOL_KEY"] = TOOL_KEY
+        env["PORTAL_TOOL_KEY"] = key_for(t["dir"])   # 컨테이너 도구는 도구 전용 키(devtool.start 는 이것만 넘김)
     return env
 
 

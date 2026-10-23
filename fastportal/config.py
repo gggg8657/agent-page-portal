@@ -97,8 +97,9 @@ TOOL_BIND = os.environ.get("TOOL_BIND") or "127.0.0.1"   # 도구가 열 주소(
 ALIVE_TTL = float(os.environ.get("TOOLS_ALIVE_TTL", "5"))  # 도구 켜짐 확인 캐시(초)
 
 # ── 개발자 업로드 승인(devsubmit.py) ───────────────────────────────────
-# 임시 잠금(2026-10-19 사용자 결정): 승인된 업로드 도구의 실행 격리(컨테이너·별도 OS 사용자)가 끝날 때까지 관리자 승인을 막는다.
-# 0(기본) = 잠금 — /api/admin/dev/decide 의 승인(ok=true)은 409. 거절·업로드·형식 검사·격리 검증은 그대로. 1 = 승인 허용
+# 잠금(2026-10-19 사용자 결정): 승인된 업로드 도구가 포털 계정으로 호스트에서 돌지 않게 막아 둠. 실행 격리(devtool.py — 승인 도구는
+# 격리 컨테이너 dongjukim-tool-<dir>)는 2026-10-23 에 붙음 — 운영에서 풀지는 사용자가 정함(start-portal.sh 에 PORTAL_DEV_APPROVE=1).
+# 0(기본) = 잠금 — /api/admin/dev/decide 의 승인(ok=true)은 409. 거절·회수·업로드·형식 검사·격리 검증은 그대로. 1 = 승인 허용
 DEV_APPROVE = os.environ.get("PORTAL_DEV_APPROVE", "0") == "1"
 
 # 폐쇄망 내부 PyPI 주소(pkgindex.py) — 있을 때만 화면에 'pip install --index-url <주소> 이름' 안내. 기본 빈 값(주소는 코드·문서에 쓰지 않음)

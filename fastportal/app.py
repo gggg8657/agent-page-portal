@@ -30,7 +30,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from starlette.concurrency import run_in_threadpool
 
-from . import accounts, admintools, analytics, ask, auth, community, config, db, relay, devsubmit, dwell, flows, board_files, modfilter, idea, jobs, lists, match, org, pages, pkgindex, posts, probe, proxy, sessions, tools, toolstate, workspace
+from . import accounts, admintools, analytics, ask, auth, community, config, db, relay, devsubmit, devtool, dwell, flows, board_files, modfilter, idea, jobs, lists, match, org, pages, pkgindex, posts, probe, proxy, sessions, tools, toolstate, workspace
 from .config import OWNERS, TLS
 from .ctx import Ctx, TooBig, drain, length, not_implemented, parse_json, read_body, too_big
 
@@ -86,6 +86,7 @@ async def lifespan(_app):
     anyio.to_thread.current_default_thread_limiter().total_tokens = THREADS
     proxy.open_client()
     match.warm()   # 할 일 검색 — 할 일 벡터를 뒤에서 준비(_data/match/ 캐시가 있으면 바로)
+    tunnels = asyncio.get_running_loop().create_task(devtool.tunnel_loop())   # 격리 컨테이너 도구의 LLM·임베딩 역방향 연결(devtool.py)
     if config.BACKUP:
         threading.Thread(target=db.backup_loop, daemon=True).start()
     if config.ANON_AUTO:   # 비활성 계정 익명화 정리 — 기본 꺼짐(PORTAL_ANON_AUTO=1 로 켬, 기한 PORTAL_ANON_AFTER_DAYS)
@@ -93,6 +94,7 @@ async def lifespan(_app):
     print(f"fastportal → {'https' if TLS else 'http'} data={config.DATA} owners={sorted(OWNERS)} max_body={config.MAX_BODY} auth={_AB.name} backup={os.environ.get('BACKUP', '0')} "
           f"threads={THREADS}/{SLOW_THREADS} session_cache={sessions.CACHE_S}s tools_cache={tools.STATS_TTL}s  {pages._SIG}", flush=True)
     yield
+    tunnels.cancel()
     await proxy.close_client()
 
 
@@ -165,7 +167,7 @@ def get_sync(ctx):
         return community.handle_get(ctx)
     if p in ("/api/pkg-index", "/api/pkg-index/check"):   # 폐쇄망 pip 패키지 찾기·확인(로그인)
         return devsubmit.pkg_get(ctx)
-    if p == "/api/dev/submissions" or p.startswith("/api/dev/submissions/"):   # 개발자 제출(개발자는 자기 것, 관리자는 전부)
+    if p in devsubmit.GET_PATHS or p.startswith("/api/dev/submissions/"):   # 개발자 제출(개발자는 자기 것, 관리자는 전부)·개발자 신청·샘플 zip
         return devsubmit.handle_get(ctx)
     if p in ("/account", "/approvals", "/admin"):
         return pages.account_page(ctx, p)
@@ -354,7 +356,11 @@ def tool_action(ctx, c, path, req):
             return ctx.send({"error": "이미 실행 중입니다"}, code=409)
         if not tools.claim_start(t) and not ctx.is_owner:   # 켜지는 중에 또 누르면 여러 벌이 뜸(관리자는 바로 다시 띄울 수 있음)
             return ctx.send({"error": "켜는 중입니다 — 잠시 뒤 다시 확인하세요", "code": "starting"}, code=409)
-        tools.start(t, jobs.tool_env(t)); tools.alive_reset()   # 켜짐 캐시 비움 — 다음 /api/tools 가 바로 다시 확인
+        try:
+            tools.start(t, jobs.tool_env(t)); tools.alive_reset()   # 켜짐 캐시 비움 — 다음 /api/tools 가 바로 다시 확인
+        except RuntimeError as e:   # 격리 컨테이너 도구 — 이미지·망이 없음 등(호스트 도구는 여기 안 옴)
+            print("tool_start 실패:", t["dir"], e, flush=True)
+            return ctx.send({"error": f"{t['dir']} 을(를) 시작하지 못했습니다 — 관리자에게 알려 주세요", "code": "start_failed"}, code=502)
         accounts.audit(c, ctx.uid, "tool_start", t["dir"])
     elif path == "/api/stop":
         if not ctx.is_owner:
@@ -396,7 +402,7 @@ def post_sync(ctx, body):
                 return flows.handle_post(ctx, req)
             if ctx.p.startswith("/api/community/"):
                 return community.handle_post(ctx, req)
-            if ctx.p in ("/api/admin/dev/decide", "/api/admin/developer"):
+            if ctx.p in devsubmit.POST_PATHS:
                 return devsubmit.handle_post(ctx, req)
             if path.startswith(("/api/account/", "/api/approvals/", "/api/admin/")):
                 return accounts.manage_post(ctx, c, path, req)
