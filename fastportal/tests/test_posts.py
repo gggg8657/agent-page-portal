@@ -1,6 +1,6 @@
 """커뮤니티 글(posts.py) — 초안→그림→저장, 분류·공지 권한, 태그(볼 수 있는 것만), 남의 글 고치기·그림 올리기 403, 초안·숨긴 글·그림 보기 권한,
 그림 종류(앞 바이트)·SVG 거절·크기·장 수·메타데이터 걷기, 신고 한 번·알림, 지우기(그림 폴더까지), 광장 목록에서 초안·숨김 빠짐, 예전 글."""
-import json, os, struct, tempfile, unittest, zlib
+import io, json, os, struct, tempfile, unittest, zlib
 from types import SimpleNamespace as NS
 from unittest.mock import patch
 
@@ -39,6 +39,10 @@ def seg(m, d):
 
 JPG = (b"\xff\xd8" + seg(0xE0, b"JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00") + seg(0xE1, b"Exif\x00\x00GPS-SECRET-12") + seg(0xFE, b"hello!")
        + seg(0xDA, b"\x01\x01\x00\x00?\x00") + b"\x12\x34\xff\xd9")
+
+
+def gif():   # 1×1 GIF
+    return bytes.fromhex("47494638396101000100800000000000ffffff21f90401000000002c00000000010001000002024401003b")
 
 
 def webp_with_exif():
@@ -160,7 +164,7 @@ class PostsTest(unittest.TestCase):
                 self.up("alice", pid, bad)
         with self.assertRaises(ValueError):   # PNG 머리만 있고 손상
             self.up("alice", pid, b"\x89PNG\r\n\x1a\n" + b"\x00" * 30)
-        self.assertEqual(self.up("alice", pid, b"GIF89a" + b"\x00" * 20)["type"], "image/gif")
+        self.assertEqual(self.up("alice", pid, gif())["type"], "image/gif")
         for _ in range(posts.IMG_N - 1):
             self.up("alice", pid, png())
         with self.assertRaises(ValueError):
@@ -174,7 +178,8 @@ class PostsTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.up("alice", pid, png())
 
-    def test_metadata_stripped(self):
+    def test_metadata_stripped_without_pillow(self):   # Pillow 가 없을 때 — 바이트에서만 걷는 길
+        self.patch_no_pillow()
         p = posts.clean_image(png(png_chunk(b"tEXt", b"Comment\x00secret") + png_chunk(b"eXIf", b"GPSDATA")))[1]
         self.assertNotIn(b"secret", p); self.assertNotIn(b"GPSDATA", p); self.assertTrue(p.endswith(b"IEND\xaeB`\x82"))
         ext, j = posts.clean_image(JPG)
@@ -184,6 +189,48 @@ class PostsTest(unittest.TestCase):
         self.assertEqual(ext, "webp"); self.assertNotIn(b"GPS!!!", w)
         self.assertEqual(struct.unpack("<I", w[4:8])[0], len(w) - 8)
         self.assertEqual(w[20] & 0x0C, 0)   # VP8X 의 EXIF·XMP 표시 꺼짐
+
+    def patch_no_pillow(self):
+        x = patch.object(posts, "Image", None); x.start(); self.p.append(x)
+
+    @unittest.skipUnless(posts.Image, "Pillow 없음")
+    def test_pillow_oriented_jpeg_upright_and_gps_removed(self):
+        from PIL import Image
+        im = Image.new("RGB", (40, 20), (255, 0, 0))
+        im.paste((0, 0, 255), (20, 0, 40, 20))   # 왼쪽 빨강·오른쪽 파랑
+        ex = Image.Exif()
+        ex[0x0112] = 6   # Orientation: 시계 방향 90° 돌려 봐야 함
+        ex[0x010F] = "PhoneMaker"
+        ex.get_ifd(0x8825)[2] = (36.0, 25.0, 12.0)   # GPS 위도
+        buf = io.BytesIO(); im.save(buf, "JPEG", exif=ex.tobytes(), quality=95)
+        self.assertIn(b"PhoneMaker", buf.getvalue())
+        ext, out = posts.clean_image(buf.getvalue())
+        self.assertEqual(ext, "jpg")
+        r = Image.open(io.BytesIO(out))
+        self.assertEqual(r.size, (20, 40))   # 돌려서 바로 섬
+        self.assertEqual(dict(r.getexif()), {})
+        self.assertNotIn(b"Exif\x00\x00", out); self.assertNotIn(b"PhoneMaker", out)
+        top = r.convert("RGB").getpixel((10, 5)); bottom = r.convert("RGB").getpixel((10, 35))
+        self.assertGreater(top[0], 200); self.assertGreater(bottom[2], 200)   # 6 = 시계 방향 → 왼쪽(빨강)이 위로
+
+    @unittest.skipUnless(posts.Image, "Pillow 없음")
+    def test_pillow_png_webp_size_cap_gif_animation(self):
+        from PIL import Image
+        ext, out = posts.clean_image(png(png_chunk(b"tEXt", b"Comment\x00secret") + png_chunk(b"eXIf", b"GPSDATA")))
+        self.assertNotIn(b"secret", out); self.assertNotIn(b"GPSDATA", out)
+        big = io.BytesIO(); Image.new("RGB", (5000, 300), (1, 2, 3)).save(big, "PNG")
+        self.assertEqual(max(Image.open(io.BytesIO(posts.clean_image(big.getvalue())[1])).size), posts.MAX_SIDE)
+        ex = Image.Exif(); ex.get_ifd(0x8825)[2] = (1.0, 2.0, 3.0); ex[0x010F] = "WebpCam"
+        w = io.BytesIO(); Image.new("RGB", (8, 8)).save(w, "WEBP", exif=ex.tobytes())
+        self.assertIn(b"WebpCam", w.getvalue())
+        ext, out = posts.clean_image(w.getvalue())
+        self.assertEqual(ext, "webp"); self.assertNotIn(b"WebpCam", out); self.assertNotIn(b"EXIF", out)
+        g = io.BytesIO(); fr = [Image.new("RGB", (6, 6), c) for c in ((255, 0, 0), (0, 255, 0), (0, 0, 255))]
+        fr[0].save(g, "GIF", save_all=True, append_images=fr[1:], duration=100, loop=0)
+        ext, out = posts.clean_image(g.getvalue())
+        self.assertEqual((ext, Image.open(io.BytesIO(out)).n_frames), ("gif", 3))   # 움직임 그대로
+        with self.assertRaises(ValueError):
+            posts.clean_image(JPG)   # 머리만 그럴듯한 손상 JPEG
 
     def test_image_view_permissions_and_headers(self):
         pid = posts.draft(ctx("alice"), {})["id"]

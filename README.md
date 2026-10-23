@@ -197,6 +197,8 @@ python3 -m venv ~/.local/fastportal-venv
 # 폐쇄망: 인터넷 되는 PC(같은 OS·파이썬 3.13·x86_64)에서 wheel 을 받아 옮긴 뒤 --no-index 로
 pip download -r fastportal/requirements.txt -d fastportal-wheels --only-binary=:all: --python-version 3.13 --platform manylinux2014_x86_64
 ~/.local/fastportal-venv/bin/pip install --no-index --find-links fastportal-wheels -r fastportal/requirements.txt
+# pillow(커뮤니티 글 그림: EXIF 회전 적용·메타데이터 제거·다시 저장)도 이 목록에 있음 — 폐쇄망 PyPI 목록(_data/pkg-index/closed-pypi-2026-10-19.txt)에 있음.
+#   없으면 포털은 그대로 뜨고 그림은 바이트에서 메타데이터만 걷음(JPEG 회전 정보도 빠짐)
 
 bash agent-page-portal/scripts/start-fastportal.sh        # 시험용 :8720 시작(이미 떠 있으면 pid 파일의 그 프로세스만 끄고 다시) · 로그 fastportal-8720.log
 bash agent-page-portal/scripts/start-fastportal.sh stop
@@ -282,7 +284,7 @@ React 랜딩이 읽는 `GET /web/landing.json`·`/app/web/landing.json`(분류·
 
 ## 출처·감사 (Credits)
 
-- 예전 포털 서버(`portal.py`)는 파이썬 표준 라이브러리만, 운영 중인 FastAPI 판(`fastportal/`)은 `fastportal/requirements.txt` 의 패키지(FastAPI·uvicorn·httpx 등, MIT·BSD·Apache-2.0 계열, certifi 만 MPL-2.0)를 씁니다. 제3자 구성요소 전체 목록·라이선스·상업 이용 여부는 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) 에 있습니다. 연결된 각 도구의 출처는 각 저장소의 `THIRD_PARTY_NOTICES.md`·README 'Credits' 를 보세요.
+- 예전 포털 서버(`portal.py`)는 파이썬 표준 라이브러리만, 운영 중인 FastAPI 판(`fastportal/`)은 `fastportal/requirements.txt` 의 패키지(FastAPI·uvicorn·httpx·Pillow 등, MIT·BSD·Apache-2.0 계열, certifi 만 MPL-2.0)를 씁니다. 제3자 구성요소 전체 목록·라이선스·상업 이용 여부는 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) 에 있습니다. 연결된 각 도구의 출처는 각 저장소의 `THIRD_PARTY_NOTICES.md`·README 'Credits' 를 보세요.
 - 기본 LLM: [vLLM](https://github.com/vllm-project/vllm) (Apache-2.0) + Google [Gemma](https://ai.google.dev/gemma) `gemma4:31b` (Apache-2.0), 임베딩은 [Ollama](https://github.com/ollama/ollama) (MIT) + bge-m3 — 포털은 환경변수로 넘겨 줄 뿐 동봉하지 않습니다.
 - 사용 설명서(`/guide`): 글꼴 [Noto Sans KR](https://fonts.google.com/noto/specimen/Noto+Sans+KR) (SIL OFL 1.1, Google Fonts), 캡처·PDF 생성에 [Playwright](https://github.com/microsoft/playwright) (Apache-2.0)·[Pillow](https://github.com/python-pillow/Pillow) (MIT-CMU).
 - 상업 이용 확인이 필요한 항목(캐릭터 파동이 그림, 생성 얼굴, 연결 도구의 비상업 요소)은 [#1](https://github.com/gggg8657/agent-page-portal/issues/1) 에 모았습니다.

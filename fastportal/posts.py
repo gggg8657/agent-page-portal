@@ -3,14 +3,21 @@
   글은 예전 posts 표를 그대로 씀(광장 공지·사례 칸, /api/tools posts 가 같은 행을 읽음). 예전 글(uid 없음·fmt 없음)은 글자 그대로 보이고 고칠 수 없음(관리자 숨김·삭제만).
   흐름: POST draft → 빈 초안(draft=1, 나만 봄) id → 그림 올리기(POST /api/community/image?post=<id>, 본문 = 그림 바이트) → save(제목·본문·분류·태그, draft=0).
   그림: png·jpeg·webp·gif 만(앞 바이트로 판정 — SVG·HTML 은 거절), 한 장 IMG_MAX(5MB)·글 하나 IMG_N(10)장, 메타데이터(EXIF·XMP·글 조각) 걷어 냄
-        (포털 venv 에 Pillow 가 없어 다시 인코딩하지 않고 바이트에서 그 조각만 뺌 — JPEG 회전 정보도 같이 빠짐). _data/community/<글 id>/<16진>.<확장자>.
+        Pillow 가 있으면 풀어서 EXIF 회전을 적용(휴대폰 사진이 바로 서게)하고 긴 변 MAX_SIDE(4096) 로 줄여 같은 형식으로 다시 저장(메타데이터 없이, 색 프로필만 둠).
+        움직이는 GIF·WebP·PNG 는 다시 저장하지 않고 바이트에서 메타데이터 조각만 뺌. Pillow 가 없으면 모두 바이트에서만 뺌(그때는 JPEG 회전 정보도 같이 빠짐).
+        저장: _data/community/<글 id>/<16진>.<확장자>.
         보기: GET /api/community/img/<글 id>/<이름> — 로그인한 계정만, 초안은 쓴 사람만, 숨긴 글은 쓴 사람·관리자만. image/* + nosniff + inline.
   태그(agents): "tool:<dir>"·"agent:<빌더 id>" 최대 AGENTS_MAX 개 — 쓸 때 쓴 사람이 볼 수 있는지 community.target 으로 확인. 읽을 때는 id 만 주고 이름은 화면이
         자기 도구·에이전트 목록에서 찾음(못 찾으면 안 보임 — 볼 수 없는 에이전트 이름이 새지 않음).
   권한: 고치기는 쓴 사람만, 지우기는 쓴 사람·관리자, 숨기기는 관리자, 신고는 남의 글에 한 번(관리자 알림함). 공지 분류는 관리자만.
 API: GET /api/community/posts?cat=&q=&agent=&sort=new|hot&limit=&offset= · /api/community/post?id= · /api/community/recent · /api/community/img/<id>/<이름>
      POST /api/community/post/draft · /post/save · /post/delete · /post/hide(관리자) · /post/report · /api/community/image?post=<id>(본문 = 그림)"""
-import json, os, re, secrets, shutil, struct, threading, time, urllib.parse
+import io, json, os, re, secrets, shutil, struct, threading, time, urllib.parse
+
+try:
+    from PIL import Image, ImageOps
+except ImportError:   # Pillow 없음 — 바이트에서 메타데이터만 걷는 길로
+    Image = ImageOps = None
 
 from . import accounts, community, config, jobs, tools, toolstate
 from .db import db, now
@@ -20,6 +27,7 @@ ADMIN_CATS = {"공지"}
 TITLE_MAX, BODY_MAX, AGENTS_MAX, REASON_MAX = 80, 20000, 5, 300
 IMG_MAX = int(os.environ.get("COMMUNITY_IMG_MAX", str(5 * 1024 * 1024)))
 IMG_N = 10
+MAX_SIDE, MAX_PIXELS = 4096, 60_000_000   # 다시 저장할 때 긴 변 상한 · 풀기 전에 거절할 픽셀 수(압축 폭탄)
 IMG_RATE_N, IMG_RATE_S = int(os.environ.get("COMMUNITY_IMG_RATE_N", "40")), 600   # 10분에 그림 40장
 DRAFTS_MAX = 5
 IMG_RE = re.compile(r"/api/community/img/(\d{1,9})/([0-9a-f]{16}\.(?:png|jpg|gif|webp))")
@@ -121,18 +129,61 @@ def _strip_webp(b):
     return b"RIFF" + struct.pack("<I", 4 + len(body)) + b"WEBP" + body
 
 
+def _strip(ext, b):
+    if ext == "png":
+        return _strip_png(b)
+    if ext == "jpg":
+        return _strip_jpg(b)
+    if ext == "webp":
+        return _strip_webp(b)
+    return b   # GIF 는 EXIF 가 없음 — 그대로
+
+
+PIL_FMT = {"png": "PNG", "jpg": "JPEG", "gif": "GIF", "webp": "WEBP"}
+
+
+def _reencode(ext, b):
+    """Pillow: 회전 적용·크기 상한·메타데이터 없이 같은 형식으로. 움직이는 그림은 바이트에서만 걷음"""
+    try:
+        im = Image.open(io.BytesIO(b))
+        if im.format != PIL_FMT[ext]:
+            raise ValueError
+        if im.width * im.height > MAX_PIXELS:
+            raise ValueError(f"그림이 너무 큽니다({im.width}×{im.height})")
+        if ext == "gif" or getattr(im, "n_frames", 1) > 1:   # 움직이는 그림은 그대로 두고 조각만 뺌
+            im.seek(0); im.load()
+            return _strip(ext, b)
+        icc = im.info.get("icc_profile")
+        trans = im.info.get("transparency")
+        try:
+            im = ImageOps.exif_transpose(im)
+        except Exception:   # 깨진 EXIF — 돌리지 않고 그대로(메타데이터는 어차피 안 씀)
+            im.load()
+        if max(im.size) > MAX_SIDE:
+            im.thumbnail((MAX_SIDE, MAX_SIDE), Image.LANCZOS)
+        out, kw = io.BytesIO(), {"icc_profile": icc} if icc else {}
+        if ext == "jpg":
+            im = im if im.mode in ("RGB", "L", "CMYK") else im.convert("RGB")
+            im.save(out, "JPEG", quality=90, optimize=True, exif=b"", **kw)
+        elif ext == "png":
+            if trans is not None and im.mode in ("P", "L", "RGB"):
+                kw["transparency"] = trans
+            im.save(out, "PNG", optimize=True, **kw)
+        else:
+            im.save(out, "WEBP", quality=90, exif=b"", xmp=b"", **kw)
+        return out.getvalue()
+    except ValueError as e:
+        raise ValueError(str(e) or "그림이 손상되었습니다")
+    except (OSError, SyntaxError, Image.DecompressionBombError) as e:
+        raise ValueError("그림이 손상되었습니다") from e
+
+
 def clean_image(b):
     """그림 바이트 → (확장자, 메타데이터 뺀 바이트). 지원 안 하는 종류·손상은 ValueError"""
     ext = sniff(b)
     if not ext:
         raise ValueError("png·jpeg·webp·gif 그림만 올릴 수 있습니다")
-    if ext == "png":
-        return ext, _strip_png(b)
-    if ext == "jpg":
-        return ext, _strip_jpg(b)
-    if ext == "webp":
-        return ext, _strip_webp(b)
-    return ext, b   # GIF 는 EXIF 가 없음 — 그대로
+    return ext, (_reencode(ext, b) if Image else _strip(ext, b))
 
 
 # ── 속도 제한(그림) ──────────────────────────────────────────────────────

@@ -3572,7 +3572,7 @@
      "portal"
     ],
     "x-permission": "self",
-    "description": "본문 = 그림 바이트(Content-Type 은 안 봄 — 앞 바이트로 png·jpeg·webp·gif 만, SVG 거절). 한 장 5MB(넘으면 413)·글 하나 10장·10분에 40장. 내 글(초안 포함)만. EXIF·XMP·글 조각은 걷어 내고 저장",
+    "description": "본문 = 그림 바이트(Content-Type 은 안 봄 — 앞 바이트로 png·jpeg·webp·gif 만, SVG 거절). 한 장 5MB(넘으면 413)·글 하나 10장·10분에 40장. 내 글(초안 포함)만. EXIF 회전을 적용하고 EXIF·XMP·글 조각 없이 같은 형식으로 다시 저장(긴 변 4096, 움직이는 GIF·WebP 는 조각만 뺌)",
     "parameters": [
      {
       "name": "post",
