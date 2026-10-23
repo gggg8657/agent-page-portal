@@ -558,7 +558,10 @@ async def route(ctx, request):
             return ctx.send({"error": "이 주소는 GET·POST 만 받습니다", "code": "method_not_allowed"}, code=405, headers=[("Allow", "GET, POST")])
         if ctx.raw == "/api/dev/submit":   # 개발자 업로드(본문 = zip, 상한 devsubmit.ZIP_MAX) — 권한을 본문보다 먼저 확인(아니면 본문을 읽지 않고 403)
             deny = await run_in_threadpool(devsubmit.precheck, ctx)
-            if deny is not None:
+            if deny is not None:   # 상한 안의 본문은 읽어 버린 뒤 답함 — 안 읽고 끊으면 브라우저는 이유 없이 'Failed to fetch' 만 봄
+                n = length(ctx)
+                if n is not None and n <= devsubmit.ZIP_MAX:
+                    await drain(ctx.request, n)
                 return deny
             try:
                 body = await read_body(ctx, devsubmit.ZIP_MAX)
