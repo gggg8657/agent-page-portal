@@ -236,8 +236,8 @@ def home_data(c, up, uid):
     liked = {r[0] for r in c.execute("SELECT post FROM post_likes WHERE user=?", (uid,))} if common else set()
     from . import toolstate
     return {"tools": tool_list(c, up, uid, u), "rank": [dict(x) for x in rank],
-            # 숨기거나 끈 도구의 이름 — 같은 이름의 '포털 기본' 대화형 빌더 에이전트(도구로 올리기 전 원본)도 전체 목록에서 빼라고 화면에 줌
-            "unlisted_names": sorted({t["name"] for t in tools() if t.get("name") and (t.get("hidden") or toolstate.unlisted(t))}),
+            # 관리자가 숨기거나 끈 도구의 이름(tools.json hidden 은 이름도 안 내보냄) — 같은 이름의 '포털 기본' 대화형 빌더 에이전트(도구로 올리기 전 원본)도 전체 목록에서 빼라고 화면에 줌
+            "unlisted_names": sorted({t["name"] for t in tools() if t.get("name") and not t.get("hidden") and toolstate.unlisted(t)}),
             "posts": [dict(p, tags=list(p["tags"]), liked=p["id"] in liked) for p in common]}
 
 
